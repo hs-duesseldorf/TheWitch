@@ -1,0 +1,16 @@
+.idea/
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+.runtime-cache/
+.venv/
+__pycache__/
+build/
+dist/
+venv/
+*.egg-info/
+*.py[cod]
+assets/datasets/
+assets/models/*.task
+assets/weights/*.json
+assets/weights/*.pt

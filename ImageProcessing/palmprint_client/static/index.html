@@ -1,0 +1,758 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Palmprint Debug Server</title>
+  <style>
+    :root {
+      color-scheme: light dark;
+
+      --background: #fafafa;
+      --foreground: #0f172a;
+      --card: #ffffff;
+      --card-foreground: #0f172a;
+      --muted: #f4f4f5;
+      --muted-foreground: #71717a;
+      --border: #e4e4e7;
+
+      --success: #16a34a;
+      --warning: #ca8a04;
+      --destructive: #dc2626;
+
+      --radius: 14px;
+      --radius-lg: 18px;
+
+      --sans: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      --mono: "JetBrains Mono", "SFMono-Regular", ui-monospace, monospace;
+
+      --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.04);
+    }
+
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --background: #09090b;
+        --foreground: #fafafa;
+        --card: #111113;
+        --card-foreground: #fafafa;
+        --muted: #18181b;
+        --muted-foreground: #a1a1aa;
+        --border: #27272a;
+
+        --success: #22c55e;
+        --warning: #eab308;
+        --destructive: #ef4444;
+
+        --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.28);
+      }
+    }
+
+    * {
+      box-sizing: border-box;
+      min-width: 0;
+    }
+
+    html,
+    body {
+      width: 100%;
+      height: 100%;
+      margin: 0;
+      overflow: hidden;
+    }
+
+    body {
+      font-family: var(--sans);
+      color: var(--foreground);
+      background: var(--background);
+      -webkit-font-smoothing: antialiased;
+      text-rendering: optimizeLegibility;
+    }
+
+    img {
+      display: block;
+      max-width: 100%;
+    }
+
+    main {
+      height: 100vh;
+      height: 100dvh;
+      max-width: 1440px;
+      margin: 0 auto;
+      padding: 24px;
+      display: grid;
+      grid-template-rows: auto minmax(0, 1fr);
+      gap: 20px;
+      overflow: hidden;
+    }
+
+    .card {
+      background: var(--card);
+      color: var(--card-foreground);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      box-shadow: var(--shadow-sm);
+    }
+
+    .topbar {
+      padding: 20px 24px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      overflow: hidden;
+    }
+
+    .title-wrap {
+      display: grid;
+      gap: 6px;
+      min-width: 0;
+    }
+
+    .eyebrow {
+      font-size: 0.75rem;
+      font-weight: 600;
+      letter-spacing: 0.02em;
+      color: var(--muted-foreground);
+    }
+
+    h1 {
+      margin: 0;
+      font-size: clamp(1.25rem, 2.1vw, 2rem);
+      line-height: 1.1;
+      letter-spacing: -0.03em;
+      font-weight: 700;
+    }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      min-height: 36px;
+      padding: 0 12px;
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      background: var(--background);
+      font-size: 0.875rem;
+      font-weight: 500;
+      white-space: nowrap;
+      flex: 0 0 auto;
+      max-width: 100%;
+    }
+
+    .badge-label {
+      color: var(--muted-foreground);
+    }
+
+    .dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 999px;
+      background: var(--warning);
+      flex: 0 0 auto;
+    }
+
+    .dot[data-state="connected"] {
+      background: var(--success);
+    }
+
+    .dot[data-state="error"] {
+      background: var(--destructive);
+    }
+
+    .dot[data-state="connecting"],
+    .dot[data-state="disconnected"] {
+      background: var(--warning);
+    }
+
+    .layout {
+      min-height: 0;
+      height: 100%;
+      display: grid;
+      grid-template-columns: minmax(0, 1.55fr) minmax(320px, 0.72fr);
+      gap: 20px;
+      align-items: stretch;
+      overflow: hidden;
+    }
+
+    .panel {
+      min-height: 0;
+      height: 100%;
+      padding: 20px;
+      display: grid;
+      gap: 16px;
+      overflow: hidden;
+    }
+
+    .panel-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      flex: 0 0 auto;
+    }
+
+    .panel-title {
+      margin: 0;
+      font-size: 0.95rem;
+      font-weight: 600;
+      color: var(--foreground);
+    }
+
+    .panel-subtitle {
+      font-size: 0.8rem;
+      color: var(--muted-foreground);
+    }
+
+    .camera-shell {
+      min-height: 0;
+      height: 100%;
+      display: grid;
+      grid-template-rows: minmax(0, 1fr) auto;
+      gap: 16px;
+      overflow: hidden;
+    }
+
+    .stream-stage {
+      position: relative;
+      min-height: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      isolation: isolate;
+      border: 1px solid var(--border);
+      border-radius: calc(var(--radius-lg) - 2px);
+      background: var(--muted);
+      aspect-ratio: 16 / 10;
+    }
+
+    .stream-frame,
+    .roi-frame {
+      position: relative;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+    }
+
+    .stream-frame img,
+    .roi-frame img {
+      width: 100%;
+      height: 100%;
+      background: var(--muted);
+    }
+
+    .stream-frame img {
+      object-fit: cover;
+      object-position: center;
+    }
+
+    .roi-dock {
+      position: absolute;
+      right: 16px;
+      bottom: 16px;
+      width: min(28%, 220px);
+      display: grid;
+      gap: 8px;
+      z-index: 2;
+    }
+
+    .roi-label {
+      justify-self: end;
+      display: inline-flex;
+      align-items: center;
+      min-height: 28px;
+      padding: 0 10px;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.92);
+      color: #111827;
+      border: 1px solid var(--border);
+      font-size: 0.72rem;
+      font-weight: 600;
+      backdrop-filter: blur(8px);
+    }
+
+    @media (prefers-color-scheme: dark) {
+      .roi-label {
+        background: rgba(24, 24, 27, 0.9);
+        color: #fafafa;
+      }
+    }
+
+    .roi-frame {
+      aspect-ratio: 1 / 1;
+      border-radius: 14px;
+      border: 1px solid var(--border);
+      background: var(--card);
+    }
+
+    .roi-frame img {
+      object-fit: contain;
+      object-position: center;
+    }
+
+    .stats {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 12px;
+      flex: 0 0 auto;
+    }
+
+    .stat {
+      min-width: 0;
+      padding: 14px;
+      border-radius: var(--radius);
+      border: 1px solid var(--border);
+      background: var(--card);
+      display: grid;
+      gap: 6px;
+    }
+
+    .stat-label {
+      font-size: 0.75rem;
+      font-weight: 500;
+      color: var(--muted-foreground);
+    }
+
+    .stat-value {
+      min-width: 0;
+      font-size: 1rem;
+      font-weight: 600;
+      letter-spacing: -0.02em;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .stat-value[data-state="running"] {
+      color: var(--success);
+    }
+
+    .stat-value[data-state="error"] {
+      color: var(--destructive);
+    }
+
+    .stat-value[data-state="idle"],
+    .stat-value[data-state="degraded"],
+    .stat-value[data-state="starting"] {
+      color: var(--warning);
+    }
+
+    .side-shell {
+      min-height: 0;
+      height: 100%;
+      display: grid;
+      grid-template-rows: auto auto minmax(0, 1fr);
+      gap: 16px;
+      overflow: hidden;
+    }
+
+    .signal-card {
+      padding: 16px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      background: var(--muted);
+      overflow: hidden;
+      flex: 0 0 auto;
+    }
+
+    .status-copy {
+      font-size: 0.9rem;
+      line-height: 1.55;
+      color: var(--foreground);
+    }
+
+    .payload-card {
+      min-height: 0;
+      height: 100%;
+      overflow: hidden;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      background: color-mix(in srgb, var(--card) 92%, var(--muted) 8%);
+    }
+
+    .payload-scroll {
+      height: 100%;
+      min-height: 0;
+      overflow: auto;
+      overscroll-behavior: contain;
+      -webkit-overflow-scrolling: touch;
+    }
+
+    pre {
+      margin: 0;
+      min-height: 100%;
+      padding: 16px;
+      font-family: var(--mono);
+      font-size: 0.78rem;
+      line-height: 1.6;
+      white-space: pre-wrap;
+      word-break: break-word;
+      color: var(--foreground);
+    }
+
+    @media (max-width: 1100px) {
+      main {
+        padding: 18px;
+        gap: 16px;
+      }
+
+      .layout {
+        grid-template-columns: 1fr;
+      }
+
+      .panel {
+        padding: 16px;
+      }
+
+      .camera-shell,
+      .side-shell {
+        gap: 14px;
+      }
+
+      .stream-stage {
+        height: auto;
+        min-height: 0;
+        aspect-ratio: 16 / 9;
+      }
+
+      .side-shell {
+        grid-template-rows: auto auto minmax(180px, 1fr);
+      }
+    }
+
+    @media (max-width: 768px) {
+      main {
+        padding: 12px;
+        gap: 12px;
+      }
+
+      .topbar {
+        padding: 14px 16px;
+        flex-direction: column;
+        align-items: stretch;
+        justify-content: flex-start;
+      }
+
+      .badge {
+        width: fit-content;
+        max-width: 100%;
+        align-self: flex-start;
+      }
+
+      .panel {
+        padding: 14px;
+        gap: 12px;
+      }
+
+      .panel-header {
+        gap: 8px;
+      }
+
+      .panel-title {
+        font-size: 0.9rem;
+      }
+
+      .panel-subtitle {
+        font-size: 0.76rem;
+      }
+
+      .stream-stage {
+        aspect-ratio: 4 / 3;
+      }
+
+      .roi-dock {
+        right: 10px;
+        bottom: 10px;
+        width: min(34%, 140px);
+        gap: 6px;
+      }
+
+      .roi-label {
+        min-height: 24px;
+        padding: 0 8px;
+        font-size: 0.65rem;
+      }
+
+      .stats {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 8px;
+      }
+
+      .stat {
+        padding: 10px;
+      }
+
+      .stat-label {
+        font-size: 0.68rem;
+      }
+
+      .stat-value {
+        font-size: 0.9rem;
+      }
+
+      .signal-card {
+        padding: 12px;
+      }
+
+      .status-copy {
+        font-size: 0.84rem;
+      }
+
+      pre {
+        padding: 12px;
+        font-size: 0.72rem;
+        line-height: 1.5;
+      }
+    }
+
+    @media (max-width: 520px) {
+      h1 {
+        font-size: 1.1rem;
+      }
+
+      .eyebrow {
+        font-size: 0.68rem;
+      }
+
+      .badge {
+        min-height: 32px;
+        padding: 0 10px;
+        font-size: 0.78rem;
+      }
+
+      .layout {
+        gap: 12px;
+      }
+
+      .stream-stage {
+        aspect-ratio: 1 / 1;
+      }
+
+      .roi-dock {
+        width: min(38%, 112px);
+      }
+
+      .stats {
+        grid-template-columns: 1fr;
+      }
+
+      .side-shell {
+        grid-template-rows: auto auto minmax(140px, 1fr);
+      }
+
+      .payload-card {
+        min-height: 140px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <header class="card topbar">
+      <div class="title-wrap">
+        <h1>Palmprint Debug Server</h1>
+      </div>
+
+      <div class="badge">
+        <span class="badge-label">UI Socket</span>
+        <span id="ui-socket" class="socket-value" data-state="connecting">Connecting</span>
+        <span class="dot" id="ui-socket-dot" data-state="connecting"></span>
+      </div>
+    </header>
+
+    <section class="layout">
+      <article class="card panel">
+        <div class="panel-header">
+          <div>
+            <h2 class="panel-title">Live Camera</h2>
+            <div class="panel-subtitle">Realtime camera stream and ROI preview</div>
+          </div>
+        </div>
+
+        <div class="camera-shell">
+          <div class="stream-stage">
+            <div class="stream-frame">
+              <img id="camera-frame" alt="Live webcam debug stream">
+            </div>
+
+            <div class="roi-dock">
+              <div class="roi-label">ROI Model Input</div>
+              <div class="roi-frame">
+                <img id="roi-frame" alt="Live ROI model input stream">
+              </div>
+            </div>
+          </div>
+
+          <section class="stats">
+            <div class="stat">
+              <span class="stat-label">Status</span>
+              <span id="runtime-state" class="stat-value" data-state="starting">STARTING</span>
+            </div>
+            <div class="stat">
+              <span class="stat-label">Hand</span>
+              <span id="hand-label" class="stat-value">--</span>
+            </div>
+            <div class="stat">
+              <span class="stat-label">FPS</span>
+              <span id="processing-fps" class="stat-value">--</span>
+            </div>
+          </section>
+        </div>
+      </article>
+
+      <article class="card panel">
+        <div class="side-shell">
+          <div class="panel-header">
+            <div>
+              <h2 class="panel-title">Signal</h2>
+              <div class="panel-subtitle">Runtime summary and payload preview</div>
+            </div>
+          </div>
+
+          <div class="signal-card">
+            <div id="status-message" class="status-copy">Waiting for runtime state.</div>
+          </div>
+
+          <div class="payload-card">
+            <div class="payload-scroll">
+              <pre id="payload-preview">No payload received yet.</pre>
+            </div>
+          </div>
+        </div>
+      </article>
+    </section>
+  </main>
+
+  <script>
+    const els = {
+      uiSocket: document.getElementById('ui-socket'),
+      uiSocketDot: document.getElementById('ui-socket-dot'),
+      runtimeState: document.getElementById('runtime-state'),
+      handLabel: document.getElementById('hand-label'),
+      processingFps: document.getElementById('processing-fps'),
+      statusMessage: document.getElementById('status-message'),
+      cameraFrame: document.getElementById('camera-frame'),
+      roiFrame: document.getElementById('roi-frame'),
+      payloadPreview: document.getElementById('payload-preview')
+    };
+
+    let socket = null;
+
+    function setState(el, text, state) {
+      el.textContent = text;
+      el.dataset.state = state || '';
+    }
+
+    function setDotState(el, state) {
+      el.dataset.state = state || '';
+    }
+
+    function compactPayload(payload) {
+      if (!payload) {
+        return 'No payload received yet.';
+      }
+
+      const preview = {
+        status: payload.status || 'starting'
+      };
+
+      if (typeof payload.message === 'string' && payload.message) {
+        preview.message = payload.message;
+      }
+
+      if (typeof payload.hand === 'string' && payload.hand) {
+        preview.hand = payload.hand;
+      }
+
+      if (Number.isFinite(Number(payload.score))) {
+        preview.score = Number(payload.score);
+      }
+
+      if (
+        payload.proportions &&
+        typeof payload.proportions === 'object' &&
+        Object.keys(payload.proportions).length > 0
+      ) {
+        preview.proportions = payload.proportions;
+      }
+
+      if (Array.isArray(payload.vector) && payload.vector.length > 0) {
+        preview.vector = payload.vector;
+      }
+
+      return JSON.stringify(preview, null, 2);
+    }
+
+    function safeSetImage(imgEl, src) {
+      if (typeof src === 'string' && src.length > 0) {
+        imgEl.src = src;
+      }
+    }
+
+    function updateFromMessage(message) {
+      const hand = typeof message.hand === 'string' ? message.hand : '';
+      const fps = Number.isFinite(Number(message.fps)) ? Number(message.fps).toFixed(1) : '--';
+      const debug = message.debug || {};
+
+      const statusTextByState = {
+        starting: 'Starting capture pipeline.',
+        running: 'Hand signal ready.',
+        idle: 'No hand detected.',
+        degraded: 'Hand detected but ROI unavailable.',
+        error: 'Runtime error.'
+      };
+
+      const status = message.status || 'unknown';
+      const statusText = (
+        typeof message.message === 'string' && message.message
+          ? message.message
+          : statusTextByState[status] || 'Waiting for runtime state.'
+      );
+
+      setState(els.runtimeState, status.toUpperCase(), status);
+      els.handLabel.textContent = hand || (status === 'idle' ? 'None' : '--');
+      els.processingFps.textContent = fps;
+      els.statusMessage.textContent = statusText;
+
+      safeSetImage(els.cameraFrame, debug.camera_frame_jpeg);
+      safeSetImage(els.roiFrame, debug.roi_frame_jpeg);
+
+      els.payloadPreview.textContent = compactPayload(message);
+    }
+
+    function connect() {
+      const protocol = window.location.protocol === 'https:' ? 'wss' : 'ws';
+      socket = new WebSocket(`${protocol}://${window.location.host}/ws/debug`);
+
+      setState(els.uiSocket, 'Connecting', 'connecting');
+      setDotState(els.uiSocketDot, 'connecting');
+
+      socket.addEventListener('open', () => {
+        setState(els.uiSocket, 'Connected', 'connected');
+        setDotState(els.uiSocketDot, 'connected');
+      });
+
+      socket.addEventListener('message', (event) => {
+        try {
+          updateFromMessage(JSON.parse(event.data));
+        } catch {
+          setState(els.uiSocket, 'Error', 'error');
+          setDotState(els.uiSocketDot, 'error');
+        }
+      });
+
+      socket.addEventListener('close', () => {
+        setState(els.uiSocket, 'Disconnected', 'disconnected');
+        setDotState(els.uiSocketDot, 'disconnected');
+        window.setTimeout(connect, 1000);
+      });
+
+      socket.addEventListener('error', () => {
+        setState(els.uiSocket, 'Error', 'error');
+        setDotState(els.uiSocketDot, 'error');
+      });
+    }
+
+    connect();
+  </script>
+</body>
+</html>

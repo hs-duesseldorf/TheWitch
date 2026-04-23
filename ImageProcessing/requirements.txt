@@ -1,0 +1,9 @@
+fastapi
+uvicorn
+websockets
+numpy
+opencv-python-headless
+torch
+torchvision
+Pillow
+mediapipe
