@@ -107,17 +107,8 @@ class HeadlessPalmClient:
 
     def _empty_feature_cache(self) -> dict[str, Any]:
         return {
-            "geometry_keys": [],
-            "geometry_length": 0,
-            "embedding_length": 0,
             "hand_proportions": {},
             "embedding_vector": [],
-            "vector_preview": [],
-            "consistency": {
-                "median_cosine": None,
-                "p10_cosine": None,
-                "p90_cosine": None,
-            },
         }
 
     def start(self) -> None:
@@ -154,14 +145,12 @@ class HeadlessPalmClient:
         message: str,
         hand_detected: bool,
         hand_label: str = "unknown",
-        hand_score: float = 0.0,
     ) -> dict[str, Any]:
         return build_status_message(
             status=status,
             message=message,
             hand_detected=hand_detected,
             hand_label=hand_label,
-            hand_score=hand_score,
         )
 
     def _ui_payload(self, payload: dict[str, Any]) -> dict[str, Any]:
@@ -208,13 +197,12 @@ class HeadlessPalmClient:
         message: str,
         hand_detected: bool,
         hand_label: str = "unknown",
-        hand_score: float = 0.0,
         camera_frame_bgr: np.ndarray | None = None,
         roi_frame_bgr: np.ndarray | None = None,
         force: bool = False,
     ) -> None:
         now = time.monotonic()
-        signature = (status, message, hand_detected, hand_label, round(float(hand_score), 4))
+        signature = (status, message, hand_detected, hand_label)
         frame_due = (camera_frame_bgr is not None or roi_frame_bgr is not None) and self._should_publish_debug_frame()
         if not force and not frame_due and self.last_status_signature == signature and (now - self.last_status_publish_at) < 0.5:
             return
@@ -224,7 +212,6 @@ class HeadlessPalmClient:
             message=message,
             hand_detected=hand_detected,
             hand_label=hand_label,
-            hand_score=hand_score,
         )
         self.last_status_signature = signature
         self.last_status_publish_at = now
@@ -239,14 +226,12 @@ class HeadlessPalmClient:
     def _publish_feature_message(
         self,
         hand_label: str,
-        hand_score: float,
         camera_frame_bgr: np.ndarray | None = None,
         roi_frame_bgr: np.ndarray | None = None,
     ) -> None:
         payload = build_feature_vector_message(
             status="running",
             hand_label=hand_label,
-            hand_score=hand_score,
             embedding_vector=self.feature_cache["embedding_vector"],
             hand_proportions=self.feature_cache["hand_proportions"],
         )
@@ -267,22 +252,12 @@ class HeadlessPalmClient:
 
         emb_matrix = np.stack(list(self.embedding_history), axis=0)
         emb_median = l2_normalize(np.median(emb_matrix, axis=0).astype(np.float32))
-        cosines = emb_matrix @ emb_median
         self.feature_cache = {
-            "geometry_keys": geom_keys,
-            "geometry_length": len(geom_keys),
-            "embedding_length": int(emb_median.shape[0]),
             "hand_proportions": {
                 key: round(float(value), 6)
                 for key, value in zip(geom_keys, geom_median.tolist())
             },
             "embedding_vector": [round(float(value), 6) for value in emb_median.tolist()],
-            "vector_preview": [round(float(value), 6) for value in emb_median[:8].tolist()],
-            "consistency": {
-                "median_cosine": round(float(np.median(cosines)), 6),
-                "p10_cosine": round(float(np.percentile(cosines, 10)), 6),
-                "p90_cosine": round(float(np.percentile(cosines, 90)), 6),
-            },
         }
 
     def _publish_no_hand(self, frame_bgr: np.ndarray) -> None:
@@ -294,13 +269,12 @@ class HeadlessPalmClient:
             roi_frame_bgr=render_placeholder_frame(self.config.roi_size, self.config.roi_size, "", ""),
         )
 
-    def _publish_roi_failure(self, hand_label: str, hand_score: float, frame_bgr: np.ndarray) -> None:
+    def _publish_roi_failure(self, hand_label: str, frame_bgr: np.ndarray) -> None:
         self._publish_status(
             status="degraded",
             message="Hand detected but ROI warp failed.",
             hand_detected=True,
             hand_label=hand_label,
-            hand_score=hand_score,
             camera_frame_bgr=frame_bgr,
             roi_frame_bgr=render_placeholder_frame(self.config.roi_size, self.config.roi_size, "ROI failed", "Adjust palm pose"),
         )
@@ -313,11 +287,11 @@ class HeadlessPalmClient:
             force=True,
         )
 
-    def _handedness(self, result: Any, index: int) -> tuple[str, float]:
+    def _handedness(self, result: Any, index: int) -> str:
         if result.handedness and index < len(result.handedness) and result.handedness[index]:
             category = result.handedness[index][0]
-            return category.category_name, float(category.score)
-        return "unknown", 0.0
+            return category.category_name
+        return "unknown"
 
     def _run_loop(self) -> None:
         target_period = max(self.config.interval_ms / 1000.0, 0.0)
@@ -346,7 +320,7 @@ class HeadlessPalmClient:
                     self._publish_no_hand(display_frame)
                 else:
                     hand = result.hand_landmarks[index]
-                    hand_label, hand_score = self._handedness(result, index)
+                    hand_label = self._handedness(result, index)
 
                     height, width = display_frame.shape[:2]
                     display_pts = np.array([[lm.x * width, lm.y * height, lm.z] for lm in hand], dtype=np.float32)
@@ -363,7 +337,7 @@ class HeadlessPalmClient:
                     current_roi_pose = estimate_roi_pose(raw_pts[:, :2])
                     if current_roi_pose is None:
                         debug_frame = draw_hand_overlay(display_frame, display_pts[:, :2])
-                        self._publish_roi_failure(hand_label, hand_score, debug_frame)
+                        self._publish_roi_failure(hand_label, debug_frame)
                         continue
 
                     raw_roi_quad = roi_quad_from_pose(current_roi_pose)
@@ -372,7 +346,7 @@ class HeadlessPalmClient:
                     roi = warp_roi_from_quad(raw_frame, raw_roi_quad, self.config.roi_size)
 
                     if roi is None:
-                        self._publish_roi_failure(hand_label, hand_score, debug_frame)
+                        self._publish_roi_failure(hand_label, debug_frame)
                     else:
                         run_embed = (self.frame_counter % self.config.embed_every == 0) or (self.last_embedding is None)
                         if run_embed:
@@ -392,7 +366,6 @@ class HeadlessPalmClient:
                         self._update_feature_cache(geometry)
                         self._publish_feature_message(
                             hand_label,
-                            hand_score,
                             debug_frame,
                             render_roi_feature_preview(roi, self.roi_tone_settings),
                         )

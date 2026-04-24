@@ -108,13 +108,6 @@
       min-width: 0;
     }
 
-    .eyebrow {
-      font-size: 0.75rem;
-      font-weight: 600;
-      letter-spacing: 0.02em;
-      color: var(--muted-foreground);
-    }
-
     h1 {
       margin: 0;
       font-size: clamp(1.25rem, 2.1vw, 2rem);
@@ -509,10 +502,6 @@
         font-size: 1.1rem;
       }
 
-      .eyebrow {
-        font-size: 0.68rem;
-      }
-
       .badge {
         min-height: 32px;
         padding: 0 10px;
@@ -554,7 +543,7 @@
 
       <div class="badge">
         <span class="badge-label">UI Socket</span>
-        <span id="ui-socket" class="socket-value" data-state="connecting">Connecting</span>
+        <span id="ui-socket" data-state="connecting">Connecting</span>
         <span class="dot" id="ui-socket-dot" data-state="connecting"></span>
       </div>
     </header>
@@ -661,10 +650,6 @@
 
       if (typeof payload.hand === 'string' && payload.hand) {
         preview.hand = payload.hand;
-      }
-
-      if (Number.isFinite(Number(payload.score))) {
-        preview.score = Number(payload.score);
       }
 
       if (
