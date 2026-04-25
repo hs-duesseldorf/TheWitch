@@ -5,7 +5,7 @@ import copy
 import json
 import threading
 from collections import deque
-from typing import Any
+from typing import Any, Callable
 
 from .utils import iso_timestamp
 
@@ -64,9 +64,16 @@ class MessageQueue:
 
 
 class PipelineWebSocketClient:
-    def __init__(self, url: str, queue: MessageQueue):
+    def __init__(
+        self,
+        url: str,
+        queue: MessageQueue,
+        *,
+        command_handler: Callable[[dict[str, Any]], dict[str, Any] | None] | None = None,
+    ):
         self.url = url
         self.queue = queue
+        self.command_handler = command_handler
         self.stop_event = threading.Event()
         self.worker: threading.Thread | None = None
         self._lock = threading.Lock()
@@ -125,15 +132,16 @@ class PipelineWebSocketClient:
             try:
                 async with connect(self.url) as websocket:
                     self._update_status(state="connected", last_error=None)
-                    while not self.stop_event.is_set():
-                        message = await asyncio.to_thread(self.queue.get, 1.0)
-                        if message is None:
-                            continue
-                        await websocket.send(json.dumps(message))
-                        self._update_status(
-                            sent=self._increment_status("sent"),
-                            last_sent_at=iso_timestamp(),
-                        )
+                    sender = asyncio.create_task(self._send_loop(websocket))
+                    receiver = asyncio.create_task(self._receive_loop(websocket))
+                    done, pending = await asyncio.wait(
+                        {sender, receiver},
+                        return_when=asyncio.FIRST_EXCEPTION,
+                    )
+                    for task in pending:
+                        task.cancel()
+                    for task in done:
+                        task.result()
             except Exception as exc:
                 self._update_status(state="error", last_error=str(exc))
                 await self._sleep_or_stop(2.0)
@@ -147,3 +155,30 @@ class PipelineWebSocketClient:
             if self.stop_event.is_set():
                 return
             await asyncio.sleep(seconds / steps)
+
+    async def _send_loop(self, websocket) -> None:
+        while not self.stop_event.is_set():
+            message = await asyncio.to_thread(self.queue.get, 0.2)
+            if message is None:
+                continue
+            await websocket.send(json.dumps(message))
+            self._update_status(
+                sent=self._increment_status("sent"),
+                last_sent_at=iso_timestamp(),
+            )
+
+    async def _receive_loop(self, websocket) -> None:
+        async for raw_message in websocket:
+            if self.command_handler is None:
+                continue
+            try:
+                message = json.loads(raw_message)
+            except json.JSONDecodeError:
+                response = {"type": "command_result", "ok": False, "error": "Invalid JSON command"}
+            else:
+                if not isinstance(message, dict):
+                    response = {"type": "command_result", "ok": False, "error": "Command must be a JSON object"}
+                else:
+                    response = await asyncio.to_thread(self.command_handler, message)
+            if response is not None:
+                self.queue.publish(response)

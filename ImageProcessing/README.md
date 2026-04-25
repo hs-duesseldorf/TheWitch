@@ -5,7 +5,8 @@ Real-time palmprint feature extraction and embedding generation for NVIDIA Jetso
 ## Scope
 
 - `main.py` starts the live palmprint client, extracts the palm ROI, builds the embedding, and streams it to an upstream websocket service.
-- `training/train_tongji_embedding.py` trains the ResNet18 + ArcFace embedding model used by the runtime.
+- `debug_server.py` starts the optional local websocket server and debug UI. It can be replaced by the real upstream server later.
+- `training/train_tongji_embedding.py` trains interchangeable embedding checkpoints, currently ResNet18 with ArcFace or contrastive cosine loss.
 
 ## Repository Layout
 
@@ -28,16 +29,30 @@ pip install -r requirements.txt
 
 ## Run
 
+Local, with the runtime and debug server on the same machine:
+
 ```bash
-python main.py --camera 0 --host 0.0.0.0 --port 8000
+python debug_server.py --port 8001
+python main.py --camera 0 --pipeline_ws_url ws://localhost:8001/ws/palmprint
+```
+
+Jetson runtime sending to the AI websocket server on the PC:
+
+```bash
+# PC
+python debug_server.py --port 8001
+
+# Jetson
+python main.py --camera 0 --pipeline_ws_url ws://<PC-LAN-IP>:8001/ws/palmprint
 ```
 
 Useful flags:
 
-- `--pipeline_ws_url ws://127.0.0.1:8001/ws/palmprint`
-- `--cnn_weights assets/weights/tongji_resnet18_arcface_256d.pt`
-- `--roi_size 256`
-- `--embed_every 1`
+- `--pipeline_ws_url ws://localhost:8001/ws/palmprint`
+- `--embedding_model arcface`
+- `--embedding_model contrastive`
+
+The debug server binds to remote clients by default so the Jetson can connect to `/ws/palmprint` and the browser on the PC can open the printed debug UI URL. The browser debug UI receives live updates over `/ws/debug` and may use simple HTTP endpoints on `debug_server.py` for UI commands.
 
 ## Training
 
@@ -52,5 +67,10 @@ assets/datasets/tongji/roi/
 Run training:
 
 ```bash
-python training/train_tongji_embedding.py
+python training/train_tongji_embedding.py --loss arcface --label_mode person
+python training/train_tongji_embedding.py --loss contrastive --label_mode person
 ```
+
+Use `--label_mode palm` to reproduce the older behavior where each palm is a separate class. Default output names include model, loss, label mode, and embedding dimension so both training runs can coexist under `assets/weights/`.
+
+`--label_mode person` assumes Tongji ordering of two palms per person with 10 images per palm and groups those 20 images into one identity class.

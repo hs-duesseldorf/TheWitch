@@ -9,7 +9,6 @@ import time
 from collections import defaultdict
 from pathlib import Path
 
-import cv2
 import numpy as np
 import torch
 import torch.nn as nn
@@ -17,7 +16,7 @@ from PIL import Image, ImageOps
 from torch.amp import GradScaler, autocast
 from torch.optim import AdamW
 from torch.optim.lr_scheduler import CosineAnnealingLR
-from torch.utils.data import DataLoader, Dataset
+from torch.utils.data import DataLoader, Dataset, Sampler
 from torchvision import transforms
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -25,39 +24,68 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from palmprint_client.constants import IMAGENET_MEAN, IMAGENET_STD, MODEL_RESIZE_SIZE
-from palmprint_client.embedding import ArcMarginProduct, ResNet18EmbeddingNet, build_embedding_checkpoint
-from palmprint_client.preprocessing import enhance_palm_roi
+from palmprint_client.embedding import (
+    ArcMarginProduct,
+    ResNet18EmbeddingNet,
+    build_embedding_checkpoint,
+)
 from palmprint_client.utils import set_deterministic
 
-IMAGES_PER_CLASS_PER_SESSION = 10
+IMAGES_PER_PALM_PER_SESSION = 10
+PALMS_PER_PERSON = 2
 DEFAULT_DATASET_ROOT = Path("assets/datasets/tongji/roi")
-DEFAULT_OUTPUT_PATH = Path("assets/weights/tongji_resnet18_arcface_256d.pt")
+TRAINING_LOSSES = ("arcface", "contrastive")
+LABEL_MODES = ("person", "palm")
+EPOCHS = 8
+BATCH_SIZE = 128
+EMBEDDING_DIM = 256
+IMAGE_SIZE = 224
+LEARNING_RATE = 3e-4
+WEIGHT_DECAY = 1e-4
+CONTRASTIVE_MARGIN = 0.0
+SAMPLES_PER_CLASS = 2
+NUM_WORKERS = 4
+SEED = 1234
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Train a Tongji palmprint embedding model with ArcFace")
+    parser = argparse.ArgumentParser(description="Train a Tongji palmprint embedding model")
     parser.add_argument("--dataset_root", type=Path, default=DEFAULT_DATASET_ROOT)
-    parser.add_argument("--output", type=Path, default=DEFAULT_OUTPUT_PATH)
-    parser.add_argument("--epochs", type=int, default=8)
-    parser.add_argument("--batch_size", type=int, default=128)
-    parser.add_argument("--embedding_dim", type=int, default=256)
-    parser.add_argument("--image_size", type=int, default=224)
-    parser.add_argument("--lr", type=float, default=3e-4)
-    parser.add_argument("--weight_decay", type=float, default=1e-4)
-    parser.add_argument("--num_workers", type=int, default=4)
-    parser.add_argument("--seed", type=int, default=1234)
-    return parser.parse_args()
+    parser.add_argument("--output", type=Path, default=None)
+    parser.add_argument("--loss", choices=TRAINING_LOSSES, default="arcface")
+    parser.add_argument("--label_mode", choices=LABEL_MODES, default="person")
+    args = parser.parse_args()
+    if args.output is None:
+        args.output = default_output_path(args)
+    return args
 
 
-def infer_label_from_path(path: Path) -> int:
+def default_output_path(args: argparse.Namespace) -> Path:
+    return Path(
+        f"assets/weights/tongji_resnet18_{args.loss}_{args.label_mode}_{EMBEDDING_DIM}d.pt"
+    )
+
+
+def infer_label_from_path(path: Path, label_mode: str) -> int:
     image_index = int(path.stem)
-    label = (image_index - 1) // IMAGES_PER_CLASS_PER_SESSION
+    if label_mode == "person":
+        images_per_class = IMAGES_PER_PALM_PER_SESSION * PALMS_PER_PERSON
+    elif label_mode == "palm":
+        images_per_class = IMAGES_PER_PALM_PER_SESSION
+    else:
+        raise ValueError(f"Unsupported label mode: {label_mode}")
+
+    label = (image_index - 1) // images_per_class
     if label < 0:
         raise ValueError(f"Invalid Tongji filename: {path.name}")
     return label
 
 
 def pil_to_enhanced_gray(image: Image.Image) -> Image.Image:
+    import cv2
+
+    from palmprint_client.preprocessing import enhance_palm_roi
+
     gray = np.array(image.convert("L"), dtype=np.uint8)
     enhanced = enhance_palm_roi(cv2.cvtColor(gray, cv2.COLOR_GRAY2BGR))
     return Image.fromarray(enhanced, mode="L")
@@ -73,6 +101,10 @@ class RandomGamma:
         array = np.array(image, dtype=np.float32) / 255.0
         corrected = np.power(np.clip(array, 0.0, 1.0), gamma)
         return Image.fromarray(np.clip(corrected * 255.0, 0.0, 255.0).astype(np.uint8), mode="L")
+
+
+def repeat_gray_to_rgb(tensor: torch.Tensor) -> torch.Tensor:
+    return tensor.repeat(3, 1, 1)
 
 
 class PalmTrainTransform:
@@ -131,7 +163,7 @@ class PalmEvalTransform:
                 transforms.Resize(MODEL_RESIZE_SIZE, interpolation=transforms.InterpolationMode.BILINEAR),
                 transforms.CenterCrop(image_size),
                 transforms.ToTensor(),
-                transforms.Lambda(lambda tensor: tensor.repeat(3, 1, 1)),
+                transforms.Lambda(repeat_gray_to_rgb),
                 transforms.Normalize(
                     mean=IMAGENET_MEAN,
                     std=IMAGENET_STD,
@@ -144,10 +176,11 @@ class PalmEvalTransform:
 
 
 class TongjiPalmDataset(Dataset):
-    def __init__(self, root: Path, sessions: tuple[str, ...], transform):
+    def __init__(self, root: Path, sessions: tuple[str, ...], transform, *, label_mode: str):
         self.root = root
         self.sessions = tuple(sessions)
         self.transform = transform
+        self.label_mode = label_mode
         self.samples: list[tuple[Path, int]] = []
 
         for session in self.sessions:
@@ -155,11 +188,12 @@ class TongjiPalmDataset(Dataset):
             if not session_dir.exists():
                 raise FileNotFoundError(f"Missing session directory: {session_dir}")
             for path in sorted(session_dir.glob("*.bmp")):
-                self.samples.append((path, infer_label_from_path(path)))
+                self.samples.append((path, infer_label_from_path(path, label_mode)))
 
         if not self.samples:
             raise RuntimeError(f"No BMP files found under {root}")
 
+        self.labels = [label for _, label in self.samples]
         self.num_classes = max(label for _, label in self.samples) + 1
 
     def __len__(self) -> int:
@@ -171,13 +205,79 @@ class TongjiPalmDataset(Dataset):
             return self.transform(image), label
 
 
+class PositivePairBatchSampler(Sampler[list[int]]):
+    def __init__(
+        self,
+        labels: list[int],
+        *,
+        batch_size: int,
+        samples_per_class: int,
+        seed: int,
+    ):
+        if samples_per_class < 2:
+            raise ValueError("samples_per_class must be >= 2 for contrastive training")
+        if batch_size < samples_per_class:
+            raise ValueError("batch_size must be >= samples_per_class")
+
+        self.batch_size = batch_size
+        self.samples_per_class = samples_per_class
+        self.seed = seed
+        self.iteration = 0
+        self.classes_per_batch = max(1, batch_size // samples_per_class)
+        self.label_to_indices: dict[int, list[int]] = defaultdict(list)
+        for index, label in enumerate(labels):
+            self.label_to_indices[int(label)].append(index)
+        self.labels = sorted(self.label_to_indices.keys())
+        self.batch_count = max(1, len(labels) // (self.classes_per_batch * samples_per_class))
+
+    def __iter__(self):
+        rng = random.Random(self.seed + self.iteration)
+        self.iteration += 1
+        for _ in range(self.batch_count):
+            if len(self.labels) <= self.classes_per_batch:
+                selected_labels = list(self.labels)
+                rng.shuffle(selected_labels)
+            else:
+                selected_labels = rng.sample(self.labels, self.classes_per_batch)
+
+            batch: list[int] = []
+            for label in selected_labels:
+                candidates = self.label_to_indices[label]
+                if len(candidates) >= self.samples_per_class:
+                    batch.extend(rng.sample(candidates, self.samples_per_class))
+                else:
+                    batch.extend(rng.choices(candidates, k=self.samples_per_class))
+            rng.shuffle(batch)
+            yield batch[: self.batch_size]
+
+    def __len__(self) -> int:
+        return self.batch_count
+
+
 def build_loader(
-    dataset: Dataset,
+    dataset: TongjiPalmDataset,
     *,
     batch_size: int,
     num_workers: int,
     shuffle: bool,
+    positive_pairs: bool = False,
+    samples_per_class: int = 2,
+    seed: int = 0,
 ) -> DataLoader:
+    if positive_pairs:
+        return DataLoader(
+            dataset,
+            batch_sampler=PositivePairBatchSampler(
+                dataset.labels,
+                batch_size=batch_size,
+                samples_per_class=samples_per_class,
+                seed=seed,
+            ),
+            num_workers=num_workers,
+            pin_memory=torch.cuda.is_available(),
+            persistent_workers=num_workers > 0,
+        )
+
     return DataLoader(
         dataset,
         batch_size=batch_size,
@@ -189,8 +289,24 @@ def build_loader(
     )
 
 
+class ContrastiveCosineLoss(nn.Module):
+    def __init__(self, *, margin: float = 0.0):
+        super().__init__()
+        self.loss = nn.CosineEmbeddingLoss(margin=margin)
+
+    def forward(self, embeddings: torch.Tensor, labels: torch.Tensor) -> torch.Tensor:
+        embeddings = nn.functional.normalize(embeddings, dim=1)
+        labels = labels.view(-1)
+        if embeddings.size(0) < 2:
+            return embeddings.sum() * 0.0
+
+        left, right = torch.triu_indices(embeddings.size(0), embeddings.size(0), offset=1, device=embeddings.device)
+        targets = torch.where(labels[left] == labels[right], 1.0, -1.0).to(embeddings.device)
+        return self.loss(embeddings[left], embeddings[right], targets)
+
+
 def embed_dataset(
-    model: ResNet18EmbeddingNet,
+    model: nn.Module,
     loader: DataLoader,
     *,
     device: torch.device,
@@ -225,7 +341,7 @@ def gallery_centroids(embeddings: torch.Tensor, labels: torch.Tensor, num_classe
 
 
 def evaluate_probe_top1(
-    model: ResNet18EmbeddingNet,
+    model: nn.Module,
     gallery_loader: DataLoader,
     probe_loader: DataLoader,
     *,
@@ -251,7 +367,7 @@ def format_duration(seconds: float) -> str:
 
 def main() -> None:
     args = parse_args()
-    set_deterministic(args.seed)
+    set_deterministic(SEED)
     torch.set_float32_matmul_precision("high")
 
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
@@ -260,50 +376,54 @@ def main() -> None:
     train_dataset = TongjiPalmDataset(
         args.dataset_root,
         sessions=("session1",),
-        transform=PalmTrainTransform(args.image_size),
+        transform=PalmTrainTransform(IMAGE_SIZE),
+        label_mode=args.label_mode,
     )
     gallery_dataset = TongjiPalmDataset(
         args.dataset_root,
         sessions=("session1",),
-        transform=PalmEvalTransform(args.image_size),
+        transform=PalmEvalTransform(IMAGE_SIZE),
+        label_mode=args.label_mode,
     )
     probe_dataset = TongjiPalmDataset(
         args.dataset_root,
         sessions=("session2",),
-        transform=PalmEvalTransform(args.image_size),
+        transform=PalmEvalTransform(IMAGE_SIZE),
+        label_mode=args.label_mode,
     )
 
     train_loader = build_loader(
         train_dataset,
-        batch_size=args.batch_size,
-        num_workers=args.num_workers,
+        batch_size=BATCH_SIZE,
+        num_workers=NUM_WORKERS,
         shuffle=True,
+        positive_pairs=args.loss == "contrastive",
+        samples_per_class=SAMPLES_PER_CLASS,
+        seed=SEED,
     )
     gallery_loader = build_loader(
         gallery_dataset,
-        batch_size=args.batch_size,
-        num_workers=args.num_workers,
+        batch_size=BATCH_SIZE,
+        num_workers=NUM_WORKERS,
         shuffle=False,
     )
     probe_loader = build_loader(
         probe_dataset,
-        batch_size=args.batch_size,
-        num_workers=args.num_workers,
+        batch_size=BATCH_SIZE,
+        num_workers=NUM_WORKERS,
         shuffle=False,
     )
 
-    model = ResNet18EmbeddingNet(embedding_dim=args.embedding_dim, pretrained=True).to(device)
-    margin_head = ArcMarginProduct(args.embedding_dim, train_dataset.num_classes).to(device)
+    model = ResNet18EmbeddingNet(embedding_dim=EMBEDDING_DIM, pretrained=True).to(device)
+    margin_head = ArcMarginProduct(EMBEDDING_DIM, train_dataset.num_classes).to(device) if args.loss == "arcface" else None
+    criterion = nn.CrossEntropyLoss() if args.loss == "arcface" else ContrastiveCosineLoss(margin=CONTRASTIVE_MARGIN)
 
-    optimizer = AdamW(
-        [
-            {"params": model.parameters(), "lr": args.lr},
-            {"params": margin_head.parameters(), "lr": args.lr},
-        ],
-        weight_decay=args.weight_decay,
-    )
-    scheduler = CosineAnnealingLR(optimizer, T_max=args.epochs)
-    criterion = nn.CrossEntropyLoss()
+    optimizer_params = [{"params": model.parameters(), "lr": LEARNING_RATE}]
+    if margin_head is not None:
+        optimizer_params.append({"params": margin_head.parameters(), "lr": LEARNING_RATE})
+
+    optimizer = AdamW(optimizer_params, weight_decay=WEIGHT_DECAY)
+    scheduler = CosineAnnealingLR(optimizer, T_max=EPOCHS)
     scaler = GradScaler(device.type, enabled=use_amp)
 
     history: list[dict[str, float]] = []
@@ -315,12 +435,14 @@ def main() -> None:
 
     print(
         f"Training on {device.type} with {len(train_dataset)} train images, "
-        f"{len(probe_dataset)} probe images, {train_dataset.num_classes} classes."
+        f"{len(probe_dataset)} probe images, {train_dataset.num_classes} classes, "
+        f"loss={args.loss}, label_mode={args.label_mode}."
     )
 
-    for epoch in range(args.epochs):
+    for epoch in range(EPOCHS):
         model.train()
-        margin_head.train()
+        if margin_head is not None:
+            margin_head.train()
 
         running_loss = 0.0
         samples_seen = 0
@@ -334,8 +456,10 @@ def main() -> None:
 
             with autocast(device_type=device.type, enabled=use_amp):
                 embeddings = model(images)
-                logits = margin_head(embeddings, labels)
-                loss = criterion(logits, labels)
+                if margin_head is None:
+                    loss = criterion(embeddings, labels)
+                else:
+                    loss = criterion(margin_head(embeddings, labels), labels)
 
             scaler.scale(loss).backward()
             scaler.step(optimizer)
@@ -348,14 +472,14 @@ def main() -> None:
             if step % 20 == 0 or step == len(train_loader):
                 avg_loss = running_loss / max(samples_seen, 1)
                 print(
-                    f"epoch {epoch + 1:02d}/{args.epochs:02d} "
+                    f"epoch {epoch + 1:02d}/{EPOCHS:02d} "
                     f"step {step:03d}/{len(train_loader):03d} "
                     f"loss {avg_loss:.4f}"
                 )
 
         scheduler.step()
 
-        train_loss = running_loss / len(train_dataset)
+        train_loss = running_loss / max(samples_seen, 1)
         probe_top1 = evaluate_probe_top1(
             model,
             gallery_loader,
@@ -386,19 +510,29 @@ def main() -> None:
                 "best_probe_top1": float(best_probe_top1),
                 "best_epoch": int(best_epoch),
                 "history": history,
-                "seed": int(args.seed),
+                "seed": int(SEED),
                 "device": str(device),
                 "trained_at_unix": int(time.time()),
+                "model": "resnet18",
+                "loss": args.loss,
+                "label_mode": args.label_mode,
             }
             checkpoint = build_embedding_checkpoint(
                 model,
                 num_classes=train_dataset.num_classes,
                 epoch=best_epoch,
-                image_size=args.image_size,
+                image_size=IMAGE_SIZE,
                 train_sessions=("session1",),
                 val_sessions=("session2",),
                 metrics=metrics,
-                classifier_state=margin_head.state_dict(),
+                classifier_state=margin_head.state_dict() if margin_head is not None else None,
+                model_name="resnet18",
+                training_objective=args.loss,
+                label_mode=args.label_mode,
+                training_config={
+                    "contrastive_margin": float(CONTRASTIVE_MARGIN),
+                    "samples_per_class": int(SAMPLES_PER_CLASS),
+                },
             )
             torch.save(checkpoint, str(args.output))
             args.output.with_suffix(".json").write_text(json.dumps(metrics, indent=2), encoding="utf-8")
