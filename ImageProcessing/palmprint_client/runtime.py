@@ -15,7 +15,7 @@ from .config import RuntimeConfig
 from .models import TextureCNN, create_hand_landmarker
 from .payloads import build_feature_vector_message, build_status_message
 from .preprocessing import RoiToneSettings
-from .transport import LatestMessageBus, MessageQueue
+from .transport import MessageQueue
 from .utils import l2_normalize, parse_camera_source
 from .vision import (
     draw_hand_overlay,
@@ -39,12 +39,10 @@ class HeadlessPalmClient:
         self,
         config: RuntimeConfig,
         *,
-        event_bus: LatestMessageBus,
         feature_queue: MessageQueue,
         pipeline_status_provider: Callable[[], dict[str, Any]],
     ):
         self.config = config
-        self.event_bus = event_bus
         self.feature_queue = feature_queue
         self.pipeline_status_provider = pipeline_status_provider
 
@@ -58,6 +56,7 @@ class HeadlessPalmClient:
         self.last_status_publish_at = 0.0
         self.last_status_signature: tuple[Any, ...] | None = None
         self.last_debug_frame_publish_at = 0.0
+        self.model_lock = threading.RLock()
 
         self.cap = cv2.VideoCapture(self.camera_source)
         if not self.cap.isOpened():
@@ -83,7 +82,7 @@ class HeadlessPalmClient:
         )
         self.cnn = TextureCNN(
             device=self.device,
-            weights_path=config.cnn_weights_path,
+            embedding_model=config.embedding_model,
             roi_tone_settings=self.roi_tone_settings,
         )
 
@@ -91,11 +90,61 @@ class HeadlessPalmClient:
         self.embedding_history: deque[np.ndarray] = deque(maxlen=config.history_size)
         self.last_embedding: np.ndarray | None = None
         self.feature_cache = self._empty_feature_cache()
-        self.event_bus.publish(self._ui_payload(self._build_status_message(
+        self.feature_queue.publish(self._ui_payload(self._build_status_message(
             status="starting",
             message="Starting capture pipeline.",
             hand_detected=False,
         )))
+
+    def _reset_feature_state_unlocked(self) -> None:
+        self.geom_history.clear()
+        self.embedding_history.clear()
+        self.last_embedding = None
+        self.feature_cache = self._empty_feature_cache()
+
+    def embedding_model_status(self) -> dict[str, Any]:
+        with self.model_lock:
+            return self.cnn.status_payload()
+
+    def select_embedding_model(self, model_id: str) -> dict[str, Any]:
+        with self.model_lock:
+            if model_id == self.cnn.model_id:
+                return self.cnn.status_payload()
+
+        cnn = TextureCNN(
+            device=self.device,
+            embedding_model=model_id,
+            roi_tone_settings=self.roi_tone_settings,
+        )
+        with self.model_lock:
+            self.cnn = cnn
+            self._reset_feature_state_unlocked()
+
+        payload = self._ui_payload(
+            self._build_status_message(
+                status="starting",
+                message=f"Switched embedding model to {cnn.display_name}.",
+                hand_detected=False,
+            )
+        )
+        self.feature_queue.publish(payload)
+        return cnn.status_payload()
+
+    def handle_command(self, message: dict[str, Any]) -> dict[str, Any] | None:
+        command = message.get("type") or message.get("command")
+        if command != "select_embedding_model":
+            return {"type": "command_result", "ok": False, "error": f"Unknown command: {command}"}
+
+        model_id = message.get("model_id")
+        if not isinstance(model_id, str) or not model_id.strip():
+            return {"type": "command_result", "ok": False, "error": "model_id is required"}
+
+        try:
+            active = self.select_embedding_model(model_id.strip())
+        except Exception as exc:
+            return {"type": "command_result", "ok": False, "error": str(exc)}
+
+        return {"type": "command_result", "ok": True, "active": active}
 
     def _configure_capture_resolution(self) -> None:
         if self.config.camera_fps > 0:
@@ -155,6 +204,8 @@ class HeadlessPalmClient:
 
     def _ui_payload(self, payload: dict[str, Any]) -> dict[str, Any]:
         ui_payload = copy.deepcopy(payload)
+        with self.model_lock:
+            embedding_model = self.cnn.status_payload()
         ui_payload["fps"] = round(self._processing_fps(), 1)
         ui_payload["pipeline"] = self.pipeline_status_provider()
         ui_payload["runtime"] = {
@@ -163,7 +214,8 @@ class HeadlessPalmClient:
             "camera_source": str(self.camera_source),
             "camera_fps_request": self.config.camera_fps,
             "device": self.device_desc,
-            "cnn_source": self.cnn.source,
+            "cnn_source": embedding_model["source"],
+            "embedding_model": embedding_model,
             "embed_every": self.config.embed_every,
         }
         return ui_payload
@@ -215,7 +267,7 @@ class HeadlessPalmClient:
         )
         self.last_status_signature = signature
         self.last_status_publish_at = now
-        self.event_bus.publish(
+        self.feature_queue.publish(
             self._debug_message(
                 self._ui_payload(payload),
                 camera_frame_bgr if frame_due or force else None,
@@ -236,14 +288,13 @@ class HeadlessPalmClient:
             hand_proportions=self.feature_cache["hand_proportions"],
         )
         frame_due = self._should_publish_debug_frame()
-        self.event_bus.publish(
+        self.feature_queue.publish(
             self._debug_message(
                 self._ui_payload(payload),
                 camera_frame_bgr if frame_due else None,
                 roi_frame_bgr if frame_due else None,
             )
         )
-        self.feature_queue.publish(payload)
 
     def _update_feature_cache(self, geometry: dict[str, float]) -> None:
         geom_keys = sorted(geometry.keys())
@@ -348,22 +399,23 @@ class HeadlessPalmClient:
                     if roi is None:
                         self._publish_roi_failure(hand_label, debug_frame)
                     else:
-                        run_embed = (self.frame_counter % self.config.embed_every == 0) or (self.last_embedding is None)
-                        if run_embed:
-                            embedding = self.cnn.embed(roi)
-                            self.last_embedding = embedding
-                            self.embedding_history.append(embedding)
-                        else:
-                            embedding = self.last_embedding
-                            if embedding is None:
-                                self._publish_error("Embedding cache was empty.")
-                                continue
+                        with self.model_lock:
+                            run_embed = (self.frame_counter % self.config.embed_every == 0) or (self.last_embedding is None)
+                            if run_embed:
+                                embedding = self.cnn.embed(roi)
+                                self.last_embedding = embedding
+                                self.embedding_history.append(embedding)
+                            else:
+                                embedding = self.last_embedding
+                                if embedding is None:
+                                    self._publish_error("Embedding cache was empty.")
+                                    continue
 
-                        self.geom_history.append(geometry)
-                        if not self.embedding_history:
-                            self.embedding_history.append(embedding)
+                            self.geom_history.append(geometry)
+                            if not self.embedding_history:
+                                self.embedding_history.append(embedding)
 
-                        self._update_feature_cache(geometry)
+                            self._update_feature_cache(geometry)
                         self._publish_feature_message(
                             hand_label,
                             debug_frame,

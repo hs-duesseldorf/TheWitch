@@ -1,0 +1,42 @@
+{
+  "best_probe_top1": 0.2554999887943268,
+  "best_epoch": 6,
+  "history": [
+    {
+      "epoch": 1.0,
+      "train_loss": 0.04004670023594214,
+      "probe_top1": 0.1978333294391632
+    },
+    {
+      "epoch": 2.0,
+      "train_loss": 0.035191935527583824,
+      "probe_top1": 0.22033333778381348
+    },
+    {
+      "epoch": 3.0,
+      "train_loss": 0.03372863833994969,
+      "probe_top1": 0.23849999904632568
+    },
+    {
+      "epoch": 4.0,
+      "train_loss": 0.03250613031180009,
+      "probe_top1": 0.19433332979679108
+    },
+    {
+      "epoch": 5.0,
+      "train_loss": 0.0314254787872019,
+      "probe_top1": 0.195333331823349
+    },
+    {
+      "epoch": 6.0,
+      "train_loss": 0.030428066120847412,
+      "probe_top1": 0.2554999887943268
+    }
+  ],
+  "seed": 1234,
+  "device": "cuda:0",
+  "trained_at_unix": 1777136049,
+  "model": "resnet18",
+  "loss": "contrastive",
+  "label_mode": "person"
+}

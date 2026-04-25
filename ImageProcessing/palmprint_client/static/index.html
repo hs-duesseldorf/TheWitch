@@ -102,6 +102,41 @@
       overflow: hidden;
     }
 
+    .topbar-actions {
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      gap: 12px;
+      flex-wrap: wrap;
+      min-width: min(100%, 560px);
+    }
+
+    .model-control {
+      display: grid;
+      gap: 6px;
+      min-width: min(100%, 280px);
+      flex: 1 1 280px;
+    }
+
+    .model-control label,
+    .model-status {
+      font-size: 0.72rem;
+      font-weight: 500;
+      color: var(--muted-foreground);
+    }
+
+    .model-control select {
+      width: 100%;
+      min-height: 36px;
+      padding: 0 34px 0 12px;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      background: var(--background);
+      color: var(--foreground);
+      font: inherit;
+      font-size: 0.875rem;
+    }
+
     .title-wrap {
       display: grid;
       gap: 6px;
@@ -425,6 +460,15 @@
         justify-content: flex-start;
       }
 
+      .topbar-actions {
+        justify-content: flex-start;
+        min-width: 0;
+      }
+
+      .model-control {
+        flex-basis: 100%;
+      }
+
       .badge {
         width: fit-content;
         max-width: 100%;
@@ -541,10 +585,21 @@
         <h1>Palmprint Debug Server</h1>
       </div>
 
-      <div class="badge">
-        <span class="badge-label">UI Socket</span>
-        <span id="ui-socket" data-state="connecting">Connecting</span>
-        <span class="dot" id="ui-socket-dot" data-state="connecting"></span>
+      <div class="topbar-actions">
+        <div class="model-control">
+          <label for="embedding-model-select">Embedding Model</label>
+          <select id="embedding-model-select">
+            <option value="arcface">Tongji ArcFace</option>
+            <option value="contrastive">Tongji Contrastive</option>
+          </select>
+          <span id="embedding-model-status" class="model-status">--</span>
+        </div>
+
+        <div class="badge">
+          <span class="badge-label">UI Socket</span>
+          <span id="ui-socket" data-state="connecting">Connecting</span>
+          <span class="dot" id="ui-socket-dot" data-state="connecting"></span>
+        </div>
       </div>
     </header>
 
@@ -621,10 +676,14 @@
       statusMessage: document.getElementById('status-message'),
       cameraFrame: document.getElementById('camera-frame'),
       roiFrame: document.getElementById('roi-frame'),
-      payloadPreview: document.getElementById('payload-preview')
+      payloadPreview: document.getElementById('payload-preview'),
+      embeddingModelSelect: document.getElementById('embedding-model-select'),
+      embeddingModelStatus: document.getElementById('embedding-model-status')
     };
 
     let socket = null;
+    let activeEmbeddingModelId = els.embeddingModelSelect.value;
+    let switchingEmbeddingModel = false;
 
     function setState(el, text, state) {
       el.textContent = text;
@@ -674,6 +733,18 @@
     }
 
     function updateFromMessage(message) {
+      if (message.type === 'command_result') {
+        switchingEmbeddingModel = false;
+        els.embeddingModelSelect.disabled = false;
+        if (message.ok && message.active) {
+          syncEmbeddingModel(message.active);
+        } else if (message.error) {
+          els.embeddingModelSelect.value = activeEmbeddingModelId;
+          els.embeddingModelStatus.textContent = `Switch failed: ${message.error}`;
+        }
+        return;
+      }
+
       const hand = typeof message.hand === 'string' ? message.hand : '';
       const fps = Number.isFinite(Number(message.fps)) ? Number(message.fps).toFixed(1) : '--';
       const debug = message.debug || {};
@@ -687,6 +758,7 @@
       };
 
       const status = message.status || 'unknown';
+      const runtimeModel = message.runtime && message.runtime.embedding_model ? message.runtime.embedding_model : null;
       const statusText = (
         typeof message.message === 'string' && message.message
           ? message.message
@@ -702,6 +774,45 @@
       safeSetImage(els.roiFrame, debug.roi_frame_jpeg);
 
       els.payloadPreview.textContent = compactPayload(message);
+      if (runtimeModel && typeof runtimeModel.id === 'string') {
+        syncEmbeddingModel(runtimeModel);
+      }
+    }
+
+    function syncEmbeddingModel(model) {
+      activeEmbeddingModelId = model.id;
+      if (els.embeddingModelSelect.querySelector(`option[value="${model.id}"]`)) {
+        els.embeddingModelSelect.value = model.id;
+      }
+      els.embeddingModelStatus.textContent = `${model.source || 'unknown'} / ${model.input_mode || 'unknown'}`;
+    }
+
+    async function selectEmbeddingModel(modelId) {
+      if (!modelId || modelId === activeEmbeddingModelId || switchingEmbeddingModel) {
+        return;
+      }
+
+      switchingEmbeddingModel = true;
+      els.embeddingModelSelect.disabled = true;
+      els.embeddingModelStatus.textContent = 'Switching model...';
+
+      try {
+        const response = await fetch('/api/embedding-model', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ model_id: modelId })
+        });
+        const payload = await response.json();
+        if (!response.ok) {
+          throw new Error(payload.error || `HTTP ${response.status}`);
+        }
+      } catch (error) {
+        els.embeddingModelSelect.value = activeEmbeddingModelId;
+        els.embeddingModelStatus.textContent = `Switch failed: ${error.message}`;
+      } finally {
+        switchingEmbeddingModel = false;
+        els.embeddingModelSelect.disabled = false;
+      }
     }
 
     function connect() {
@@ -736,6 +847,10 @@
         setDotState(els.uiSocketDot, 'error');
       });
     }
+
+    els.embeddingModelSelect.addEventListener('change', (event) => {
+      selectEmbeddingModel(event.target.value);
+    });
 
     connect();
   </script>
