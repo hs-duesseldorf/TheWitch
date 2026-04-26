@@ -19,6 +19,7 @@ EMBEDDING_MODEL_CHOICES = ("arcface", "contrastive")
 class RuntimeConfig:
     camera: str
     embedding_model: str
+    device: str
     camera_fps: float = 0.0
     width: int = 0
     height: int = 0
@@ -54,6 +55,16 @@ def parse_args() -> AppConfig:
     parser = argparse.ArgumentParser(description="Palmprint runtime websocket client")
     parser.add_argument("--camera", type=str, default="0", help="OpenCV camera index or source string")
     parser.add_argument(
+        "--device",
+        type=str,
+        choices=("auto", "cpu", "cuda", "mps"),
+        default=os.getenv("PALMPRINT_DEVICE", "auto"),
+        help=(
+            "Torch device for embedding inference "
+            "(auto prefers CUDA, then Apple MPS, then CPU; env: PALMPRINT_DEVICE)"
+        ),
+    )
+    parser.add_argument(
         "--embedding_model",
         type=str,
         choices=EMBEDDING_MODEL_CHOICES,
@@ -75,6 +86,7 @@ def parse_args() -> AppConfig:
     runtime = RuntimeConfig(
         camera=args.camera,
         embedding_model=args.embedding_model,
+        device=args.device,
     )
     transport = TransportConfig(
         pipeline_ws_url=(args.pipeline_ws_url or os.getenv("PALMPRINT_AI_WS_URL", DEFAULT_AI_PIPELINE_WS_URL)).strip()

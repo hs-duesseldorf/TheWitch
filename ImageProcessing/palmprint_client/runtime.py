@@ -34,6 +34,31 @@ from .vision import (
 DEBUG_STREAM_INTERVAL_S = 1.0 / 30.0
 
 
+def resolve_torch_device(requested_device: str) -> tuple[torch.device, str]:
+    requested = (requested_device or "auto").strip().lower()
+    if requested == "auto":
+        if torch.cuda.is_available():
+            return torch.device("cuda:0"), f"cuda ({torch.cuda.get_device_name(0)})"
+        if torch.backends.mps.is_available():
+            return torch.device("mps"), "mps (Apple Metal)"
+        return torch.device("cpu"), "cpu"
+
+    if requested == "cuda":
+        if not torch.cuda.is_available():
+            raise RuntimeError("Torch device 'cuda' was requested, but CUDA is not available on this machine.")
+        return torch.device("cuda:0"), f"cuda ({torch.cuda.get_device_name(0)})"
+
+    if requested == "mps":
+        if not torch.backends.mps.is_available():
+            raise RuntimeError("Torch device 'mps' was requested, but Apple Metal/MPS is not available in this PyTorch build.")
+        return torch.device("mps"), "mps (Apple Metal)"
+
+    if requested == "cpu":
+        return torch.device("cpu"), "cpu"
+
+    raise ValueError(f"Unsupported torch device: {requested_device!r}")
+
+
 class HeadlessPalmClient:
     def __init__(
         self,
@@ -67,12 +92,8 @@ class HeadlessPalmClient:
         except Exception:
             pass
 
-        if not torch.cuda.is_available():
-            raise RuntimeError("Palmprint runtime requires CUDA and targets NVIDIA Jetson Nano deployment.")
-
         self.landmarker = create_hand_landmarker(config.hand_model_path)
-        self.device = torch.device("cuda:0")
-        self.device_desc = f"cuda ({torch.cuda.get_device_name(0)})"
+        self.device, self.device_desc = resolve_torch_device(config.device)
         self.roi_tone_settings = RoiToneSettings(
             brightness=config.roi_brightness,
             contrast=config.roi_contrast,
