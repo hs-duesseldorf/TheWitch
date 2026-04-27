@@ -14,3 +14,5 @@ assets/datasets/
 assets/models/*.task
 assets/weights/*.json
 assets/weights/*.pt
+ArtificialIntelligence/TextToSpeech/xtts-env
+ArtificialIntelligence/TextToSpeech/output.wav
