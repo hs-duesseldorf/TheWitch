@@ -10,11 +10,14 @@ import torch.nn.functional as F
 from torchvision import models
 
 CHECKPOINT_FORMAT = "palmprint_resnet18_embedding_v1"
+RESNET18_MODEL_NAME = "resnet18"
 
 
 class ResNet18EmbeddingNet(nn.Module):
     def __init__(self, embedding_dim: int = 256, *, pretrained: bool = True):
         super().__init__()
+        self.model_name = RESNET18_MODEL_NAME
+        self.embedding_dim = int(embedding_dim)
         weights = None
         if pretrained:
             try:
@@ -83,7 +86,7 @@ class ArcMarginProduct(nn.Module):
 
 
 def build_embedding_checkpoint(
-    model: ResNet18EmbeddingNet,
+    model: nn.Module,
     *,
     num_classes: int,
     epoch: int,
@@ -92,15 +95,23 @@ def build_embedding_checkpoint(
     val_sessions: tuple[str, ...],
     metrics: dict[str, Any],
     classifier_state: dict[str, torch.Tensor] | None = None,
+    model_name: str | None = None,
+    training_objective: str = "arcface",
+    label_mode: str = "palm",
+    training_config: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
+    resolved_model_name = model_name or str(getattr(model, "model_name", RESNET18_MODEL_NAME))
     return {
         "format": CHECKPOINT_FORMAT,
-        "model_name": "resnet18",
-        "embedding_dim": int(model.embedding[0].out_features),
+        "model_name": resolved_model_name,
+        "embedding_dim": int(getattr(model, "embedding_dim", 256)),
         "num_classes": int(num_classes),
         "image_size": int(image_size),
         "input_mode": "palm_gray",
         "metric": "cosine",
+        "training_objective": training_objective,
+        "label_mode": label_mode,
+        "training_config": training_config or {},
         "epoch": int(epoch),
         "train_sessions": list(train_sessions),
         "val_sessions": list(val_sessions),
@@ -114,12 +125,15 @@ def load_embedding_checkpoint(
     checkpoint_path: Path,
     *,
     device: torch.device,
-) -> tuple[ResNet18EmbeddingNet, dict[str, Any]]:
+) -> tuple[nn.Module, dict[str, Any]]:
     checkpoint = torch.load(str(checkpoint_path), map_location="cpu")
     if not isinstance(checkpoint, dict) or checkpoint.get("format") != CHECKPOINT_FORMAT:
         raise ValueError(f"{checkpoint_path} is not a {CHECKPOINT_FORMAT} checkpoint")
 
     embedding_dim = int(checkpoint.get("embedding_dim", 256))
+    model_name = str(checkpoint.get("model_name", RESNET18_MODEL_NAME))
+    if model_name != RESNET18_MODEL_NAME:
+        raise ValueError(f"Unsupported checkpoint model: {model_name}")
     model = ResNet18EmbeddingNet(embedding_dim=embedding_dim, pretrained=False)
     model.load_state_dict(checkpoint["model_state"], strict=True)
     model = model.eval().to(device)

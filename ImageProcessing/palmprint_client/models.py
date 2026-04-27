@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import cv2
 import numpy as np
 import torch
 import torch.nn as nn
@@ -16,6 +15,13 @@ from .constants import IMAGENET_MEAN, IMAGENET_STD, MODEL_INPUT_SIZE, MODEL_RESI
 from .embedding import load_embedding_checkpoint
 from .preprocessing import RoiToneSettings, prepare_cnn_input_roi
 from .utils import l2_normalize
+
+WEIGHTS_DIR = Path(__file__).resolve().parents[1] / "assets" / "weights"
+DEFAULT_EMBEDDING_MODEL = "arcface"
+EMBEDDING_MODELS: dict[str, tuple[str, Path]] = {
+    "arcface": ("Tongji ArcFace", WEIGHTS_DIR / "tongji_resnet18_arcface_256d.pt"),
+    "contrastive": ("Tongji Contrastive", WEIGHTS_DIR / "tongji_resnet18_contrastive_person_256d.pt"),
+}
 
 
 def create_hand_landmarker(model_path: Path) -> mp_vision.HandLandmarker:
@@ -34,21 +40,24 @@ def create_hand_landmarker(model_path: Path) -> mp_vision.HandLandmarker:
 
 
 class TextureCNN:
-    def __init__(self, device: torch.device, weights_path: Path, roi_tone_settings: RoiToneSettings):
+    def __init__(
+        self,
+        *,
+        device: torch.device,
+        embedding_model: str = DEFAULT_EMBEDDING_MODEL,
+        roi_tone_settings: RoiToneSettings,
+    ):
         self.device = device
-        self.weights_path = weights_path
+        self.model_id = embedding_model
+        self.weights_path = self._model_path(embedding_model)
+        self.display_name = EMBEDDING_MODELS[self.model_id][0]
         self.roi_tone_settings = roi_tone_settings
-        self.model, self.preprocess, self.source, self.input_mode = self._build_model()
+        self.model, self.preprocess, self.source, self.input_mode, self.embedding_dim = self._build_model()
 
-    def _default_preprocess(self) -> transforms.Compose:
-        return transforms.Compose(
-            [
-                transforms.Resize(MODEL_RESIZE_SIZE),
-                transforms.CenterCrop(MODEL_INPUT_SIZE),
-                transforms.ToTensor(),
-                transforms.Normalize(mean=IMAGENET_MEAN, std=IMAGENET_STD),
-            ]
-        )
+    def _model_path(self, model_id: str) -> Path:
+        if model_id not in EMBEDDING_MODELS:
+            raise ValueError(f"Unknown embedding model: {model_id}")
+        return EMBEDDING_MODELS[model_id][1]
 
     def _palm_preprocess(self) -> transforms.Compose:
         return transforms.Compose(
@@ -61,50 +70,38 @@ class TextureCNN:
             ]
         )
 
-    def _load_imagenet_model(self) -> tuple[nn.Module, transforms.Compose, str]:
+    def _load_legacy_resnet18(self, weights_path: Path) -> nn.Module:
+        state = torch.load(str(weights_path), map_location="cpu")
+        if isinstance(state, dict) and "state_dict" in state:
+            state = state["state_dict"]
+        if not isinstance(state, dict):
+            raise ValueError(f"{weights_path} does not contain a state dict")
+
+        state = {str(key).removeprefix("module."): value for key, value in state.items()}
+        model = models.resnet18(weights=None)
+        if "fc.weight" in state:
+            model.fc = nn.Linear(model.fc.in_features, state["fc.weight"].shape[0])
+        model.load_state_dict(state, strict=True)
+        return nn.Sequential(*list(model.children())[:-1])
+
+    def _build_model(self) -> tuple[nn.Module, transforms.Compose, str, str, int]:
+        if not self.weights_path.exists():
+            raise FileNotFoundError(f"Missing embedding model weights: {self.weights_path}")
+
         try:
-            weights = models.ResNet18_Weights.DEFAULT
-            return models.resnet18(weights=weights), weights.transforms(), "imagenet_default"
+            model, checkpoint = load_embedding_checkpoint(self.weights_path, device=self.device)
+            input_mode = str(checkpoint.get("input_mode", "palm_gray"))
+            embedding_dim = int(checkpoint.get("embedding_dim", 256))
+            return self._prepare_model(model), self._palm_preprocess(), f"local:{self.weights_path.name}", input_mode, embedding_dim
         except Exception:
-            try:
-                return models.resnet18(pretrained=True), self._default_preprocess(), "imagenet_legacy"
-            except Exception:
-                return models.resnet18(weights=None), self._default_preprocess(), "random_init"
+            model = self._load_legacy_resnet18(self.weights_path)
+            return self._prepare_model(model), self._palm_preprocess(), f"local:{self.weights_path.name}", "palm_gray", 512
 
-    def _build_model(self) -> tuple[nn.Module, transforms.Compose, str, str]:
-        preprocess = self._default_preprocess()
-        source = "random_init"
-        input_mode = "rgb_imagenet"
-
-        if self.weights_path.exists():
-            try:
-                model, checkpoint = load_embedding_checkpoint(self.weights_path, device=self.device)
-                source = f"local:{self.weights_path.name}"
-                preprocess = self._palm_preprocess()
-                input_mode = checkpoint.get("input_mode", "palm_gray")
-            except Exception:
-                model = models.resnet18(weights=None)
-                try:
-                    state = torch.load(str(self.weights_path), map_location="cpu")
-                    if "fc.weight" in state:
-                        model.fc = nn.Linear(model.fc.in_features, state["fc.weight"].shape[0])
-                    model.load_state_dict(state, strict=True)
-                    source = f"local:{self.weights_path.name}"
-                    preprocess = self._palm_preprocess()
-                    input_mode = "palm_gray"
-                    model = nn.Sequential(*list(model.children())[:-1])
-                except Exception:
-                    model, preprocess, source = self._load_imagenet_model()
-                    source = f"local_failed->{source}"
-                    model = nn.Sequential(*list(model.children())[:-1])
-        else:
-            model, preprocess, source = self._load_imagenet_model()
-            model = nn.Sequential(*list(model.children())[:-1])
-
+    def _prepare_model(self, model: nn.Module) -> nn.Module:
         model = model.eval().to(self.device)
         if self.device.type == "cuda":
             model = model.half()
-        return model, preprocess, source, input_mode
+        return model
 
     def _forward_batch(self, images: list[Image.Image]) -> np.ndarray:
         x = torch.stack([self.preprocess(image) for image in images], dim=0).to(self.device)
@@ -112,19 +109,18 @@ class TextureCNN:
             x = x.half()
         with torch.inference_mode():
             feat = self.model(x).flatten(1)
-        matrix = feat.detach().cpu().numpy().astype(np.float32)
-        return matrix
+        return feat.detach().cpu().numpy().astype(np.float32)
 
-    def _embed_palm_roi(self, roi_bgr: np.ndarray) -> np.ndarray:
+    def embed(self, roi_bgr: np.ndarray) -> np.ndarray:
         gray = prepare_cnn_input_roi(roi_bgr, self.roi_tone_settings)
         vec = self._forward_batch([Image.fromarray(gray, mode="L")])[0]
         return l2_normalize(vec)
 
-    def embed(self, roi_bgr: np.ndarray) -> np.ndarray:
-        if self.input_mode == "palm_gray":
-            return self._embed_palm_roi(roi_bgr)
-
-        rgb = cv2.cvtColor(roi_bgr, cv2.COLOR_BGR2RGB)
-        pil = Image.fromarray(rgb)
-        vec = self._forward_batch([pil])[0]
-        return l2_normalize(vec)
+    def status_payload(self) -> dict[str, object]:
+        return {
+            "id": self.model_id,
+            "display_name": self.display_name,
+            "source": self.source,
+            "input_mode": self.input_mode,
+            "embedding_dim": self.embedding_dim,
+        }
