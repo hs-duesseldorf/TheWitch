@@ -1,0 +1,41 @@
+IMPORTANT TTS IS BUILT ON OLD PYTHON SO WE NEED OLD PYTHON so download this version
+needs to show up when you run python --version
+https://www.python.org/downloads/release/python-31011/
+
+also to avoid a later C++ issue:
+had to download https://visualstudio.microsoft.com/de/visual-cpp-build-tools/
+-> must select Desktop development with C++!!!
+
+---
+
+#create venv
+python -m venv venv
+
+#enter venv
+venv\Scripts\activate
+
+pip uninstall torch torchvision torchaudio -y 
+pip install torch==2.1.2 torchvision==0.16.2 torchaudio==2.1.2 --index-url 
+
+pip install -r requirements.txt
+
+
+#für transformers error
+pip uninstall transformers -y
+pip install transformers==4.38.2
+
+#für alle anderen Versionen to make em match and line up without clashes
+pip uninstall gradio jinja2 fastapi starlette uvicorn -y
+pip install gradio==4.44.1
+pip install jinja2==3.1.4
+pip install fastapi==0.110.0
+pip install starlette==0.36.3
+pip install uvicorn==0.29.0
+
+pip uninstall gradio -y
+pip install gradio==3.50.2
+
+
+---
+#app kann man danach NUR mit python app.py ausführen und nicht mit streamlit
+#couldnt find a version that works with streamlit and other requirement
