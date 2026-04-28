@@ -8,6 +8,7 @@ from typing import Any
 from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse
 
+from .palmprint_data import PalmprintData
 from .transport import LatestMessageBus
 
 INDEX_HTML_PATH = Path(__file__).resolve().parent / "static" / "index.html"
@@ -27,6 +28,7 @@ class DebugWebSocketHub:
             async for raw_message in websocket.iter_text():
                 message = self._decode_json(raw_message)
                 if message is not None:
+                    self._to_palmprint_data(message)
                     self.event_bus.publish(message)
         except WebSocketDisconnect:
             return
@@ -70,6 +72,14 @@ class DebugWebSocketHub:
         except json.JSONDecodeError:
             return None
         return message if isinstance(message, dict) else None
+
+    def _to_palmprint_data(self, message: dict[str, Any]) -> PalmprintData | None:
+        if not self._looks_like_palmprint_data(message):
+            return None
+        return PalmprintData.from_dict(message)
+
+    def _looks_like_palmprint_data(self, message: dict[str, Any]) -> bool:
+        return all(key in message for key in ("status", "hand", "proportions", "vector"))
 
 
 def create_debug_app() -> FastAPI:
