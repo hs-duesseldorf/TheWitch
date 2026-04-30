@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import Any, Sequence
 
+from .palmprint_data import build_palmprint_data
 
 def build_feature_vector_message(
     *,
@@ -10,12 +11,12 @@ def build_feature_vector_message(
     embedding_vector: Sequence[float],
     hand_proportions: dict[str, float],
 ) -> dict[str, Any]:
-    return {
-        "status": status,
-        "hand": hand_label,
-        "proportions": {key: round(float(value), 6) for key, value in hand_proportions.items()},
-        "vector": [round(float(value), 6) for value in embedding_vector],
-    }
+    return build_palmprint_data(
+        status=status,
+        hand=hand_label,
+        proportions=hand_proportions,
+        vector=embedding_vector,
+    ).to_dict()
 
 
 def build_status_message(
