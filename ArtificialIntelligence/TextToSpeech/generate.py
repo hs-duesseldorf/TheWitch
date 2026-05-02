@@ -13,7 +13,7 @@ output_file = "output.wav"
 print("Enter text to synthesize (or type 'exit'):\n")
 
 while True:
-    text = input("Text: ")
+    text = input("Text: ") #use a ! at end of sentence for no exhale, thats part of model sadly
 
     if text.lower() == "exit":
         break
@@ -24,7 +24,9 @@ while True:
         text=text,
         speaker_wav=speaker_wav,
         language=language,
-        file_path=output_file
+        file_path=output_file,
+        split_sentences=False #this adjusts it so that breaks between words are more even
+        #no rdm long breaks in the middle from splitting
     )
 
     print(f"Saved: {output_file}\n")

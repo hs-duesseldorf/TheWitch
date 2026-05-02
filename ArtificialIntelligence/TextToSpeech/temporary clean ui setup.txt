@@ -14,17 +14,18 @@ python -m venv venv
 #enter venv
 venv\Scripts\activate
 
+#these are the CPU versions of torch
+#for a PC with a Nvidia GPU we'll use a different Version with CUDA that should be faster
 pip uninstall torch torchvision torchaudio -y 
 pip install torch==2.1.2 torchvision==0.16.2 torchaudio==2.1.2 --index-url https://download.pytorch.org/whl/cpu
 
 pip install -r requirements.txt
 
 
-#für transformers error
+#we need these exact versions else there are requirement conflicts
 pip uninstall transformers -y
 pip install transformers==4.38.2
 
-#für alle anderen Versionen to make em match and line up without clashes
 pip uninstall gradio jinja2 fastapi starlette uvicorn -y
 pip install gradio==4.44.1
 pip install jinja2==3.1.4
@@ -37,5 +38,5 @@ pip install gradio==3.50.2
 
 
 ---
-#app kann man danach NUR mit python app.py ausführen und nicht mit streamlit
+#app should now be executable with 'python app.py'
 #couldnt find a version that works with streamlit and other requirement
