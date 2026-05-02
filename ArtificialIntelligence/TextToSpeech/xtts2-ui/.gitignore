@@ -1,7 +1,7 @@
 outputs/*
 !outputs/.placeholder
-targets/*
-!target/Rogger.wav
+#targets/*
+#!target/Rogger.wav
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
