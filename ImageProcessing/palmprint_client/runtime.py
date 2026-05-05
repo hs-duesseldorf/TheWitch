@@ -23,6 +23,8 @@ from .vision import (
     encode_frame_data_url,
     estimate_roi_pose,
     extract_geometry_features,
+    is_palm_frontal,
+    is_palm_side_visible,
     mirror_quad_horizontally,
     render_placeholder_frame,
     render_roi_feature_preview,
@@ -351,6 +353,26 @@ class HeadlessPalmClient:
             roi_frame_bgr=render_placeholder_frame(self.config.roi_size, self.config.roi_size, "ROI failed", "Adjust palm pose"),
         )
 
+    def _publish_palm_side_required(self, hand_label: str, frame_bgr: np.ndarray) -> None:
+        self._publish_status(
+            status="degraded",
+            message="Falsche Handseite. Bitte dreh deine Hand, damit die Handflaeche sichtbar ist.",
+            hand_detected=True,
+            hand_label=hand_label,
+            camera_frame_bgr=frame_bgr,
+            roi_frame_bgr=render_placeholder_frame(self.config.roi_size, self.config.roi_size, "Falsche Seite", "Hand drehen"),
+        )
+
+    def _publish_pose_quality(self, hand_label: str, frame_bgr: np.ndarray) -> None:
+        self._publish_status(
+            status="degraded",
+            message="Handflaeche ist nicht gerade genug. Bitte sehr frontal zur Kamera halten.",
+            hand_detected=True,
+            hand_label=hand_label,
+            camera_frame_bgr=frame_bgr,
+            roi_frame_bgr=render_placeholder_frame(self.config.roi_size, self.config.roi_size, "Hand gerade", "Sehr frontal halten"),
+        )
+
     def _publish_error(self, message: str) -> None:
         self._publish_status(
             status="error",
@@ -364,6 +386,14 @@ class HeadlessPalmClient:
             category = result.handedness[index][0]
             return category.category_name
         return "unknown"
+
+    def _display_handedness(self, hand_label: str) -> str:
+        label = (hand_label or "").strip().lower()
+        if label == "left":
+            return "Right"
+        if label == "right":
+            return "Left"
+        return hand_label
 
     def _run_loop(self) -> None:
         target_period = max(self.config.interval_ms / 1000.0, 0.0)
@@ -393,28 +423,40 @@ class HeadlessPalmClient:
                 else:
                     hand = result.hand_landmarks[index]
                     hand_label = self._handedness(result, index)
+                    display_hand_label = self._display_handedness(hand_label)
 
                     height, width = display_frame.shape[:2]
                     display_pts = np.array([[lm.x * width, lm.y * height, lm.z] for lm in hand], dtype=np.float32)
                     raw_pts = display_pts.copy()
                     raw_pts[:, 0] = (width - 1) - raw_pts[:, 0]
 
+                    debug_hand_frame = draw_hand_overlay(display_frame, display_pts[:, :2])
                     world_pts = None
                     if result.hand_world_landmarks and index < len(result.hand_world_landmarks):
                         world = result.hand_world_landmarks[index]
                         world_pts = np.array([[lm.x, lm.y, lm.z] for lm in world], dtype=np.float32)
 
+                    palm_side_points = world_pts
+                    if world_pts is None:
+                        palm_side_points = np.array([[lm.x * width, lm.y * height, lm.z] for lm in hand], dtype=np.float32)
+                    if not is_palm_side_visible(np.asarray(palm_side_points), hand_label, min_confidence=0.3):
+                        self._publish_palm_side_required(display_hand_label, debug_hand_frame)
+                        continue
+
                     points3d = world_pts if world_pts is not None else raw_pts
+                    if not is_palm_frontal(np.asarray(palm_side_points), hand_label):
+                        self._publish_pose_quality(display_hand_label, debug_hand_frame)
+                        continue
+
                     geometry = extract_geometry_features(points3d)
                     current_roi_pose = estimate_roi_pose(raw_pts[:, :2])
                     if current_roi_pose is None:
-                        debug_frame = draw_hand_overlay(display_frame, display_pts[:, :2])
-                        self._publish_roi_failure(hand_label, debug_frame)
+                        self._publish_roi_failure(display_hand_label, debug_hand_frame)
                         continue
 
                     raw_roi_quad = roi_quad_from_pose(current_roi_pose)
                     display_roi_quad = mirror_quad_horizontally(raw_roi_quad, width)
-                    debug_frame = draw_roi_quad(draw_hand_overlay(display_frame, display_pts[:, :2]), display_roi_quad)
+                    debug_frame = draw_roi_quad(debug_hand_frame, display_roi_quad)
                     roi = warp_roi_from_quad(raw_frame, raw_roi_quad, self.config.roi_size)
 
                     if roi is None:
@@ -438,7 +480,7 @@ class HeadlessPalmClient:
 
                             self._update_feature_cache(geometry)
                         self._publish_feature_message(
-                            hand_label,
+                            display_hand_label,
                             debug_frame,
                             render_roi_feature_preview(roi, self.roi_tone_settings),
                         )

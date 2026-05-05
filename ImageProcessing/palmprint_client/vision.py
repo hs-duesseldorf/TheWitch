@@ -63,6 +63,45 @@ def _finger_length(points: np.ndarray, ids: tuple[int, int, int, int]) -> float:
     return _distance(points[a], points[b]) + _distance(points[b], points[c]) + _distance(points[c], points[d])
 
 
+def palm_facing_score(points3d: np.ndarray, hand_label: str) -> float | None:
+    points = np.asarray(points3d, dtype=np.float32)
+    if points.shape[0] <= max(WRIST, INDEX_MCP, PINKY_MCP):
+        return None
+
+    wrist = points[WRIST, :3]
+    index_mcp = points[INDEX_MCP, :3]
+    pinky_mcp = points[PINKY_MCP, :3]
+    normal = np.cross(index_mcp - wrist, pinky_mcp - wrist)
+    normal_unit = _normalize_vector(normal)
+    if normal_unit is None:
+        return None
+
+    # MediaPipe depth grows away from the camera, so the viewing direction is -Z.
+    camera_direction = np.array([0.0, 0.0, -1.0], dtype=np.float32)
+    facing_score = float(np.dot(normal_unit, camera_direction))
+    label = (hand_label or "").strip().lower()
+
+    if label == "right":
+        return facing_score
+    if label == "left":
+        return -facing_score
+    return None
+
+
+def is_palm_side_visible(points3d: np.ndarray, hand_label: str, *, min_confidence: float = 0.2) -> bool:
+    score = palm_facing_score(points3d, hand_label)
+    if score is None:
+        return True
+    return score >= min_confidence
+
+
+def is_palm_frontal(points3d: np.ndarray, hand_label: str, *, min_confidence: float = 0.82) -> bool:
+    score = palm_facing_score(points3d, hand_label)
+    if score is None:
+        return True
+    return abs(score) >= min_confidence
+
+
 def extract_geometry_features(points3d: np.ndarray) -> dict[str, float]:
     palm_width = _distance(points3d[INDEX_MCP], points3d[PINKY_MCP])
     palm_height = _distance(points3d[WRIST], points3d[MIDDLE_MCP])
@@ -107,6 +146,7 @@ def estimate_roi_pose(landmarks_px: np.ndarray) -> RoiPose | None:
     points_xy = np.asarray(landmarks_px[:, :2], dtype=np.float32)
 
     wrist = points_xy[WRIST]
+    thumb_mcp = points_xy[THUMB_MCP]
     index_mcp = points_xy[INDEX_MCP]
     middle_mcp = points_xy[MIDDLE_MCP]
     ring_mcp = points_xy[RING_MCP]
@@ -128,7 +168,8 @@ def estimate_roi_pose(landmarks_px: np.ndarray) -> RoiPose | None:
         x_axis = _normalize_vector(_perpendicular(y_axis))
         if x_axis is None:
             return None
-    if x_axis[0] < 0.0:
+    thumb_projection = float(np.dot(thumb_mcp - wrist, x_axis))
+    if thumb_projection < 0.0:
         x_axis = -x_axis
 
     y_axis = _perpendicular(x_axis)
@@ -145,9 +186,8 @@ def estimate_roi_pose(landmarks_px: np.ndarray) -> RoiPose | None:
     if palm_width < 3.0 or palm_height < 3.0:
         return None
 
-    center = wrist + y_axis * (0.46 * palm_height)
     return RoiPose(
-        center=center.astype(np.float32),
+        center=(wrist + y_axis * (0.46 * palm_height)).astype(np.float32),
         x_axis=x_axis.astype(np.float32),
         y_axis=y_axis.astype(np.float32),
         palm_width=float(palm_width),
@@ -156,15 +196,21 @@ def estimate_roi_pose(landmarks_px: np.ndarray) -> RoiPose | None:
 
 
 def roi_quad_from_pose(pose: RoiPose) -> np.ndarray:
-    top_center = pose.center + pose.y_axis * (0.34 * pose.palm_height)
-    bottom_center = pose.center - pose.y_axis * (0.40 * pose.palm_height)
-    half_w_top = 0.56 * pose.palm_width
-    half_w_bottom = 0.66 * pose.palm_width
+    top_center = pose.center + pose.y_axis * (0.50 * pose.palm_height)
+    bottom_center = pose.center - pose.y_axis * (0.31 * pose.palm_height) + pose.x_axis * (0.065 * pose.palm_width)
+    half_w_top = 0.51 * pose.palm_width
+    half_w_bottom = 0.58 * pose.palm_width
+    thumb_bias = 0.07 * pose.palm_width
 
-    tl = top_center - pose.x_axis * half_w_top
-    tr = top_center + pose.x_axis * half_w_top
-    br = bottom_center + pose.x_axis * half_w_bottom
-    bl = bottom_center - pose.x_axis * half_w_bottom
+    left_top = half_w_top - 0.02 * pose.palm_width
+    right_top = half_w_top + thumb_bias
+    left_bottom = half_w_bottom - 0.03 * pose.palm_width
+    right_bottom = half_w_bottom + thumb_bias
+
+    tl = top_center - pose.x_axis * left_top
+    tr = top_center + pose.x_axis * right_top
+    br = bottom_center + pose.x_axis * right_bottom
+    bl = bottom_center - pose.x_axis * left_bottom
     return np.float32([tl, tr, br, bl])
 
 
