@@ -1,16 +1,101 @@
+# Local IDE/editor state
 .idea/
+.vs/
+.vscode/
+.zed/
+.fleet/
+.cursor/
+.history/
+.ionide/
+*.suo
+*.opensdf
+*.sdf
+*.VC.db
+*.VC.opendb
+*.DotSettings.user
+.vsconfig
+.vsconfig.user
+
+# Python generated files and environments
 .mypy_cache/
 .pytest_cache/
 .ruff_cache/
 .runtime-cache/
 .venv/
-__pycache__/
-build/
-dist/
 venv/
+__pycache__/
 *.egg-info/
 *.py[cod]
+build/
+dist/
+
+# Project data and model artifacts
 assets/datasets/
 assets/models/*.task
 assets/weights/*.json
 assets/weights/*.pt
+
+# Unreal generated folders
+Binaries/
+DerivedDataCache/
+Intermediate/
+Saved/
+
+# Unreal build output, but keep checked-in build metadata exceptions.
+Build/*
+**/Build/*
+!Build/*/
+!**/Build/*/
+Build/*/**
+**/Build/*/**
+!Build/*/PakBlacklist*.txt
+!**/Build/*/PakBlacklist*.txt
+!Build/**/*.ico
+!**/Build/**/*.ico
+
+# Unreal plugin generated folders
+Plugins/*/Binaries/
+Plugins/*/Intermediate/
+**/Plugins/*/Binaries/
+**/Plugins/*/Intermediate/
+
+# Generated project files
+*.sln
+*.xcodeproj
+*.xcworkspace
+
+# Compiled objects, libraries, and binaries
+*.slo
+*.lo
+*.o
+*.obj
+*.gch
+*.pch
+*.so
+*.dylib
+*.dll
+*.mod
+*.lai
+*.la
+*.a
+*.lib
+*.exe
+*.out
+*.app
+*.ipa
+*.pdb
+*.exp
+*.ilk
+
+# Unreal generated assets and logs
+*_BuiltData.uasset
+SourceArt/**/*.png
+SourceArt/**/*.tga
+**/SourceArt/**/*.png
+**/SourceArt/**/*.tga
+*.log
+*.tmp
+
+# Keep project descriptors tracked.
+!*.uproject
+!*.uplugin
