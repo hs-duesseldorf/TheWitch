@@ -31,18 +31,6 @@ def enhance_palm_roi(roi_bgr: np.ndarray) -> np.ndarray:
     return np.clip(enhanced, 0, 255).astype(np.uint8)
 
 
-def rotate_image_keep_size(image: np.ndarray, angle_deg: float) -> np.ndarray:
-    height, width = image.shape[:2]
-    matrix = cv2.getRotationMatrix2D((width / 2.0, height / 2.0), angle_deg, 1.0)
-    return cv2.warpAffine(
-        image,
-        matrix,
-        (width, height),
-        flags=cv2.INTER_LINEAR,
-        borderMode=cv2.BORDER_REFLECT_101,
-    )
-
-
 def prepare_cnn_input_roi(roi_bgr: np.ndarray, settings: RoiToneSettings) -> np.ndarray:
     if roi_bgr.ndim == 2:
         gray = roi_bgr.astype(np.uint8, copy=False)

@@ -1,0 +1,388 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <title>The Witch Debug</title>
+        <script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
+        <style>
+            :root {
+                color-scheme: dark;
+                --bg: #101113;
+                --panel: #17191d;
+                --text: #e9eaec;
+                --muted: #989da6;
+                --line: #2b2f36;
+                --accent: #f0c36a;
+            }
+            * {
+                box-sizing: border-box;
+            }
+            body {
+                margin: 0;
+                background: var(--bg);
+                color: var(--text);
+                font:
+                    14px/1.45 system-ui,
+                    sans-serif;
+            }
+            .body,
+            .debug-layout,
+            .grid,
+            .videos {
+                display: grid;
+                gap: 12px;
+            }
+            main {
+                display: grid;
+                gap: 12px;
+                padding: 16px;
+            }
+            .debug-layout {
+                grid-template-columns: minmax(520px, 1fr) minmax(280px, 1fr);
+            }
+            .videos {
+                grid-template-columns: 1fr 1fr;
+            }
+            .grid {
+                grid-template-columns: repeat(3, minmax(0, 1fr));
+            }
+            .panel {
+                border: 1px solid var(--line);
+                background: var(--panel);
+                border-radius: 8px;
+                overflow: hidden;
+            }
+            .head {
+                display: flex;
+                align-items: center;
+                height: 38px;
+                padding: 0 12px;
+                border-bottom: 1px solid var(--line);
+            }
+            h2,
+            .video-label {
+                margin: 0;
+                color: var(--muted);
+                font-size: 12px;
+                font-weight: 650;
+                text-transform: uppercase;
+            }
+            button {
+                height: 30px;
+                border: 1px solid var(--line);
+                background: #20242a;
+                color: var(--text);
+                border-radius: 6px;
+                padding: 0 10px;
+                font: inherit;
+                font-size: 12px;
+            }
+            button:hover {
+                background: #2a3038;
+            }
+            .body,
+            .videos {
+                padding: 12px;
+            }
+            .state {
+                color: var(--accent);
+                font:
+                    13px ui-monospace,
+                    monospace;
+            }
+            .video-label {
+                margin-bottom: 6px;
+                font-size: 11px;
+            }
+            audio {
+                width: 100%;
+            }
+            .stream-wrap {
+                position: relative;
+                aspect-ratio: var(--video-ratio, 16 / 9);
+                background: #050608;
+                border: 1px solid #0c0e12;
+                border-radius: 6px;
+                overflow: hidden;
+            }
+            canvas {
+                display: block;
+                width: 100%;
+                height: 100%;
+            }
+            .overlay {
+                position: absolute;
+                left: 10px;
+                bottom: 8px;
+                padding: 3px 6px;
+                border-radius: 4px;
+                background: rgb(0 0 0 / 0.58);
+                color: #d6d8dc;
+                font-size: 11px;
+            }
+            pre {
+                margin: 0;
+                padding: 10px 12px;
+                min-height: 100px;
+                max-height: 200px;
+                overflow: auto;
+                white-space: pre-wrap;
+                overflow-wrap: anywhere;
+                background: #111316;
+                font:
+                    12px ui-monospace,
+                    monospace;
+            }
+            .wide {
+                grid-column: 1 / -1;
+            }
+            #graphViewport {
+                height: 450px;
+                overflow: auto;
+                background: #090a0c;
+            }
+            #graphContent {
+                padding: 24px;
+            }
+            #graphContent svg {
+                max-width: none !important;
+            }
+            @media (max-width: 860px) {
+                .debug-layout,
+                .grid,
+                .videos {
+                    grid-template-columns: 1fr;
+                }
+            }
+        </style>
+    </head>
+    <body>
+        <main>
+            <section class="debug-layout">
+                <section class="panel">
+                    <div class="head"><h2>Videos</h2></div>
+                    <div class="videos">
+                        <div>
+                            <div class="video-label">Video</div>
+                            <div class="stream-wrap">
+                                <canvas id="cameraCanvas"></canvas
+                                ><span id="cameraFps" class="overlay"
+                                    >0 fps</span
+                                >
+                            </div>
+                        </div>
+                        <div>
+                            <div class="video-label">ROI</div>
+                            <div class="stream-wrap">
+                                <canvas id="roiCanvas"></canvas
+                                ><span id="roiFps" class="overlay">0 fps</span>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+                <section class="panel">
+                    <div class="head"><h2>AI Debug</h2></div>
+                    <div class="body">
+                        <div>
+                            state:
+                            <span id="currentState" class="state">-</span>
+                        </div>
+                        <div><button id="resetButton">Reset</button></div>
+                        <audio id="ttsAudio" controls></audio>
+                    </div>
+                </section>
+            </section>
+
+            <section class="grid">
+                <section class="panel">
+                    <div class="head"><h2>ImageProcessing</h2></div>
+                    <pre id="ImageProcessingEvents">waiting...</pre>
+                </section>
+                <section class="panel">
+                    <div class="head"><h2>ArtificialIntelligence</h2></div>
+                    <pre id="ArtificialIntelligenceEvents">waiting...</pre>
+                </section>
+                <section class="panel">
+                    <div class="head"><h2>Unreal</h2></div>
+                    <pre id="UnrealEvents">waiting...</pre>
+                </section>
+            </section>
+
+            <section class="panel">
+                <div class="head"><h2>State Machine</h2></div>
+                <div id="graphViewport"><div id="graphContent"></div></div>
+            </section>
+        </main>
+
+        <script>
+            const API = location.origin;
+            const $ = (id) => document.getElementById(id);
+            let currentAudio = "";
+            let currentState = "";
+            let graphRenderId = 0;
+            mermaid.initialize({
+                startOnLoad: false,
+                theme: "dark",
+                securityLevel: "loose",
+            });
+
+            addEventListener("DOMContentLoaded", init);
+            $("resetButton").onclick = async () => {
+                await fetch(`${API}/api/reset`, { method: "POST" });
+                await pollState();
+                loadGraph();
+            };
+
+            async function init() {
+                await loadGraph();
+                const { ws_port } = await json("/api/config");
+                const wsBase = `${location.protocol === "https:" ? "wss" : "ws"}://${location.hostname}:${ws_port}`;
+                stream("camera", `${wsBase}/ws/ai-3d-video`);
+                stream("roi", `${wsBase}/ws/ai-3d-roi`);
+                socket(`${wsBase}/ws/ip-ai`, (ev) => {
+                    show(ev.origin, ev);
+                    loadGraph();
+                });
+                socket(`${wsBase}/ws/ai-3d`, (ev) => {
+                    if (ev.type === "fortune" && ev.audio) setAudio(ev);
+                    show(ev.origin, ev);
+                    loadGraph();
+                });
+                setInterval(pollState, 1000);
+                pollState();
+            }
+
+            async function json(path) {
+                return (await fetch(`${API}${path}`)).json();
+            }
+
+            async function pollState() {
+                const nextState = (await json("/api/state")).state || "-";
+                $("currentState").textContent = nextState;
+                if (nextState !== currentState) {
+                    currentState = nextState;
+                    loadGraph();
+                }
+            }
+
+            function socket(url, target, binary = false) {
+                const showEvent =
+                    typeof target === "function"
+                        ? target
+                        : (ev) => show(target, ev);
+                const connect = () => {
+                    const ws = new WebSocket(url);
+                    if (binary) ws.binaryType = "arraybuffer";
+                    ws.onerror = () => ws.close();
+                    ws.onclose = () => setTimeout(connect, 1000);
+                    ws.onmessage = (e) => {
+                        try {
+                            Promise.resolve(
+                                showEvent(binary ? e.data : JSON.parse(e.data)),
+                            ).catch(() => {});
+                        } catch {}
+                    };
+                };
+                connect();
+            }
+
+            function show(name, event) {
+                const visible = event.audio
+                    ? {
+                          ...event,
+                          audio: `[wav ${Math.round(event.audio.length * 0.75)} bytes]`,
+                      }
+                    : event;
+                $(`${name}Events`).textContent = JSON.stringify(
+                    visible,
+                    null,
+                    2,
+                );
+            }
+
+            function setAudio(event) {
+                if (event.audio === currentAudio) return;
+                currentAudio = event.audio;
+                $("ttsAudio").src = `data:audio/wav;base64,${event.audio}`;
+            }
+
+            function stream(name, url) {
+                const canvas = $(`${name}Canvas`);
+                const ctx = canvas.getContext("2d", { alpha: false });
+                const wrap = canvas.closest(".stream-wrap");
+                let frames = 0,
+                    lastTick = performance.now();
+                ctx.fillStyle = "#000";
+
+                new ResizeObserver(() => {
+                    const r = canvas.getBoundingClientRect();
+                    canvas.width = Math.max(
+                        2,
+                        Math.floor(r.width * devicePixelRatio),
+                    );
+                    canvas.height = Math.max(
+                        2,
+                        Math.floor(r.height * devicePixelRatio),
+                    );
+                }).observe(canvas);
+
+                socket(
+                    url,
+                    async (data) => {
+                        const bmp = await createImageBitmap(
+                            new Blob([data], { type: "image/jpeg" }),
+                        );
+                        if (name === "camera") {
+                            wrap
+                                .closest(".videos")
+                                .style.setProperty(
+                                    "--video-ratio",
+                                    `${bmp.width} / ${bmp.height}`,
+                                );
+                        }
+                        const scale = Math.min(
+                            canvas.width / bmp.width,
+                            canvas.height / bmp.height,
+                        );
+                        const w = bmp.width * scale,
+                            h = bmp.height * scale;
+                        ctx.fillRect(0, 0, canvas.width, canvas.height);
+                        ctx.drawImage(
+                            bmp,
+                            (canvas.width - w) / 2,
+                            (canvas.height - h) / 2,
+                            w,
+                            h,
+                        );
+                        bmp.close();
+                        frames++;
+                        const now = performance.now();
+                        if (now - lastTick >= 1000) {
+                            $(`${name}Fps`).textContent =
+                                `${Math.round((frames * 1000) / (now - lastTick))} fps`;
+                            frames = 0;
+                            lastTick = now;
+                        }
+                    },
+                    true,
+                );
+            }
+
+            async function loadGraph() {
+                const div = $("graphContent");
+                const renderId = ++graphRenderId;
+                const { graph } = await json("/api/state-machine-graph");
+                try {
+                    const rendered = await mermaid.render(
+                        `g${Date.now()}-${renderId}`,
+                        graph,
+                    );
+                    if (renderId === graphRenderId) div.innerHTML = rendered.svg;
+                } catch {
+                    if (renderId === graphRenderId) div.textContent = graph;
+                }
+            }
+        </script>
+    </body>
+</html>

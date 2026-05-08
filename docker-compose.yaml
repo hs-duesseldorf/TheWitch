@@ -1,0 +1,86 @@
+name: thewitch
+
+services:
+  ai:
+    build:
+      context: .
+      dockerfile: ArtificialIntelligence/Dockerfile
+    command: ["python", "debug_ui.py"]
+    env_file:
+      - .env
+    ports:
+      - "8765:8765"
+      - "8501:8501"
+    volumes:
+      - ./ArtificialIntelligence/assets:/assets:ro
+    restart: unless-stopped
+    networks:
+      - witch-net
+
+  llm:
+    build:
+      context: ArtificialIntelligence/servers/llm_server
+      args:
+        WITCH_LLM_MODEL: ${WITCH_LLM_MODEL}
+    env_file:
+      - .env
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    restart: unless-stopped
+    networks:
+      - witch-net
+
+  tts:
+    build: ArtificialIntelligence/servers/tts_server
+    env_file:
+      - .env
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    volumes:
+      - tts_models:/root/.local/share/tts
+      - ./ArtificialIntelligence/assets:/assets:ro
+      - ./ArtificialIntelligence/assets:/app/assets:ro
+    ports:
+      - "5002:5002"
+    restart: unless-stopped
+    networks:
+      - witch-net
+
+  ip:
+    build:
+      context: .
+      dockerfile: ImageProcessing/Dockerfile
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    privileged: true
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    env_file:
+      - .env
+    volumes:
+      - ./ImageProcessing/assets:/app/assets:ro
+    restart: unless-stopped
+    networks:
+      - witch-net
+
+volumes:
+  tts_models:
+
+networks:
+  witch-net:
+    driver: bridge

@@ -1,185 +1,144 @@
 from __future__ import annotations
 
-import copy
+import logging
 import threading
 import time
 from collections import deque
-from typing import Any, Callable
+from contextlib import suppress
+from pathlib import Path
+from typing import Any
 
 import cv2
 import mediapipe as mp
 import numpy as np
 import torch
 
-from .config import RuntimeConfig
 from .models import TextureCNN, create_hand_landmarker
-from .payloads import build_feature_vector_message, build_status_message
-from .preprocessing import RoiToneSettings
-from .transport import MessageQueue
+from .preprocessing import RoiToneSettings, prepare_cnn_input_roi
+from .transport import WebSocketClient
 from .utils import l2_normalize, parse_camera_source
+from shared.events import Hand, HandEvent, HandTrigger
 from .vision import (
     draw_hand_overlay,
     draw_roi_quad,
-    encode_frame_data_url,
+    encode_frame_jpeg,
     estimate_roi_pose,
     extract_geometry_features,
     is_palm_frontal,
     is_palm_side_visible,
     mirror_quad_horizontally,
-    render_placeholder_frame,
-    render_roi_feature_preview,
     roi_quad_from_pose,
     select_primary_hand_from_tasks,
     warp_roi_from_quad,
 )
 
-DEBUG_STREAM_INTERVAL_S = 1.0 / 30.0
+logger = logging.getLogger(__name__)
+
+ASSETS_DIR = Path(__file__).resolve().parent.parent / "assets"
+DEFAULT_HAND_MODEL_PATH = ASSETS_DIR / "models" / "hand_landmarker.task"
+VIDEO_STREAM_INTERVAL_S = 1.0 / 30.0
+WEBCAM_BRIDGE_URL = "http://host.docker.internal:8090/video"
+CAMERA_SOURCE = "0"
+CAMERA_FPS = 0.0
+CAMERA_WIDTH = 0
+CAMERA_HEIGHT = 0
+FRAME_INTERVAL_MS = 0
+HISTORY_SIZE = 45
+ROI_SIZE = 256
+EMBED_EVERY = 1
+EMBEDDING_MODEL = "arcface"
+ROI_BRIGHTNESS = -8.0
+ROI_CONTRAST = 1.2
+ROI_GAMMA = 1.1
+ROI_CLAHE_CLIP_LIMIT = 1.8
+ROI_CLAHE_TILE_SIZE = 8
 
 
-def resolve_torch_device(requested_device: str) -> tuple[torch.device, str]:
-    requested = (requested_device or "auto").strip().lower()
-    if requested == "auto":
-        if torch.cuda.is_available():
-            return torch.device("cuda:0"), f"cuda ({torch.cuda.get_device_name(0)})"
-        if torch.backends.mps.is_available():
-            return torch.device("mps"), "mps (Apple Metal)"
-        return torch.device("cpu"), "cpu"
-
-    if requested == "cuda":
-        if not torch.cuda.is_available():
-            raise RuntimeError("Torch device 'cuda' was requested, but CUDA is not available on this machine.")
-        return torch.device("cuda:0"), f"cuda ({torch.cuda.get_device_name(0)})"
-
-    if requested == "mps":
-        if not torch.backends.mps.is_available():
-            raise RuntimeError("Torch device 'mps' was requested, but Apple Metal/MPS is not available in this PyTorch build.")
-        return torch.device("mps"), "mps (Apple Metal)"
-
-    if requested == "cpu":
-        return torch.device("cpu"), "cpu"
-
-    raise ValueError(f"Unsupported torch device: {requested_device!r}")
+def resolve_torch_device() -> torch.device:
+    if torch.cuda.is_available():
+        return torch.device("cuda:0")
+    if torch.backends.mps.is_available():
+        return torch.device("mps")
+    return torch.device("cpu")
 
 
 class HeadlessPalmClient:
     def __init__(
         self,
-        config: RuntimeConfig,
         *,
-        feature_queue: MessageQueue,
-        pipeline_status_provider: Callable[[], dict[str, Any]],
+        event_client: WebSocketClient,
+        video_client: WebSocketClient,
+        roi_client: WebSocketClient,
     ):
-        self.config = config
-        self.feature_queue = feature_queue
-        self.pipeline_status_provider = pipeline_status_provider
+        self.event_client = event_client
+        self.video_client = video_client
+        self.roi_client = roi_client
 
-        self.camera_source = parse_camera_source(config.camera)
+        self.camera_fps = CAMERA_FPS
+        self.width = CAMERA_WIDTH
+        self.height = CAMERA_HEIGHT
+        self.interval_ms = FRAME_INTERVAL_MS
+        self.roi_size = ROI_SIZE
+        self.embed_every = EMBED_EVERY
+
+        self.camera_source = parse_camera_source(CAMERA_SOURCE)
         self.stop_event = threading.Event()
         self.worker: threading.Thread | None = None
         self.started_at = time.monotonic()
         self.frame_counter = 0
-        self.frame_timestamps: deque[float] = deque(maxlen=90)
-        self.last_frame_size = [config.width, config.height]
-        self.last_status_publish_at = 0.0
-        self.last_status_signature: tuple[Any, ...] | None = None
-        self.last_debug_frame_publish_at = 0.0
+        self.last_hand_observation_signature: tuple[Any, ...] | None = None
+        self.last_video_frame_publish_at = 0.0
+        self.last_roi_frame_publish_at = 0.0
         self.model_lock = threading.RLock()
 
         self.cap = cv2.VideoCapture(self.camera_source)
+        if not self.cap.isOpened() and isinstance(self.camera_source, int):
+            logger.warning("Camera %s failed, trying MJPEG bridge at %s", self.camera_source, WEBCAM_BRIDGE_URL)
+            self.camera_source = WEBCAM_BRIDGE_URL
+            self.cap = cv2.VideoCapture(WEBCAM_BRIDGE_URL)
         if not self.cap.isOpened():
-            raise RuntimeError(f"Could not open camera source {self.camera_source!r}")
+            raise RuntimeError(
+                f"Could not open camera source {CAMERA_SOURCE!r}. "
+                f"Start the webcam bridge if running in Docker Desktop without device passthrough: {WEBCAM_BRIDGE_URL}"
+            )
         self._configure_capture_resolution()
-        try:
+        with suppress(cv2.error):
             self.cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
-        except Exception:
-            pass
 
-        self.landmarker = create_hand_landmarker(config.hand_model_path)
-        self.device, self.device_desc = resolve_torch_device(config.device)
+        self.landmarker = create_hand_landmarker(DEFAULT_HAND_MODEL_PATH)
+        self.device = resolve_torch_device()
         self.roi_tone_settings = RoiToneSettings(
-            brightness=config.roi_brightness,
-            contrast=config.roi_contrast,
-            gamma=config.roi_gamma,
-            clahe_clip_limit=config.roi_clahe_clip_limit,
-            clahe_tile_size=config.roi_clahe_tile_size,
+            brightness=ROI_BRIGHTNESS,
+            contrast=ROI_CONTRAST,
+            gamma=ROI_GAMMA,
+            clahe_clip_limit=ROI_CLAHE_CLIP_LIMIT,
+            clahe_tile_size=ROI_CLAHE_TILE_SIZE,
         )
         self.cnn = TextureCNN(
             device=self.device,
-            embedding_model=config.embedding_model,
+            embedding_model=EMBEDDING_MODEL,
             roi_tone_settings=self.roi_tone_settings,
         )
 
-        self.geom_history: deque[dict[str, float]] = deque(maxlen=config.history_size)
-        self.embedding_history: deque[np.ndarray] = deque(maxlen=config.history_size)
+        self.geom_history: deque[dict[str, float]] = deque(maxlen=HISTORY_SIZE)
+        self.embedding_history: deque[np.ndarray] = deque(maxlen=HISTORY_SIZE)
         self.last_embedding: np.ndarray | None = None
         self.feature_cache = self._empty_feature_cache()
-        self.feature_queue.publish(self._ui_payload(self._build_status_message(
-            status="starting",
-            message="Starting capture pipeline.",
-            hand_detected=False,
-        )))
-
-    def _reset_feature_state_unlocked(self) -> None:
-        self.geom_history.clear()
-        self.embedding_history.clear()
-        self.last_embedding = None
-        self.feature_cache = self._empty_feature_cache()
-
-    def embedding_model_status(self) -> dict[str, Any]:
-        with self.model_lock:
-            return self.cnn.status_payload()
-
-    def select_embedding_model(self, model_id: str) -> dict[str, Any]:
-        with self.model_lock:
-            if model_id == self.cnn.model_id:
-                return self.cnn.status_payload()
-
-        cnn = TextureCNN(
-            device=self.device,
-            embedding_model=model_id,
-            roi_tone_settings=self.roi_tone_settings,
-        )
-        with self.model_lock:
-            self.cnn = cnn
-            self._reset_feature_state_unlocked()
-
-        payload = self._ui_payload(
-            self._build_status_message(
-                status="starting",
-                message=f"Switched embedding model to {cnn.display_name}.",
-                hand_detected=False,
-            )
-        )
-        self.feature_queue.publish(payload)
-        return cnn.status_payload()
-
-    def handle_command(self, message: dict[str, Any]) -> dict[str, Any] | None:
-        command = message.get("type") or message.get("command")
-        if command != "select_embedding_model":
-            return {"type": "command_result", "ok": False, "error": f"Unknown command: {command}"}
-
-        model_id = message.get("model_id")
-        if not isinstance(model_id, str) or not model_id.strip():
-            return {"type": "command_result", "ok": False, "error": "model_id is required"}
-
-        try:
-            active = self.select_embedding_model(model_id.strip())
-        except Exception as exc:
-            return {"type": "command_result", "ok": False, "error": str(exc)}
-
-        return {"type": "command_result", "ok": True, "active": active}
+        self._publish_hand_event(HandEvent(
+            trigger=HandTrigger.ABSENT,
+        ))
 
     def _configure_capture_resolution(self) -> None:
-        if self.config.camera_fps > 0:
-            self.cap.set(cv2.CAP_PROP_FPS, self.config.camera_fps)
-        if self.config.width > 0:
-            self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, self.config.width)
-        if self.config.height > 0:
-            self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, self.config.height)
+        if self.camera_fps > 0:
+            self.cap.set(cv2.CAP_PROP_FPS, self.camera_fps)
+        if self.width > 0:
+            self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, self.width)
+        if self.height > 0:
+            self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, self.height)
 
     def _empty_feature_cache(self) -> dict[str, Any]:
         return {
-            "hand_proportions": {},
+            "hand_lengths": {},
             "embedding_vector": [],
         }
 
@@ -202,122 +161,65 @@ class HeadlessPalmClient:
             self.landmarker.close()
             self.landmarker = None
 
-    def _processing_fps(self) -> float:
-        if len(self.frame_timestamps) < 2:
-            return 0.0
-        span = self.frame_timestamps[-1] - self.frame_timestamps[0]
-        if span <= 1e-9:
-            return 0.0
-        return (len(self.frame_timestamps) - 1) / span
+    def _should_publish_video_frame(self) -> bool:
+        return (time.monotonic() - self.last_video_frame_publish_at) >= VIDEO_STREAM_INTERVAL_S
 
-    def _build_status_message(
+    def _should_publish_roi_frame(self) -> bool:
+        return (time.monotonic() - self.last_roi_frame_publish_at) >= VIDEO_STREAM_INTERVAL_S
+
+    def _publish_video_frame(
         self,
-        *,
-        status: str,
-        message: str,
-        hand_detected: bool,
-        hand_label: str = "unknown",
-    ) -> dict[str, Any]:
-        return build_status_message(
-            status=status,
-            message=message,
-            hand_detected=hand_detected,
-            hand_label=hand_label,
-        )
-
-    def _ui_payload(self, payload: dict[str, Any]) -> dict[str, Any]:
-        ui_payload = copy.deepcopy(payload)
-        with self.model_lock:
-            embedding_model = self.cnn.status_payload()
-        ui_payload["fps"] = round(self._processing_fps(), 1)
-        ui_payload["pipeline"] = self.pipeline_status_provider()
-        ui_payload["runtime"] = {
-            "uptime_s": round(time.monotonic() - self.started_at, 2),
-            "frame_size": copy.deepcopy(self.last_frame_size),
-            "camera_source": str(self.camera_source),
-            "camera_fps_request": self.config.camera_fps,
-            "device": self.device_desc,
-            "cnn_source": embedding_model["source"],
-            "embedding_model": embedding_model,
-            "embed_every": self.config.embed_every,
-        }
-        return ui_payload
-
-    def _should_publish_debug_frame(self) -> bool:
-        return (time.monotonic() - self.last_debug_frame_publish_at) >= DEBUG_STREAM_INTERVAL_S
-
-    def _debug_message(
-        self,
-        payload: dict[str, Any],
         camera_frame_bgr: np.ndarray | None,
-        roi_frame_bgr: np.ndarray | None,
-    ) -> dict[str, Any]:
-        if camera_frame_bgr is None and roi_frame_bgr is None:
-            return payload
+    ) -> None:
+        if camera_frame_bgr is None:
+            return
+        self.video_client.send_message(encode_frame_jpeg(camera_frame_bgr, max_width=720, quality=72))
+        self.last_video_frame_publish_at = time.monotonic()
 
-        debug_payload = copy.deepcopy(payload)
-        debug: dict[str, str] = {}
-        if camera_frame_bgr is not None:
-            debug["camera_frame_jpeg"] = encode_frame_data_url(camera_frame_bgr)
-        if roi_frame_bgr is not None:
-            debug["roi_frame_jpeg"] = encode_frame_data_url(roi_frame_bgr, max_width=320, quality=78)
-        debug_payload["debug"] = debug
-        self.last_debug_frame_publish_at = time.monotonic()
-        return debug_payload
+    def _publish_roi_frame(self, roi: np.ndarray) -> None:
+        model_input = prepare_cnn_input_roi(roi, self.roi_tone_settings)
+        self.roi_client.send_message(encode_frame_jpeg(model_input, max_width=256, quality=72))
+        self.last_roi_frame_publish_at = time.monotonic()
 
-    def _publish_status(
+    def _publish_hand_status(
         self,
         *,
-        status: str,
-        message: str,
-        hand_detected: bool,
-        hand_label: str = "unknown",
+        trigger: HandTrigger,
+        hand: Hand | None = None,
         camera_frame_bgr: np.ndarray | None = None,
-        roi_frame_bgr: np.ndarray | None = None,
-        force: bool = False,
     ) -> None:
-        now = time.monotonic()
-        signature = (status, message, hand_detected, hand_label)
-        frame_due = (camera_frame_bgr is not None or roi_frame_bgr is not None) and self._should_publish_debug_frame()
-        if not force and not frame_due and self.last_status_signature == signature and (now - self.last_status_publish_at) < 0.5:
-            return
-
-        payload = self._build_status_message(
-            status=status,
-            message=message,
-            hand_detected=hand_detected,
-            hand_label=hand_label,
-        )
-        self.last_status_signature = signature
-        self.last_status_publish_at = now
-        self.feature_queue.publish(
-            self._debug_message(
-                self._ui_payload(payload),
-                camera_frame_bgr if frame_due or force else None,
-                roi_frame_bgr if frame_due or force else None,
-            )
-        )
+        if camera_frame_bgr is not None and self._should_publish_video_frame():
+            self._publish_video_frame(camera_frame_bgr)
+        self._publish_hand_event(HandEvent(
+            trigger=trigger,
+            hand=hand,
+        ))
 
     def _publish_feature_message(
         self,
-        hand_label: str,
+        hand: Hand | None,
         camera_frame_bgr: np.ndarray | None = None,
-        roi_frame_bgr: np.ndarray | None = None,
     ) -> None:
-        payload = build_feature_vector_message(
-            status="running",
-            hand_label=hand_label,
-            embedding_vector=self.feature_cache["embedding_vector"],
-            hand_proportions=self.feature_cache["hand_proportions"],
+        if self._should_publish_video_frame():
+            self._publish_video_frame(camera_frame_bgr)
+
+        self._publish_hand_event(HandEvent(
+            trigger=HandTrigger.DETECTED,
+            hand=hand,
+            lengths=dict(self.feature_cache["hand_lengths"]),
+            vector=list(self.feature_cache["embedding_vector"]),
+        ))
+
+    def _publish_hand_event(self, event: HandEvent) -> None:
+        signature = (
+            event.trigger,
+            event.hand,
+            bool(event.vector),
         )
-        frame_due = self._should_publish_debug_frame()
-        self.feature_queue.publish(
-            self._debug_message(
-                self._ui_payload(payload),
-                camera_frame_bgr if frame_due else None,
-                roi_frame_bgr if frame_due else None,
-            )
-        )
+        if signature == self.last_hand_observation_signature:
+            return
+        self.last_hand_observation_signature = signature
+        self.event_client.send_message(event)
 
     def _update_feature_cache(self, geometry: dict[str, float]) -> None:
         geom_keys = sorted(geometry.keys())
@@ -327,7 +229,7 @@ class HeadlessPalmClient:
         emb_matrix = np.stack(list(self.embedding_history), axis=0)
         emb_median = l2_normalize(np.median(emb_matrix, axis=0).astype(np.float32))
         self.feature_cache = {
-            "hand_proportions": {
+            "hand_lengths": {
                 key: round(float(value), 6)
                 for key, value in zip(geom_keys, geom_median.tolist())
             },
@@ -335,68 +237,40 @@ class HeadlessPalmClient:
         }
 
     def _publish_no_hand(self, frame_bgr: np.ndarray) -> None:
-        self._publish_status(
-            status="idle",
-            message="No hand detected.",
-            hand_detected=False,
+        self._publish_hand_status(
+            trigger=HandTrigger.ABSENT,
             camera_frame_bgr=frame_bgr,
-            roi_frame_bgr=render_placeholder_frame(self.config.roi_size, self.config.roi_size, "", ""),
         )
 
-    def _publish_roi_failure(self, hand_label: str, frame_bgr: np.ndarray) -> None:
-        self._publish_status(
-            status="degraded",
-            message="Hand detected but ROI warp failed.",
-            hand_detected=True,
-            hand_label=hand_label,
+    def _publish_roi_failure(self, hand: Hand | None, frame_bgr: np.ndarray) -> None:
+        self._publish_hand_status(
+            trigger=HandTrigger.TILTED,
+            hand=hand,
             camera_frame_bgr=frame_bgr,
-            roi_frame_bgr=render_placeholder_frame(self.config.roi_size, self.config.roi_size, "ROI failed", "Adjust palm pose"),
         )
 
-    def _publish_palm_side_required(self, hand_label: str, frame_bgr: np.ndarray) -> None:
-        self._publish_status(
-            status="degraded",
-            message="Falsche Handseite. Bitte dreh deine Hand, damit die Handflaeche sichtbar ist.",
-            hand_detected=True,
-            hand_label=hand_label,
+    def _publish_palm_side_required(self, hand: Hand | None, frame_bgr: np.ndarray) -> None:
+        self._publish_hand_status(
+            trigger=HandTrigger.WRONG_SIDE,
+            hand=hand,
             camera_frame_bgr=frame_bgr,
-            roi_frame_bgr=render_placeholder_frame(self.config.roi_size, self.config.roi_size, "Falsche Seite", "Hand drehen"),
         )
 
-    def _publish_pose_quality(self, hand_label: str, frame_bgr: np.ndarray) -> None:
-        self._publish_status(
-            status="degraded",
-            message="Handflaeche ist nicht gerade genug. Bitte sehr frontal zur Kamera halten.",
-            hand_detected=True,
-            hand_label=hand_label,
+    def _publish_pose_quality(self, hand: Hand | None, frame_bgr: np.ndarray) -> None:
+        self._publish_hand_status(
+            trigger=HandTrigger.TILTED,
+            hand=hand,
             camera_frame_bgr=frame_bgr,
-            roi_frame_bgr=render_placeholder_frame(self.config.roi_size, self.config.roi_size, "Hand gerade", "Sehr frontal halten"),
         )
 
     def _publish_error(self, message: str) -> None:
-        self._publish_status(
-            status="error",
-            message=message,
-            hand_detected=False,
-            force=True,
+        logger.warning("Palmprint runtime error: %s", message)
+        self._publish_hand_status(
+            trigger=HandTrigger.ABSENT,
         )
 
-    def _handedness(self, result: Any, index: int) -> str:
-        if result.handedness and index < len(result.handedness) and result.handedness[index]:
-            category = result.handedness[index][0]
-            return category.category_name
-        return "unknown"
-
-    def _display_handedness(self, hand_label: str) -> str:
-        label = (hand_label or "").strip().lower()
-        if label == "left":
-            return "Right"
-        if label == "right":
-            return "Left"
-        return hand_label
-
     def _run_loop(self) -> None:
-        target_period = max(self.config.interval_ms / 1000.0, 0.0)
+        target_period = max(self.interval_ms / 1000.0, 0.0)
         while not self.stop_event.is_set():
             loop_started = time.monotonic()
             try:
@@ -408,9 +282,7 @@ class HeadlessPalmClient:
                     continue
 
                 display_frame = cv2.flip(raw_frame, 1)
-                self.last_frame_size = [int(display_frame.shape[1]), int(display_frame.shape[0])]
                 self.frame_counter += 1
-                self.frame_timestamps.append(time.monotonic())
 
                 rgb = cv2.cvtColor(display_frame, cv2.COLOR_BGR2RGB)
                 mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb)
@@ -422,15 +294,22 @@ class HeadlessPalmClient:
                     self._publish_no_hand(display_frame)
                 else:
                     hand = result.hand_landmarks[index]
-                    hand_label = self._handedness(result, index)
-                    display_hand_label = self._display_handedness(hand_label)
+                    mediapipe_hand = None
+                    if result.handedness and index < len(result.handedness) and result.handedness[index]:
+                        with suppress(ValueError):
+                            mediapipe_hand = Hand((result.handedness[index][0].category_name or "").strip().lower())
+                    display_hand = None
+                    if mediapipe_hand is Hand.LEFT:
+                        display_hand = Hand.RIGHT
+                    elif mediapipe_hand is Hand.RIGHT:
+                        display_hand = Hand.LEFT
 
                     height, width = display_frame.shape[:2]
                     display_pts = np.array([[lm.x * width, lm.y * height, lm.z] for lm in hand], dtype=np.float32)
                     raw_pts = display_pts.copy()
                     raw_pts[:, 0] = (width - 1) - raw_pts[:, 0]
 
-                    debug_hand_frame = draw_hand_overlay(display_frame, display_pts[:, :2])
+                    overlay_hand_frame = draw_hand_overlay(display_frame, display_pts[:, :2])
                     world_pts = None
                     if result.hand_world_landmarks and index < len(result.hand_world_landmarks):
                         world = result.hand_world_landmarks[index]
@@ -439,31 +318,33 @@ class HeadlessPalmClient:
                     palm_side_points = world_pts
                     if world_pts is None:
                         palm_side_points = np.array([[lm.x * width, lm.y * height, lm.z] for lm in hand], dtype=np.float32)
-                    if not is_palm_side_visible(np.asarray(palm_side_points), hand_label, min_confidence=0.3):
-                        self._publish_palm_side_required(display_hand_label, debug_hand_frame)
+                    if not is_palm_side_visible(np.asarray(palm_side_points), mediapipe_hand, min_confidence=0.3):
+                        self._publish_palm_side_required(display_hand, overlay_hand_frame)
                         continue
 
                     points3d = world_pts if world_pts is not None else raw_pts
-                    if not is_palm_frontal(np.asarray(palm_side_points), hand_label):
-                        self._publish_pose_quality(display_hand_label, debug_hand_frame)
+                    if not is_palm_frontal(np.asarray(palm_side_points), mediapipe_hand):
+                        self._publish_pose_quality(display_hand, overlay_hand_frame)
                         continue
 
                     geometry = extract_geometry_features(points3d)
                     current_roi_pose = estimate_roi_pose(raw_pts[:, :2])
                     if current_roi_pose is None:
-                        self._publish_roi_failure(display_hand_label, debug_hand_frame)
+                        self._publish_roi_failure(display_hand, overlay_hand_frame)
                         continue
 
                     raw_roi_quad = roi_quad_from_pose(current_roi_pose)
                     display_roi_quad = mirror_quad_horizontally(raw_roi_quad, width)
-                    debug_frame = draw_roi_quad(debug_hand_frame, display_roi_quad)
-                    roi = warp_roi_from_quad(raw_frame, raw_roi_quad, self.config.roi_size)
+                    overlay_frame = draw_roi_quad(overlay_hand_frame, display_roi_quad)
+                    roi = warp_roi_from_quad(raw_frame, raw_roi_quad, self.roi_size)
 
                     if roi is None:
-                        self._publish_roi_failure(hand_label, debug_frame)
+                        self._publish_roi_failure(display_hand, overlay_frame)
                     else:
+                        if self._should_publish_roi_frame():
+                            self._publish_roi_frame(roi)
                         with self.model_lock:
-                            run_embed = (self.frame_counter % self.config.embed_every == 0) or (self.last_embedding is None)
+                            run_embed = (self.frame_counter % self.embed_every == 0) or (self.last_embedding is None)
                             if run_embed:
                                 embedding = self.cnn.embed(roi)
                                 self.last_embedding = embedding
@@ -480,11 +361,11 @@ class HeadlessPalmClient:
 
                             self._update_feature_cache(geometry)
                         self._publish_feature_message(
-                            display_hand_label,
-                            debug_frame,
-                            render_roi_feature_preview(roi, self.roi_tone_settings),
+                            display_hand,
+                            overlay_frame,
                         )
             except Exception as exc:
+                logger.exception("Palmprint processing loop failed")
                 self._publish_error(str(exc))
 
             elapsed = time.monotonic() - loop_started
