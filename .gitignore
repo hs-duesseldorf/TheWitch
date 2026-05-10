@@ -35,6 +35,11 @@ assets/models/*.task
 assets/weights/*.json
 assets/weights/*.pt
 
+# User-provided TTS speaker samples
+speakers/
+ArtificialIntelligence/assets/*.wav
+!ArtificialIntelligence/assets/.gitkeep
+
 # Unreal generated folders
 Binaries/
 DerivedDataCache/

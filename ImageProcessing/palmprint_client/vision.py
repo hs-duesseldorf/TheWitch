@@ -1,11 +1,12 @@
 from __future__ import annotations
 
-import base64
 from dataclasses import dataclass
 from typing import Any
 
 import cv2
 import numpy as np
+
+from shared.events import Hand
 
 from .constants import (
     HAND_CONNECTIONS,
@@ -31,8 +32,6 @@ from .constants import (
     THUMB_TIP,
     WRIST,
 )
-from .preprocessing import RoiToneSettings, prepare_cnn_input_roi
-
 
 @dataclass(frozen=True)
 class RoiPose:
@@ -63,7 +62,7 @@ def _finger_length(points: np.ndarray, ids: tuple[int, int, int, int]) -> float:
     return _distance(points[a], points[b]) + _distance(points[b], points[c]) + _distance(points[c], points[d])
 
 
-def palm_facing_score(points3d: np.ndarray, hand_label: str) -> float | None:
+def palm_facing_score(points3d: np.ndarray, hand: Hand | None) -> float | None:
     points = np.asarray(points3d, dtype=np.float32)
     if points.shape[0] <= max(WRIST, INDEX_MCP, PINKY_MCP):
         return None
@@ -79,24 +78,23 @@ def palm_facing_score(points3d: np.ndarray, hand_label: str) -> float | None:
     # MediaPipe depth grows away from the camera, so the viewing direction is -Z.
     camera_direction = np.array([0.0, 0.0, -1.0], dtype=np.float32)
     facing_score = float(np.dot(normal_unit, camera_direction))
-    label = (hand_label or "").strip().lower()
 
-    if label == "right":
+    if hand is Hand.RIGHT:
         return facing_score
-    if label == "left":
+    if hand is Hand.LEFT:
         return -facing_score
     return None
 
 
-def is_palm_side_visible(points3d: np.ndarray, hand_label: str, *, min_confidence: float = 0.2) -> bool:
-    score = palm_facing_score(points3d, hand_label)
+def is_palm_side_visible(points3d: np.ndarray, hand: Hand | None, *, min_confidence: float = 0.2) -> bool:
+    score = palm_facing_score(points3d, hand)
     if score is None:
         return True
     return score >= min_confidence
 
 
-def is_palm_frontal(points3d: np.ndarray, hand_label: str, *, min_confidence: float = 0.82) -> bool:
-    score = palm_facing_score(points3d, hand_label)
+def is_palm_frontal(points3d: np.ndarray, hand: Hand | None, *, min_confidence: float = 0.82) -> bool:
+    score = palm_facing_score(points3d, hand)
     if score is None:
         return True
     return abs(score) >= min_confidence
@@ -105,40 +103,15 @@ def is_palm_frontal(points3d: np.ndarray, hand_label: str, *, min_confidence: fl
 def extract_geometry_features(points3d: np.ndarray) -> dict[str, float]:
     palm_width = _distance(points3d[INDEX_MCP], points3d[PINKY_MCP])
     palm_height = _distance(points3d[WRIST], points3d[MIDDLE_MCP])
-    palm_scale = max(float(np.hypot(palm_width, palm_height)), 1e-9)
-
-    thumb_len_raw = _finger_length(points3d, (THUMB_CMC, THUMB_MCP, THUMB_IP, THUMB_TIP))
-    index_len_raw = _finger_length(points3d, (INDEX_MCP, INDEX_PIP, INDEX_DIP, INDEX_TIP))
-    middle_len_raw = _finger_length(points3d, (MIDDLE_MCP, MIDDLE_PIP, MIDDLE_DIP, MIDDLE_TIP))
-    ring_len_raw = _finger_length(points3d, (RING_MCP, RING_PIP, RING_DIP, RING_TIP))
-    pinky_len_raw = _finger_length(points3d, (PINKY_MCP, PINKY_PIP, PINKY_DIP, PINKY_TIP))
-
-    palm_width_norm = palm_width / palm_scale
-    palm_height_norm = palm_height / palm_scale
-    thumb_len = thumb_len_raw / palm_scale
-    index_len = index_len_raw / palm_scale
-    middle_len = middle_len_raw / palm_scale
-    ring_len = ring_len_raw / palm_scale
-    pinky_len = pinky_len_raw / palm_scale
 
     return {
-        "palm_width": palm_width_norm,
-        "palm_height": palm_height_norm,
-        "thumb_length": thumb_len,
-        "index_length": index_len,
-        "middle_length": middle_len,
-        "ring_length": ring_len,
-        "pinky_length": pinky_len,
-        "thumb_to_palm_width": thumb_len_raw / max(palm_width, 1e-9),
-        "thumb_to_palm_height": thumb_len_raw / max(palm_height, 1e-9),
-        "index_to_palm_width": index_len_raw / max(palm_width, 1e-9),
-        "index_to_palm_height": index_len_raw / max(palm_height, 1e-9),
-        "middle_to_palm_width": middle_len_raw / max(palm_width, 1e-9),
-        "middle_to_palm_height": middle_len_raw / max(palm_height, 1e-9),
-        "ring_to_palm_width": ring_len_raw / max(palm_width, 1e-9),
-        "ring_to_palm_height": ring_len_raw / max(palm_height, 1e-9),
-        "pinky_to_palm_width": pinky_len_raw / max(palm_width, 1e-9),
-        "pinky_to_palm_height": pinky_len_raw / max(palm_height, 1e-9),
+        "palm_width": palm_width,
+        "palm_height": palm_height,
+        "thumb_length": _finger_length(points3d, (THUMB_CMC, THUMB_MCP, THUMB_IP, THUMB_TIP)),
+        "index_length": _finger_length(points3d, (INDEX_MCP, INDEX_PIP, INDEX_DIP, INDEX_TIP)),
+        "middle_length": _finger_length(points3d, (MIDDLE_MCP, MIDDLE_PIP, MIDDLE_DIP, MIDDLE_TIP)),
+        "ring_length": _finger_length(points3d, (RING_MCP, RING_PIP, RING_DIP, RING_TIP)),
+        "pinky_length": _finger_length(points3d, (PINKY_MCP, PINKY_PIP, PINKY_DIP, PINKY_TIP)),
     }
 
 
@@ -269,7 +242,7 @@ def draw_roi_quad(frame_bgr: np.ndarray, quad: np.ndarray | None) -> np.ndarray:
     return out
 
 
-def encode_frame_data_url(frame_bgr: np.ndarray, *, max_width: int = 720, quality: int = 72) -> str:
+def encode_frame_jpeg(frame_bgr: np.ndarray, *, max_width: int = 720, quality: int = 72) -> bytes:
     frame = frame_bgr
     height, width = frame.shape[:2]
     if width > max_width:
@@ -278,30 +251,8 @@ def encode_frame_data_url(frame_bgr: np.ndarray, *, max_width: int = 720, qualit
 
     ok, encoded = cv2.imencode(".jpg", frame, [int(cv2.IMWRITE_JPEG_QUALITY), int(quality)])
     if not ok:
-        raise RuntimeError("Failed to encode debug frame.")
-    payload = base64.b64encode(encoded.tobytes()).decode("ascii")
-    return f"data:image/jpeg;base64,{payload}"
-
-
-def render_placeholder_frame(width: int, height: int, title: str, subtitle: str) -> np.ndarray:
-    frame = np.full((height, width, 3), (230, 236, 232), dtype=np.uint8)
-    cv2.rectangle(frame, (0, 0), (width - 1, height - 1), (190, 204, 199), 3)
-    if title:
-        cv2.putText(frame, title, (20, max(40, height // 3)), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (39, 66, 72), 2, cv2.LINE_AA)
-    if subtitle:
-        cv2.putText(frame, subtitle, (20, max(72, height // 3 + 28)), cv2.FONT_HERSHEY_SIMPLEX, 0.48, (86, 106, 112), 1, cv2.LINE_AA)
-    return frame
-
-
-def render_roi_feature_preview(roi_bgr: np.ndarray, roi_tone_settings: RoiToneSettings) -> np.ndarray:
-    gray = prepare_cnn_input_roi(roi_bgr, roi_tone_settings)
-    height, width = gray.shape[:2]
-    crop_size = max(1, int(round(min(height, width) * (224.0 / 256.0))))
-    offset_y = max((height - crop_size) // 2, 0)
-    offset_x = max((width - crop_size) // 2, 0)
-    cropped = gray[offset_y : offset_y + crop_size, offset_x : offset_x + crop_size]
-    preview = cv2.resize(cropped, (width, height), interpolation=cv2.INTER_LINEAR)
-    return cv2.cvtColor(preview, cv2.COLOR_GRAY2BGR)
+        raise RuntimeError("Failed to encode video frame.")
+    return encoded.tobytes()
 
 
 def select_primary_hand_from_tasks(result: Any) -> int | None:
