@@ -4,7 +4,6 @@ import logging
 import os
 import threading
 from pathlib import Path
-from urllib.parse import urlparse
 
 import uvicorn
 from fastapi import FastAPI
@@ -76,8 +75,8 @@ def get_state_machine_graph():
 
 @app.get("/api/config")
 def get_config():
-    ws_url = os.getenv("WITCH_WS_BASE_URL", "ws://localhost:8765")
-    return {"ws_port": urlparse(ws_url).port or 8765}
+    ws_port = int(os.getenv("WITCH_AI_PORT"))
+    return {"ws_port": ws_port}
 
 
 @app.post("/api/reset")
@@ -87,5 +86,6 @@ def reset_state():
 
 
 if __name__ == "__main__":
-    logger.info("FastAPI server starting on 0.0.0.0:8501")
-    uvicorn.run(app, host="0.0.0.0", port=8501)
+    port = int(os.getenv("WITCH_AI_UI_PORT"))
+    logger.info("FastAPI server starting on 0.0.0.0:%d", port)
+    uvicorn.run(app, host="0.0.0.0", port=port)

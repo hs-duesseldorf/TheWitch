@@ -1,0 +1,83 @@
+name: thewitch
+
+x-llm-image: &llm-image
+  build:
+    context: ArtificialIntelligence/servers/llm_server
+    args:
+      OLLAMA_PORT: ${WITCH_LLM_PORT}
+      OLLAMA_MODEL: ${WITCH_LLM_MODEL}
+  image: thewitch-llm:latest
+
+x-tts-image: &tts-image
+  build:
+    context: ArtificialIntelligence/servers/tts_server
+    args:
+      WITCH_TTS_PORT: ${WITCH_TTS_PORT}
+      WITCH_TTS_MODEL: ${WITCH_TTS_MODEL}
+  image: thewitch-tts:latest
+
+services:
+  ai:
+    build:
+      context: .
+      dockerfile: ArtificialIntelligence/Dockerfile
+      args:
+        WITCH_AI_PORT: ${WITCH_AI_PORT}
+        WITCH_AI_UI_PORT: ${WITCH_AI_UI_PORT}
+    command: ["python", "debug_ui.py"]
+    env_file: [.env]
+    environment:
+      WITCH_AI_PORT: ${WITCH_AI_PORT}
+      WITCH_LLM_BASE_URL: ${WITCH_LLM_BASE_URL}
+      WITCH_TTS_BASE_URL: ${WITCH_TTS_BASE_URL}
+      WITCH_LLM_MODEL: ${WITCH_LLM_MODEL}
+    ports:
+      - "${WITCH_AI_UI_PORT}:${WITCH_AI_UI_PORT}"
+      - "${WITCH_AI_PORT}:${WITCH_AI_PORT}"
+    volumes:
+      - ./ArtificialIntelligence/assets:/assets:ro
+    restart: unless-stopped
+    networks: [witch-net]
+
+  llm:
+    <<: *llm-image
+    env_file: [.env]
+    volumes:
+      - ollama_models:/root/.ollama
+    ports:
+      - "${WITCH_LLM_PORT}:${WITCH_LLM_PORT}"
+    restart: unless-stopped
+    networks: [witch-net]
+
+  tts:
+    <<: *tts-image
+    env_file: [.env]
+    volumes:
+      - tts_models:/root/.local/share/tts
+      - ./ArtificialIntelligence/assets:/assets:ro
+      - ./ArtificialIntelligence/assets:/app/assets:ro
+    ports:
+      - "${WITCH_TTS_PORT}:${WITCH_TTS_PORT}"
+    restart: unless-stopped
+    networks: [witch-net]
+
+  ip:
+    build:
+      context: .
+      dockerfile: ImageProcessing/Dockerfile
+    privileged: true
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    env_file: [.env]
+    volumes:
+      - ./ImageProcessing/assets:/app/assets:ro
+    restart: unless-stopped
+    networks: [witch-net]
+
+volumes:
+  ollama_models:
+  tts_models:
+
+networks:
+  witch-net:
+    driver: bridge

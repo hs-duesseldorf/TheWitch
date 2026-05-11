@@ -4,16 +4,17 @@ import asyncio
 import base64
 import io
 import logging
+import os
 from contextlib import asynccontextmanager
 from pathlib import Path
 
 import soundfile as sf
 import torch
+import uvicorn
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from TTS.api import TTS
-import uvicorn
 
 logging.basicConfig(
     level=logging.WARNING,
@@ -21,7 +22,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger("tts-server")
 
-MODEL_NAME = "tts_models/de/thorsten/vits"
+MODEL_NAME = os.getenv("WITCH_TTS_MODEL")
 SPEAKER_DIR = Path("/assets")
 SPEAKER_DIR.mkdir(parents=True, exist_ok=True)
 OUTPUT_DIR = Path("/tmp/thewitch-tts")
@@ -53,8 +54,6 @@ def get_tts():
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    loop = asyncio.get_event_loop()
-    await loop.run_in_executor(None, get_tts)
     yield
 
 
@@ -91,11 +90,13 @@ async def synthesize(req: TTSRequest):
         sf.write(buffer, data, samplerate, format="WAV")
         audio_b64 = base64.b64encode(buffer.getvalue()).decode()
 
-        return JSONResponse({
-            "audio": audio_b64,
-            "sample_rate": samplerate,
-            "format": "wav",
-        })
+        return JSONResponse(
+            {
+                "audio": audio_b64,
+                "sample_rate": samplerate,
+                "format": "wav",
+            }
+        )
 
     except Exception as e:
         logger.exception("TTS synthesis failed")
@@ -103,7 +104,8 @@ async def synthesize(req: TTSRequest):
 
 
 def main():
-    uvicorn.run(api, host="0.0.0.0", port=5002, log_level="warning")
+    port = int(os.getenv("WITCH_TTS_PORT"))
+    uvicorn.run(api, host="0.0.0.0", port=port, log_level="warning")
 
 
 if __name__ == "__main__":

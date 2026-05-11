@@ -1,8 +1,0 @@
-torch==2.5.1
-torchaudio==2.5.1
-torchvision==0.20.1
-fastapi>=0.110.0
-uvicorn[standard]>=0.29.0
-soundfile>=0.12.1
-TTS==0.21.3
-transformers==4.41.2

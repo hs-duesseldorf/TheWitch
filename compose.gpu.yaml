@@ -1,0 +1,9 @@
+services:
+  llm:
+    gpus: all
+
+  tts:
+    gpus: all
+
+  ip:
+    gpus: all

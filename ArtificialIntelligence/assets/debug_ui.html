@@ -230,7 +230,7 @@
             addEventListener("DOMContentLoaded", init);
             $("resetButton").onclick = async () => {
                 await fetch(`${API}/api/reset`, { method: "POST" });
-                await pollState();
+                await updateState();
                 loadGraph();
             };
 
@@ -242,22 +242,23 @@
                 stream("roi", `${wsBase}/ws/ai-3d-roi`);
                 socket(`${wsBase}/ws/ip-ai`, (ev) => {
                     show(ev.origin, ev);
+                    updateState();
                     loadGraph();
                 });
                 socket(`${wsBase}/ws/ai-3d`, (ev) => {
                     if (ev.type === "fortune" && ev.audio) setAudio(ev);
                     show(ev.origin, ev);
+                    updateState();
                     loadGraph();
                 });
-                setInterval(pollState, 1000);
-                pollState();
+                updateState();
             }
 
             async function json(path) {
                 return (await fetch(`${API}${path}`)).json();
             }
 
-            async function pollState() {
+            async function updateState() {
                 const nextState = (await json("/api/state")).state || "-";
                 $("currentState").textContent = nextState;
                 if (nextState !== currentState) {

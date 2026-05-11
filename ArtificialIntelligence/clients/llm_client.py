@@ -4,8 +4,7 @@ import asyncio
 import logging
 import time
 
-import httpx
-from ollama import AsyncClient
+import ollama
 
 logger = logging.getLogger(__name__)
 
@@ -19,33 +18,32 @@ class LLMClient:
         base_url: str,
         model: str,
     ):
-        base_url = base_url.strip()
-        self.client = AsyncClient(host=base_url.rstrip("/"))
-        self.model = model
+        self.base_url = base_url.strip().rstrip("/")
+        self.model = model.strip()
+        self._client = ollama.AsyncClient(host=self.base_url)
 
     async def generate(self, prompt: str) -> str:
         started_at = time.perf_counter()
         logger.info("LLM request: model=%s prompt_chars=%d", self.model, len(prompt))
         for attempt in range(1, REQUEST_ATTEMPTS + 1):
             try:
-                resp = await self.client.generate(
+                response = await self._client.generate(
                     model=self.model,
                     prompt=prompt,
-                    stream=False,
-                    keep_alive="10m",
                     options={
                         "temperature": 0.8,
                         "top_p": 0.9,
                         "num_ctx": 1024,
                     },
                 )
+                data = {"response": response["response"]}
                 break
-            except httpx.HTTPError:
+            except Exception:
                 if attempt == REQUEST_ATTEMPTS:
                     raise
                 logger.warning("LLM request failed on attempt %d/%d; retrying", attempt, REQUEST_ATTEMPTS)
                 await asyncio.sleep(RETRY_DELAY_SECONDS * attempt)
-        text = (resp.get("response") or "").strip()
+        text = (data.get("response") or "").strip()
         logger.info("LLM response: chars=%d elapsed=%.2fs", len(text), time.perf_counter() - started_at)
         return text
 
