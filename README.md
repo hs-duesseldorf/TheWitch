@@ -4,6 +4,8 @@ A digital installation featuring a virtual fortune teller that reads visitors' p
 
 ## Quick Start
 
+Prerequisite: Docker Desktop installed
+
 ```bash
 docker compose up --build
 ```
