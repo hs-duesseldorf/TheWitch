@@ -1,4 +1,4 @@
-FROM python:3.11-slim
+FROM pytorch/pytorch:2.5.1-cuda12.1-cudnn9-runtime
 
 WORKDIR /app
 
@@ -7,17 +7,24 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libsndfile1 \
     && rm -rf /var/lib/apt/lists/*
 
-COPY requirements.txt ./
-RUN --mount=type=cache,target=/root/.cache/pip pip install -r requirements.txt --extra-index-url https://download.pytorch.org/whl/cu124
+ARG WITCH_TTS_MODEL
+ENV WITCH_TTS_MODEL=${WITCH_TTS_MODEL}
 
-# Pre-download TTS model to cache
+RUN pip install --no-cache-dir \
+    fastapi>=0.110.0 \
+    uvicorn[standard]>=0.29.0 \
+    soundfile>=0.12.1 \
+    TTS==0.21.3
+
 ENV COQUI_TOS_AGREED=1
-RUN python -c "from TTS.api import TTS; TTS(model_name='tts_models/de/thorsten/vits'); print('TTS model cached')" || echo "Model download failed, will download at runtime"
+
+RUN python -c "from TTS.api import TTS; TTS('${WITCH_TTS_MODEL}')"
 
 COPY main.py .
 
 RUN mkdir -p /assets
 
-EXPOSE 5002
+ARG WITCH_TTS_PORT=8083
+EXPOSE ${WITCH_TTS_PORT}
 
 CMD ["python", "main.py"]

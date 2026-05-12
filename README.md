@@ -10,7 +10,13 @@ Prerequisite: Docker Desktop installed
 docker compose up --build
 ```
 
-Debug UI: http://localhost:8501/
+Debug UI: http://localhost:8080/
+
+If the Docker host has NVIDIA container GPU support configured, use the GPU override:
+
+```bash
+docker compose -f compose.yaml -f compose.gpu.yaml up --build
+```
 
 On Windows, use the Windows commands below instead so the camera bridge is enabled.
 
@@ -19,10 +25,10 @@ On Windows, use the Windows commands below instead so the camera bridge is enabl
 ```mermaid
 flowchart LR
     ip[ImageProcessing]
-    ai[ArtificialIntelligence<br/>ws://localhost:8765]
-    debug[Debug UI<br/>http://localhost:8501/]
-    llm[LLM llm<br/>http://llm:11434]
-    tts[TTS tts<br/>http://tts:5002]
+    ai[AI<br/>ws://localhost:8081]
+    debug[Debug UI<br/>http://localhost:8080/]
+    llm[LLM llm<br/>http://llm:8082]
+    tts[TTS tts<br/>http://tts:8083]
     unreal[3D / Unreal]
 
     ip <-- "WebSocket /ws/ip-ai" --> ai
@@ -49,13 +55,13 @@ Default config (Docker service names) works for full local stack. If running ser
 
 ```dotenv
 # LLM on another machine
-WITCH_LLM_BASE_URL=http://192.168.1.20:11434
+WITCH_LLM_BASE_URL=http://192.168.1.20:8082
 
 # TTS on another machine
-WITCH_TTS_BASE_URL=http://192.168.1.21:5002
+WITCH_TTS_BASE_URL=http://192.168.1.21:8083
 
 # ImageProcessing on Jetson -> AI on PC
-IP_AI_BASE_URL=ws://192.168.1.10:8765
+WITCH_AI_BASE_URL=ws://192.168.1.10:8081
 ```
 
 ## Running Specific Services
@@ -70,8 +76,8 @@ On Windows, start the webcam bridge first, then use the same `docker compose` co
 
 ## Jetson as Camera Client
 
-1. On the AI machine: keep `ai` service running and reachable on port `8765`
-2. On the Jetson: set `IP_AI_BASE_URL=ws://<AI-machine-LAN-IP>:8765` in `.env`
+1. On the AI machine: keep `ai` service running and reachable on port `8081`
+2. On the Jetson: set `WITCH_AI_BASE_URL=ws://<AI-machine-LAN-IP>:8081` in `.env`
 3. Run only the camera client:
 
 ```bash
@@ -120,7 +126,8 @@ If the file is missing, TTS starts with the model default voice.
 ## Unreal Engine Connection
 
 ```
-ws://ai:8765/ws/ai-3d
+# From env: ${WITCH_AI_BASE_URL}/ws/ai-3d
+# Resolved: ws://ai:8081/ws/ai-3d
 ```
 
 ## Useful Commands

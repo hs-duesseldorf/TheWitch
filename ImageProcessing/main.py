@@ -10,7 +10,7 @@ from palmprint_client.transport import WebSocketClient
 
 class App:
     def __init__(self):
-        ai_ws_base_url = os.getenv("IP_AI_BASE_URL").strip().rstrip("/")
+        ai_ws_base_url = os.getenv("WITCH_AI_BASE_URL").strip().rstrip("/")
 
         pipeline_ws_url = f"{ai_ws_base_url}/ws/ip-ai"
         video_ws_url = f"{ai_ws_base_url}/ws/ip-ai-video"

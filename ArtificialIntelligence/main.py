@@ -1,7 +1,6 @@
 import asyncio
 import logging
 import os
-from urllib.parse import urlparse
 
 from clients.llm_client import LLMClient
 from clients.tts_client import TTSClient
@@ -19,11 +18,8 @@ logging.getLogger("transitions").setLevel(logging.ERROR)
 
 class App:
     def __init__(self):
-        ws_url = urlparse(os.getenv("WITCH_WS_BASE_URL"))
-        ws_host = ws_url.hostname
-        ws_port = ws_url.port
-
-        self.ws_server = WebSocketServer(host=ws_host, port=ws_port)
+        ws_port = int(os.getenv("WITCH_AI_PORT"))
+        self.ws_server = WebSocketServer(host="0.0.0.0", port=ws_port)
         self.state_machine = WitchStateMachine()
         self.runtime = WitchRuntime(
             ws_server=self.ws_server,

@@ -2,8 +2,17 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
-COPY ArtificialIntelligence/requirements.txt .
-RUN --mount=type=cache,target=/root/.cache/pip pip install -r requirements.txt
+RUN pip install --no-cache-dir \
+    httpx>=0.27.0 \
+    msgspec>=0.18.6 \
+    transitions>=0.9.3 \
+    streamlit>=1.36.0 \
+    websockets>=12.0 \
+    flask>=3.0.0 \
+    flask-cors>=4.0.0 \
+    fastapi>=0.110.0 \
+    uvicorn[standard]>=0.29.0 \
+    ollama>=0.4.0
 
 COPY shared/ ./shared/
 COPY ArtificialIntelligence/clients/ ./clients/
@@ -15,10 +24,9 @@ COPY ArtificialIntelligence/message_parser.py .
 COPY ArtificialIntelligence/main.py .
 COPY ArtificialIntelligence/runtime.py .
 
-COPY ArtificialIntelligence/debug_ui.py .
-COPY ArtificialIntelligence/assets/ ./assets/
-
-EXPOSE 8765
-EXPOSE 8501
+ARG WITCH_AI_WS_PORT
+ARG WITCH_AI_UI_PORT
+EXPOSE ${WITCH_AI_WS_PORT}
+EXPOSE ${WITCH_AI_UI_PORT}
 
 CMD ["python", "main.py"]

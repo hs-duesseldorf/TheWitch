@@ -1,4 +1,4 @@
-FROM python:3.10-slim
+FROM python:3.11-slim
 
 WORKDIR /app
 
@@ -11,11 +11,17 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libgomp1 \
     && rm -rf /var/lib/apt/lists/*
 
-COPY ImageProcessing/requirements.txt .
-RUN --mount=type=cache,target=/root/.cache/pip pip install -r requirements.txt --extra-index-url https://download.pytorch.org/whl/cu124
+RUN pip install --no-cache-dir \
+    torch==2.5.1 \
+    torchvision==0.20.1 \
+    websockets \
+    msgspec \
+    numpy \
+    opencv-python-headless \
+    Pillow \
+    mediapipe
 
 COPY shared/ ./shared/
-COPY ImageProcessing/palmprint_client/ ./palmprint_client/
-COPY ImageProcessing/main.py ImageProcessing/webcam_bridge.py ./
+COPY ImageProcessing/ ./
 
 CMD ["python", "main.py"]
