@@ -9,6 +9,7 @@ from typing import Any
 import httpx
 import msgspec
 
+from message_channels import EventChannel
 from state_machine.state_machine import (
     SCENES_THAT_DELIVER_FORTUNE,
     SCENES_THAT_START_ANALYSIS,
@@ -49,6 +50,25 @@ class WitchRuntime:
         self._analysis_stage = "idle"
         self._hand_data: dict | None = None
         self._pending_fortune_event: FortuneEvent | None = None
+        self._ip_channel = EventChannel(
+            ws_server=self.ws_server,
+            path="/ws/ip-ai",
+            default_origin="ImageProcessing",
+            decode_source="ip",
+        )
+        self._ai3d_channel = EventChannel(
+            ws_server=self.ws_server,
+            path="/ws/ai-3d",
+            default_origin="ArtificialIntelligence",
+            decode_source="ai-3d",
+        )
+        self._ip_handlers = {
+            HandEvent: self._handle_ip_hand_event,
+        }
+        self._unreal_handlers = {
+            AnimationEvent: self._handle_unreal_animation_event,
+            FortuneRequestEvent: self._handle_unreal_fortune_request,
+        }
 
         self._register_routes()
 
@@ -61,15 +81,11 @@ class WitchRuntime:
         self.ws_server.add_route("/ws/ai-3d-roi", self._on_ai_3d_roi_message)
 
     async def _on_ip_ai_message(self, server: WebSocketServer, connection: Any, message: str | bytes) -> None:
-        if isinstance(message, bytes):
-            return
-        try:
-            event = msgspec.json.decode(message, type=WitchEvent)
-        except (msgspec.DecodeError, TypeError, ValueError) as exc:
-            logger.warning("Failed to decode IP message: %s", exc)
+        event = self._ip_channel.decode(message)
+        if event is None:
             return
         await self.handle_ip_event(connection, event)
-        await self.ws_server.broadcast(self._encode_event_with_origin(event, "ImageProcessing"), path="/ws/ip-ai")
+        await self._ip_channel.broadcast(event)
 
     async def _on_ip_ai_video_message(self, server: WebSocketServer, connection: Any, message: str | bytes) -> None:
         if isinstance(message, bytes):
@@ -87,18 +103,11 @@ class WitchRuntime:
         return
 
     async def _on_ai_3d_message(self, server: WebSocketServer, connection: Any, message: str | bytes) -> None:
-        if isinstance(message, bytes):
-            return
-        try:
-            event = msgspec.json.decode(message, type=WitchEvent)
-        except msgspec.DecodeError:
+        event = self._ai3d_channel.decode(message)
+        if event is None:
             return
         await self.handle_unreal(connection, event)
-        await self.ws_server.broadcast(
-            self._encode_event_with_origin(event, "Unreal"),
-            path="/ws/ai-3d",
-            exclude=connection,
-        )
+        await self._ai3d_channel.broadcast(event, origin="Unreal", exclude=connection)
 
     def state(self) -> str:
         return self.state_machine.state
@@ -136,13 +145,13 @@ class WitchRuntime:
         self._analysis_task = loop.create_task(self._run_analysis())
 
     async def handle_ip_event(self, connection: Any, event: WitchEvent) -> None:
-        match event:
-            case HandEvent():
-                await self.handle_hand_event(event, msgspec.to_builtins(event))
-            case _:
-                pass
+        handler = self._ip_handlers.get(type(event))
+        if handler is None:
+            return
+        await handler(connection, event)
 
-    async def handle_hand_event(self, event: HandEvent, raw_event: dict[str, Any]) -> None:
+    async def _handle_ip_hand_event(self, connection: Any, event: HandEvent) -> None:
+        raw_event = msgspec.to_builtins(event)
         self._hand_data = {
             "trigger": event.trigger.value,
             "hand": event.hand.value if event.hand else None,
@@ -157,23 +166,27 @@ class WitchRuntime:
         await self._apply_transition_effects(transitions)
 
     async def handle_unreal(self, connection: Any, message: WitchEvent):
-        match message:
-            case AnimationEvent(trigger=AnimationTrigger.FINISHED):
-                await self._handle_animation_finished(message)
-            case FortuneRequestEvent():
-                await self._handle_fortune_request(connection)
-            case _:
-                pass
+        handler = self._unreal_handlers.get(type(message))
+        if handler is None:
+            return
+        await handler(connection, message)
+
+    async def _handle_unreal_animation_event(self, connection: Any, message: AnimationEvent) -> None:
+        if message.trigger is AnimationTrigger.FINISHED:
+            await self._handle_animation_finished(message)
+
+    async def _handle_unreal_fortune_request(self, connection: Any, message: FortuneRequestEvent) -> None:
+        await self._handle_fortune_request(connection)
 
     async def _handle_fortune_request(self, connection: Any) -> None:
         if self._hand_data:
             await self._start_analysis()
             return
-        await self.ws_server.send_to(
+        await self._ai3d_channel.send_to(
             connection,
-            self._encode_event_with_origin(ErrorEvent(
+            ErrorEvent(
                 message="No hand data available",
-            ), "ArtificialIntelligence"),
+            ),
         )
 
     async def _handle_animation_finished(self, message: AnimationEvent) -> None:
@@ -275,9 +288,4 @@ class WitchRuntime:
         return True
 
     async def _broadcast_event_to_unreal(self, event: WitchEvent) -> None:
-        await self.ws_server.broadcast(self._encode_event_with_origin(event, "ArtificialIntelligence"), path="/ws/ai-3d")
-
-    def _encode_event_with_origin(self, event: WitchEvent, origin: str) -> str:
-        data = msgspec.to_builtins(event)
-        data["origin"] = data.get("origin") or origin
-        return msgspec.json.encode(data).decode("utf-8")
+        await self._ai3d_channel.broadcast(event)

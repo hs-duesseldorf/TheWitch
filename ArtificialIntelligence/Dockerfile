@@ -15,7 +15,14 @@ RUN pip install --no-cache-dir \
     ollama>=0.4.0
 
 COPY shared/ ./shared/
-COPY ArtificialIntelligence/ ./
+COPY ArtificialIntelligence/clients/ ./clients/
+COPY ArtificialIntelligence/servers/ ./servers/
+COPY ArtificialIntelligence/state_machine/ ./state_machine/
+COPY ArtificialIntelligence/websocket_server/ ./websocket_server/
+COPY ArtificialIntelligence/message_channels.py .
+COPY ArtificialIntelligence/message_parser.py .
+COPY ArtificialIntelligence/main.py .
+COPY ArtificialIntelligence/runtime.py .
 
 ARG WITCH_AI_WS_PORT
 ARG WITCH_AI_UI_PORT
