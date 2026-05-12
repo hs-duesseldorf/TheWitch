@@ -23,6 +23,8 @@ COPY ArtificialIntelligence/message_channels.py .
 COPY ArtificialIntelligence/message_parser.py .
 COPY ArtificialIntelligence/main.py .
 COPY ArtificialIntelligence/runtime.py .
+COPY ArtificialIntelligence/debug_ui.py .
+COPY ArtificialIntelligence/assets/ ./assets/
 
 ARG WITCH_AI_WS_PORT
 ARG WITCH_AI_UI_PORT
