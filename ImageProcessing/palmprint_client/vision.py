@@ -100,6 +100,36 @@ def is_palm_frontal(points3d: np.ndarray, hand: Hand | None, *, min_confidence: 
     return abs(score) >= min_confidence
 
 
+def are_hand_landmarks_fully_visible(
+    landmarks_px: np.ndarray,
+    frame_width: int,
+    frame_height: int,
+    *,
+    margin_px: float = 0.0,
+) -> bool:
+    points = np.asarray(landmarks_px, dtype=np.float32)
+    if points.ndim != 2 or points.shape[0] < 21 or points.shape[1] < 2:
+        return False
+
+    xy = points[:, :2]
+    if not np.isfinite(xy).all():
+        return False
+
+    min_x = margin_px
+    min_y = margin_px
+    max_x = float(frame_width - 1) - margin_px
+    max_y = float(frame_height - 1) - margin_px
+    if max_x < min_x or max_y < min_y:
+        return False
+
+    return bool(
+        (xy[:, 0] >= min_x).all()
+        and (xy[:, 0] <= max_x).all()
+        and (xy[:, 1] >= min_y).all()
+        and (xy[:, 1] <= max_y).all()
+    )
+
+
 def extract_geometry_features(points3d: np.ndarray) -> dict[str, float]:
     palm_width = _distance(points3d[INDEX_MCP], points3d[PINKY_MCP])
     palm_height = _distance(points3d[WRIST], points3d[MIDDLE_MCP])

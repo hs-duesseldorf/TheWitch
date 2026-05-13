@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import os
 import threading
 import time
 from collections import deque
@@ -19,6 +20,7 @@ from .transport import WebSocketClient
 from .utils import l2_normalize, parse_camera_source
 from shared.events import Hand, HandEvent, HandTrigger
 from .vision import (
+    are_hand_landmarks_fully_visible,
     draw_hand_overlay,
     draw_roi_quad,
     encode_frame_jpeg,
@@ -38,7 +40,7 @@ ASSETS_DIR = Path(__file__).resolve().parent.parent / "assets"
 DEFAULT_HAND_MODEL_PATH = ASSETS_DIR / "models" / "hand_landmarker.task"
 VIDEO_STREAM_INTERVAL_S = 1.0 / 30.0
 WEBCAM_BRIDGE_URL = "http://host.docker.internal:8090/video"
-CAMERA_SOURCE = "0"
+CAMERA_SOURCE = os.getenv("WITCH_CAMERA_SOURCE", "0")
 CAMERA_FPS = 0.0
 CAMERA_WIDTH = 0
 CAMERA_HEIGHT = 0
@@ -52,6 +54,7 @@ ROI_CONTRAST = 1.2
 ROI_GAMMA = 1.1
 ROI_CLAHE_CLIP_LIMIT = 1.8
 ROI_CLAHE_TILE_SIZE = 8
+HAND_LANDMARK_VISIBILITY_MARGIN_PX = 2.0
 
 
 def resolve_torch_device() -> torch.device:
@@ -310,6 +313,15 @@ class HeadlessPalmClient:
                     raw_pts[:, 0] = (width - 1) - raw_pts[:, 0]
 
                     overlay_hand_frame = draw_hand_overlay(display_frame, display_pts[:, :2])
+                    if not are_hand_landmarks_fully_visible(
+                        display_pts[:, :2],
+                        width,
+                        height,
+                        margin_px=HAND_LANDMARK_VISIBILITY_MARGIN_PX,
+                    ):
+                        self._publish_pose_quality(display_hand, overlay_hand_frame)
+                        continue
+
                     world_pts = None
                     if result.hand_world_landmarks and index < len(result.hand_world_landmarks):
                         world = result.hand_world_landmarks[index]
