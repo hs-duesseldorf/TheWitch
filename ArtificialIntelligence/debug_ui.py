@@ -30,6 +30,7 @@ app.add_middleware(
 
 runtime_lock = threading.Lock()
 runtime: App | None = None
+state_machine_graph: str | None = None
 
 
 def get_runtime() -> App:
@@ -64,13 +65,17 @@ def get_state():
 
 @app.get("/api/state-machine-graph")
 def get_state_machine_graph():
+    global state_machine_graph
+    if state_machine_graph is not None:
+        return {"graph": state_machine_graph}
+
     sm = get_runtime().state_machine.machine
     try:
-        mermaid = sm.get_graph().source.replace("direction LR", "direction TB")
+        state_machine_graph = sm.get_graph().source.replace("direction LR", "direction TB")
     except Exception as e:
         logger.warning("Failed to generate state machine graph: %s", e)
-        mermaid = "graph TD\n  error[Graph unavailable]"
-    return {"graph": mermaid}
+        state_machine_graph = "graph TD\n  error[Graph unavailable]"
+    return {"graph": state_machine_graph}
 
 
 @app.get("/api/config")

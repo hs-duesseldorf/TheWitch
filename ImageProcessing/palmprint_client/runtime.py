@@ -179,8 +179,7 @@ class HeadlessPalmClient:
         self.video_client.send_message(encode_frame_jpeg(camera_frame_bgr, max_width=720, quality=72))
         self.last_video_frame_publish_at = time.monotonic()
 
-    def _publish_roi_frame(self, roi: np.ndarray) -> None:
-        model_input = prepare_cnn_input_roi(roi, self.roi_tone_settings)
+    def _publish_roi_frame(self, model_input: np.ndarray) -> None:
         self.roi_client.send_message(encode_frame_jpeg(model_input, max_width=256, quality=72))
         self.last_roi_frame_publish_at = time.monotonic()
 
@@ -193,6 +192,8 @@ class HeadlessPalmClient:
     ) -> None:
         if camera_frame_bgr is not None and self._should_publish_video_frame():
             self._publish_video_frame(camera_frame_bgr)
+        if not self._should_publish_hand_signature(trigger, hand, False):
+            return
         self._publish_hand_event(HandEvent(
             trigger=trigger,
             hand=hand,
@@ -206,12 +207,23 @@ class HeadlessPalmClient:
         if self._should_publish_video_frame():
             self._publish_video_frame(camera_frame_bgr)
 
+        vector = self.feature_cache["embedding_vector"]
+        if not self._should_publish_hand_signature(HandTrigger.DETECTED, hand, bool(vector)):
+            return
         self._publish_hand_event(HandEvent(
             trigger=HandTrigger.DETECTED,
             hand=hand,
             lengths=dict(self.feature_cache["hand_lengths"]),
-            vector=list(self.feature_cache["embedding_vector"]),
+            vector=list(vector),
         ))
+
+    def _should_publish_hand_signature(
+        self,
+        trigger: HandTrigger,
+        hand: Hand | None,
+        has_vector: bool,
+    ) -> bool:
+        return (trigger, hand, has_vector) != self.last_hand_observation_signature
 
     def _publish_hand_event(self, event: HandEvent) -> None:
         signature = (
@@ -245,21 +257,21 @@ class HeadlessPalmClient:
             camera_frame_bgr=frame_bgr,
         )
 
-    def _publish_roi_failure(self, hand: Hand | None, frame_bgr: np.ndarray) -> None:
+    def _publish_roi_failure(self, hand: Hand | None, frame_bgr: np.ndarray | None) -> None:
         self._publish_hand_status(
             trigger=HandTrigger.TILTED,
             hand=hand,
             camera_frame_bgr=frame_bgr,
         )
 
-    def _publish_palm_side_required(self, hand: Hand | None, frame_bgr: np.ndarray) -> None:
+    def _publish_palm_side_required(self, hand: Hand | None, frame_bgr: np.ndarray | None) -> None:
         self._publish_hand_status(
             trigger=HandTrigger.WRONG_SIDE,
             hand=hand,
             camera_frame_bgr=frame_bgr,
         )
 
-    def _publish_pose_quality(self, hand: Hand | None, frame_bgr: np.ndarray) -> None:
+    def _publish_pose_quality(self, hand: Hand | None, frame_bgr: np.ndarray | None) -> None:
         self._publish_hand_status(
             trigger=HandTrigger.TILTED,
             hand=hand,
@@ -312,7 +324,12 @@ class HeadlessPalmClient:
                     raw_pts = display_pts.copy()
                     raw_pts[:, 0] = (width - 1) - raw_pts[:, 0]
 
-                    overlay_hand_frame = draw_hand_overlay(display_frame, display_pts[:, :2])
+                    should_publish_video = self._should_publish_video_frame()
+                    overlay_hand_frame = (
+                        draw_hand_overlay(display_frame, display_pts[:, :2])
+                        if should_publish_video
+                        else None
+                    )
                     if not are_hand_landmarks_fully_visible(
                         display_pts[:, :2],
                         width,
@@ -346,19 +363,29 @@ class HeadlessPalmClient:
                         continue
 
                     raw_roi_quad = roi_quad_from_pose(current_roi_pose)
-                    display_roi_quad = mirror_quad_horizontally(raw_roi_quad, width)
-                    overlay_frame = draw_roi_quad(overlay_hand_frame, display_roi_quad)
+                    overlay_frame = None
+                    if overlay_hand_frame is not None:
+                        display_roi_quad = mirror_quad_horizontally(raw_roi_quad, width)
+                        overlay_frame = draw_roi_quad(overlay_hand_frame, display_roi_quad)
                     roi = warp_roi_from_quad(raw_frame, raw_roi_quad, self.roi_size)
 
                     if roi is None:
                         self._publish_roi_failure(display_hand, overlay_frame)
                     else:
-                        if self._should_publish_roi_frame():
-                            self._publish_roi_frame(roi)
+                        should_publish_roi = self._should_publish_roi_frame()
                         with self.model_lock:
                             run_embed = (self.frame_counter % self.embed_every == 0) or (self.last_embedding is None)
+                            model_input = (
+                                prepare_cnn_input_roi(roi, self.roi_tone_settings)
+                                if should_publish_roi or run_embed
+                                else None
+                            )
+                            if should_publish_roi and model_input is not None:
+                                self._publish_roi_frame(model_input)
                             if run_embed:
-                                embedding = self.cnn.embed(roi)
+                                if model_input is None:
+                                    model_input = prepare_cnn_input_roi(roi, self.roi_tone_settings)
+                                embedding = self.cnn.embed_preprocessed(model_input)
                                 self.last_embedding = embedding
                                 self.embedding_history.append(embedding)
                             else:

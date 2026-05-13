@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from functools import lru_cache
 
 import cv2
 import numpy as np
@@ -13,6 +14,14 @@ class RoiToneSettings:
     gamma: float = 1.1
     clahe_clip_limit: float = 1.8
     clahe_tile_size: int = 8
+
+
+@lru_cache(maxsize=8)
+def _clahe(clip_limit: float, tile_size: int) -> cv2.CLAHE:
+    return cv2.createCLAHE(
+        clipLimit=float(clip_limit),
+        tileGridSize=(int(tile_size), int(tile_size)),
+    )
 
 
 def enhance_palm_roi(roi_bgr: np.ndarray) -> np.ndarray:
@@ -40,11 +49,7 @@ def prepare_cnn_input_roi(roi_bgr: np.ndarray, settings: RoiToneSettings) -> np.
     processed = gray
     if settings.clahe_clip_limit > 0:
         tile = max(1, int(settings.clahe_tile_size))
-        clahe = cv2.createCLAHE(
-            clipLimit=float(settings.clahe_clip_limit),
-            tileGridSize=(tile, tile),
-        )
-        processed = clahe.apply(processed)
+        processed = _clahe(float(settings.clahe_clip_limit), tile).apply(processed)
 
     adjusted = processed.astype(np.float32) * float(settings.contrast) + float(settings.brightness)
     adjusted = np.clip(adjusted, 0.0, 255.0) / 255.0

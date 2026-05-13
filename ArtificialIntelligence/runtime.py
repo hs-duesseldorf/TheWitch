@@ -7,8 +7,6 @@ import logging
 from typing import Any
 
 import httpx
-import msgspec
-
 from message_channels import EventChannel
 from state_machine.state_machine import (
     SCENES_THAT_DELIVER_FORTUNE,
@@ -153,7 +151,6 @@ class WitchRuntime:
         await handler(connection, event)
 
     async def _handle_ip_hand_event(self, connection: Any, event: HandEvent) -> None:
-        raw_event = msgspec.to_builtins(event)
         self._hand_data = {
             "trigger": event.trigger.value,
             "hand": event.hand.value if event.hand else None,

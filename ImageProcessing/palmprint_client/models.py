@@ -113,6 +113,10 @@ class TextureCNN:
 
     def embed(self, roi_bgr: np.ndarray) -> np.ndarray:
         gray = prepare_cnn_input_roi(roi_bgr, self.roi_tone_settings)
+        return self.embed_preprocessed(gray)
+
+    def embed_preprocessed(self, roi_gray: np.ndarray) -> np.ndarray:
+        gray = roi_gray.astype(np.uint8, copy=False)
         vec = self._forward_batch([Image.fromarray(gray, mode="L")])[0]
         return l2_normalize(vec)
 
