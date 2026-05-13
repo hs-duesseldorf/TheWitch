@@ -24,6 +24,7 @@ from shared.events import (
     FortuneEvent,
     FortuneRequestEvent,
     HandEvent,
+    PersonEvent,
     Scene,
     SceneCommandEvent,
     WitchEvent,
@@ -64,6 +65,7 @@ class WitchRuntime:
         )
         self._ip_handlers = {
             HandEvent: self._handle_ip_hand_event,
+            PersonEvent: self._handle_ip_person_event,
         }
         self._unreal_handlers = {
             AnimationEvent: self._handle_unreal_animation_event,
@@ -160,6 +162,13 @@ class WitchRuntime:
         }
 
         transitions = self.state_machine.hand_event(event)
+        for transition in transitions:
+            await self._broadcast_transition(transition)
+
+        await self._apply_transition_effects(transitions)
+
+    async def _handle_ip_person_event(self, connection: Any, event: PersonEvent) -> None:
+        transitions = self.state_machine.person_event(event)
         for transition in transitions:
             await self._broadcast_transition(transition)
 

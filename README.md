@@ -64,6 +64,14 @@ WITCH_TTS_BASE_URL=http://192.168.1.21:8083
 WITCH_AI_BASE_URL=ws://192.168.1.10:8081
 ```
 
+### Seat Sensor
+
+The ImageProcessing service publishes a `person_detected` event when the VL53L0X seat sensor detects someone sitting down. For local testing without sensor hardware, override it so the person-present event is sent on startup:
+
+```dotenv
+WITCH_SEAT_SENSOR_OVERRIDE=true
+```
+
 ## Running Specific Services
 
 ```bash

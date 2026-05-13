@@ -5,7 +5,7 @@ from pathlib import Path
 
 from transitions.extensions import GraphMachine
 
-from shared.events import HandEvent, HandTrigger, Scene
+from shared.events import HandEvent, HandTrigger, PersonEvent, PersonTrigger, Scene
 
 
 IDLE = Scene.SCENE_0_IDLE.value
@@ -46,6 +46,7 @@ def transition(trigger: str, source: str | list[str], dest: str) -> dict[str, ob
 
 TRANSITIONS = [
     # Camera / hand input.
+    transition("ip_person_seated", IDLE, ATTENTION),
     transition("ip_hand_absent", IDLE, ATTENTION),
     transition("ip_hand_present", IDLE, INTRO),
     transition("attention_done", ATTENTION, IDLE),
@@ -191,6 +192,12 @@ class WitchStateMachine:
             seen_states.add(self.state)
 
         return changes
+
+    def person_event(self, event: PersonEvent) -> list[StateChange]:
+        if event.trigger is not PersonTrigger.DETECTED:
+            return []
+        change = self.advance("ip_person_seated")
+        return [change] if change else []
 
     def animation_finished(self, scene: str | None = None) -> list[StateChange]:
         if scene is not None and scene != self.state:

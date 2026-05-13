@@ -19,7 +19,9 @@ RUN pip install --no-cache-dir \
     numpy \
     opencv-python-headless \
     Pillow \
-    mediapipe
+    mediapipe \
+    adafruit-blinka \
+    adafruit-circuitpython-vl53l0x
 
 COPY shared/ ./shared/
 COPY ImageProcessing/ ./
