@@ -12,6 +12,7 @@ class HandTrigger(str, Enum):
     DETECTED = "hand_detected"
     ABSENT = "hand_absent"
     WRONG_SIDE = "hand_wrong_side"
+    NOT_FULLY_IN_VIEW = "hand_not_fully_in_view"
     TILTED = "hand_tilted"
 
 

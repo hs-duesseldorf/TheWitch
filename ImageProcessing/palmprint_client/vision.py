@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 from typing import Any
 
@@ -100,6 +101,44 @@ def is_palm_frontal(points3d: np.ndarray, hand: Hand | None, *, min_confidence: 
     return abs(score) >= min_confidence
 
 
+def are_normalized_hand_landmarks_fully_visible(
+    landmarks: list[Any],
+    frame_width: int,
+    frame_height: int,
+    *,
+    margin_px: float = 0.0,
+) -> bool:
+    if len(landmarks) < 21 or frame_width <= 0 or frame_height <= 0:
+        return False
+
+    min_x = margin_px / float(frame_width)
+    min_y = margin_px / float(frame_height)
+    max_x = (float(frame_width - 1) - margin_px) / float(frame_width)
+    max_y = (float(frame_height - 1) - margin_px) / float(frame_height)
+    if max_x < min_x or max_y < min_y:
+        return False
+
+    lo_x = float("inf")
+    lo_y = float("inf")
+    hi_x = float("-inf")
+    hi_y = float("-inf")
+    for landmark in landmarks:
+        x = landmark.x
+        y = landmark.y
+        if not math.isfinite(x) or not math.isfinite(y):
+            return False
+        if x < lo_x:
+            lo_x = x
+        if x > hi_x:
+            hi_x = x
+        if y < lo_y:
+            lo_y = y
+        if y > hi_y:
+            hi_y = y
+
+    return lo_x >= min_x and hi_x <= max_x and lo_y >= min_y and hi_y <= max_y
+
+
 def are_hand_landmarks_fully_visible(
     landmarks_px: np.ndarray,
     frame_width: int,
@@ -122,12 +161,9 @@ def are_hand_landmarks_fully_visible(
     if max_x < min_x or max_y < min_y:
         return False
 
-    return bool(
-        (xy[:, 0] >= min_x).all()
-        and (xy[:, 0] <= max_x).all()
-        and (xy[:, 1] >= min_y).all()
-        and (xy[:, 1] <= max_y).all()
-    )
+    lo = xy.min(axis=0)
+    hi = xy.max(axis=0)
+    return bool(lo[0] >= min_x and hi[0] <= max_x and lo[1] >= min_y and hi[1] <= max_y)
 
 
 def extract_geometry_features(points3d: np.ndarray) -> dict[str, float]:

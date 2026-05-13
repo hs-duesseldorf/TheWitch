@@ -20,7 +20,7 @@ from .transport import WebSocketClient
 from .utils import l2_normalize, parse_camera_source
 from shared.events import Hand, HandEvent, HandTrigger
 from .vision import (
-    are_hand_landmarks_fully_visible,
+    are_normalized_hand_landmarks_fully_visible,
     draw_hand_overlay,
     draw_roi_quad,
     encode_frame_jpeg,
@@ -271,6 +271,13 @@ class HeadlessPalmClient:
             camera_frame_bgr=frame_bgr,
         )
 
+    def _publish_hand_not_fully_in_view(self, hand: Hand | None, frame_bgr: np.ndarray | None) -> None:
+        self._publish_hand_status(
+            trigger=HandTrigger.NOT_FULLY_IN_VIEW,
+            hand=hand,
+            camera_frame_bgr=frame_bgr,
+        )
+
     def _publish_pose_quality(self, hand: Hand | None, frame_bgr: np.ndarray | None) -> None:
         self._publish_hand_status(
             trigger=HandTrigger.TILTED,
@@ -320,24 +327,29 @@ class HeadlessPalmClient:
                         display_hand = Hand.LEFT
 
                     height, width = display_frame.shape[:2]
+                    should_publish_video = self._should_publish_video_frame()
+                    if not are_normalized_hand_landmarks_fully_visible(
+                        hand,
+                        width,
+                        height,
+                        margin_px=HAND_LANDMARK_VISIBILITY_MARGIN_PX,
+                    ):
+                        overlay_hand_frame = None
+                        if should_publish_video:
+                            display_pts = np.array([[lm.x * width, lm.y * height, lm.z] for lm in hand], dtype=np.float32)
+                            overlay_hand_frame = draw_hand_overlay(display_frame, display_pts[:, :2])
+                        self._publish_hand_not_fully_in_view(display_hand, overlay_hand_frame)
+                        continue
+
                     display_pts = np.array([[lm.x * width, lm.y * height, lm.z] for lm in hand], dtype=np.float32)
                     raw_pts = display_pts.copy()
                     raw_pts[:, 0] = (width - 1) - raw_pts[:, 0]
 
-                    should_publish_video = self._should_publish_video_frame()
                     overlay_hand_frame = (
                         draw_hand_overlay(display_frame, display_pts[:, :2])
                         if should_publish_video
                         else None
                     )
-                    if not are_hand_landmarks_fully_visible(
-                        display_pts[:, :2],
-                        width,
-                        height,
-                        margin_px=HAND_LANDMARK_VISIBILITY_MARGIN_PX,
-                    ):
-                        self._publish_pose_quality(display_hand, overlay_hand_frame)
-                        continue
 
                     world_pts = None
                     if result.hand_world_landmarks and index < len(result.hand_world_landmarks):

@@ -236,7 +236,7 @@ class WitchStateMachine:
 def hand_condition(event: HandEvent) -> str:
     if event.trigger is HandTrigger.ABSENT:
         return "absent"
-    if event.trigger in {HandTrigger.WRONG_SIDE, HandTrigger.TILTED}:
+    if event.trigger in {HandTrigger.WRONG_SIDE, HandTrigger.NOT_FULLY_IN_VIEW, HandTrigger.TILTED}:
         return "wrong"
     return "ready" if event.vector else "present"
 
