@@ -4,6 +4,7 @@ import os
 import time
 from contextlib import suppress
 
+from palmprint_client.seat_sensor import SeatPresenceMonitor
 from palmprint_client.runtime import HeadlessPalmClient
 from palmprint_client.transport import WebSocketClient
 
@@ -24,18 +25,23 @@ class App:
             video_client=self.video_client,
             roi_client=self.roi_client,
         )
+        self.seat_monitor = SeatPresenceMonitor(
+            event_client=self.event_client,
+        )
 
     def run(self) -> None:
         try:
             self.event_client.start()
             self.video_client.start()
             self.roi_client.start()
+            self.seat_monitor.start()
             self.runtime.start()
 
             with suppress(KeyboardInterrupt):
                 self._wait_forever()
         finally:
             self.runtime.stop()
+            self.seat_monitor.stop()
             self.roi_client.stop()
             self.video_client.stop()
             self.event_client.stop()

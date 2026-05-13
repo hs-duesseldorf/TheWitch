@@ -2,6 +2,7 @@
 stateDiagram-v2
 direction TB
     [*] --> scene_0_idle
+    scene_0_idle --> scene_1_attention: ip_person_seated
     scene_0_idle --> scene_1_attention: ip_hand_absent
     scene_1_attention --> scene_0_idle: attention_done
     scene_0_idle --> scene_2_intro: ip_hand_present
