@@ -51,18 +51,20 @@ flowchart LR
 
 ## Configure
 
-Default config (Docker service names) works for full local stack. If running services on other machines, update the `.env` hosts:
+Default config routes through the Docker host instead of Docker-internal service names. If running services on other machines, update the `.env` hosts to the machine that runs each service:
 
 ```dotenv
-# LLM on another machine
-WITCH_LLM_BASE_URL=http://192.168.1.20:8082
+# AI connects to the LLM machine
+WITCH_LLM_HOST=192.168.1.20
 
-# TTS on another machine
-WITCH_TTS_BASE_URL=http://192.168.1.21:8083
+# AI connects to the TTS machine
+WITCH_TTS_HOST=192.168.1.21
 
-# ImageProcessing on Jetson -> AI on PC
-WITCH_AI_BASE_URL=ws://192.168.1.10:8081
+# ImageProcessing connects to the AI machine
+WITCH_AI_HOST=192.168.1.10
 ```
+
+Use `host.docker.internal` when the target service runs on the same Docker host. Use a LAN IP or hostname when the target service runs on another PC. Do not use `localhost` for cross-machine connections; inside a container it points back to that same container.
 
 ### Seat Sensor
 
@@ -85,7 +87,7 @@ On Windows, start the webcam bridge first, then use the same `docker compose` co
 ## Jetson as Camera Client
 
 1. On the AI machine: keep `ai` service running and reachable on port `8081`
-2. On the Jetson: set `WITCH_AI_BASE_URL=ws://<AI-machine-LAN-IP>:8081` in `.env`
+2. On the Jetson: set `WITCH_AI_HOST=<AI-machine-LAN-IP>` in `.env`
 3. Run only the camera client:
 
 ```bash
@@ -134,8 +136,15 @@ If the file is missing, TTS starts with the model default voice.
 ## Unreal Engine Connection
 
 ```
-# From env: ${WITCH_AI_BASE_URL}/ws/ai-3d
-# Resolved: ws://ai:8081/ws/ai-3d
+# Same PC as AI, native Unreal:
+ws://localhost:8081/ws/ai-3d
+
+# Different PC:
+ws://<AI-machine-LAN-IP>:8081/ws/ai-3d
+
+# AI video and ROI streams:
+ws://<AI-machine-LAN-IP>:8081/ws/ai-3d-video
+ws://<AI-machine-LAN-IP>:8081/ws/ai-3d-roi
 ```
 
 ## Useful Commands

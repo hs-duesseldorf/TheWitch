@@ -34,6 +34,8 @@ services:
     ports:
       - "${WITCH_AI_UI_PORT}:${WITCH_AI_UI_PORT}"
       - "${WITCH_AI_PORT}:${WITCH_AI_PORT}"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     volumes:
       - ./ArtificialIntelligence/assets:/assets:ro
     restart: unless-stopped
@@ -69,6 +71,8 @@ services:
     extra_hosts:
       - "host.docker.internal:host-gateway"
     env_file: [.env]
+    environment:
+      WITCH_AI_BASE_URL: ws://${WITCH_AI_HOST}:${WITCH_AI_PORT}
     volumes:
       - ./ImageProcessing/assets:/app/assets:ro
     restart: unless-stopped
