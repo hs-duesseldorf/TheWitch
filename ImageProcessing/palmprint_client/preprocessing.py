@@ -24,6 +24,14 @@ def _clahe(clip_limit: float, tile_size: int) -> cv2.CLAHE:
     )
 
 
+@lru_cache(maxsize=16)
+def _tone_lut(contrast: float, brightness: float, gamma: float) -> np.ndarray:
+    values = np.arange(256, dtype=np.float32)
+    values = np.clip(values * float(contrast) + float(brightness), 0.0, 255.0) / 255.0
+    values = np.power(values, float(gamma))
+    return np.clip(values * 255.0, 0.0, 255.0).astype(np.uint8)
+
+
 def enhance_palm_roi(roi_bgr: np.ndarray) -> np.ndarray:
     gray = cv2.cvtColor(roi_bgr, cv2.COLOR_BGR2GRAY)
     clahe = cv2.createCLAHE(clipLimit=2.4, tileGridSize=(8, 8)).apply(gray)
@@ -51,7 +59,5 @@ def prepare_cnn_input_roi(roi_bgr: np.ndarray, settings: RoiToneSettings) -> np.
         tile = max(1, int(settings.clahe_tile_size))
         processed = _clahe(float(settings.clahe_clip_limit), tile).apply(processed)
 
-    adjusted = processed.astype(np.float32) * float(settings.contrast) + float(settings.brightness)
-    adjusted = np.clip(adjusted, 0.0, 255.0) / 255.0
-    adjusted = np.power(adjusted, float(settings.gamma))
-    return np.clip(adjusted * 255.0, 0.0, 255.0).astype(np.uint8)
+    lut = _tone_lut(float(settings.contrast), float(settings.brightness), float(settings.gamma))
+    return cv2.LUT(processed, lut)

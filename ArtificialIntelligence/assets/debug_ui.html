@@ -245,7 +245,7 @@
                     updateState();
                 });
                 socket(`${wsBase}/ws/ai-3d`, (ev) => {
-                    if (ev.type === "fortune" && ev.audio) setAudio(ev);
+                    if (ev.type === "fortune") updateAudio();
                     show(ev.origin, ev);
                     updateState();
                 });
@@ -288,21 +288,16 @@
             }
 
             function show(name, event) {
-                const visible = event.audio
-                    ? {
-                          ...event,
-                          audio: `[wav ${Math.round(event.audio.length * 0.75)} bytes]`,
-                      }
-                    : event;
                 $(`${name}Events`).textContent = JSON.stringify(
-                    visible,
+                    event,
                     null,
                     2,
                 );
             }
 
-            function setAudio(event) {
-                if (event.audio === currentAudio) return;
+            async function updateAudio() {
+                const event = await json("/api/tts-audio");
+                if (!event.audio || event.audio === currentAudio) return;
                 currentAudio = event.audio;
                 $("ttsAudio").src = `data:audio/wav;base64,${event.audio}`;
             }

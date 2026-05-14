@@ -10,7 +10,10 @@ import cv2
 
 BRIDGE_PORT = 8090
 JPEG_QUALITY = 82
-CAPTURE_DELAY_SECONDS = 0.03
+CAPTURE_FPS = 15.0
+CAPTURE_WIDTH = 640
+CAPTURE_HEIGHT = 480
+CAPTURE_DELAY_SECONDS = 1.0 / CAPTURE_FPS
 
 
 class FrameStore:
@@ -37,13 +40,23 @@ def capture_loop(store: FrameStore, camera: str) -> None:
     if not cap.isOpened():
         raise RuntimeError(f"Could not open camera source {camera!r}")
 
+    cap.set(cv2.CAP_PROP_FPS, CAPTURE_FPS)
+    cap.set(cv2.CAP_PROP_FRAME_WIDTH, CAPTURE_WIDTH)
+    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, CAPTURE_HEIGHT)
+
     while store.running:
+        started = time.monotonic()
         ok, frame = cap.read()
         if ok:
+            height, width = frame.shape[:2]
+            if width != CAPTURE_WIDTH or height != CAPTURE_HEIGHT:
+                frame = cv2.resize(frame, (CAPTURE_WIDTH, CAPTURE_HEIGHT), interpolation=cv2.INTER_AREA)
             encoded_ok, encoded = cv2.imencode(".jpg", frame, [int(cv2.IMWRITE_JPEG_QUALITY), JPEG_QUALITY])
             if encoded_ok:
                 store.set_frame(encoded.tobytes())
-        time.sleep(CAPTURE_DELAY_SECONDS)
+        remaining = CAPTURE_DELAY_SECONDS - (time.monotonic() - started)
+        if remaining > 0:
+            time.sleep(remaining)
 
     cap.release()
 

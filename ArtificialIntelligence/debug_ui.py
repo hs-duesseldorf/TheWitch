@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 import logging
 import os
 import threading
@@ -82,6 +83,19 @@ def get_state_machine_graph():
 def get_config():
     ws_port = int(os.getenv("WITCH_AI_PORT"))
     return {"ws_port": ws_port}
+
+
+@app.get("/api/tts-audio")
+def get_tts_audio():
+    latest = get_runtime().runtime.latest_tts_audio()
+    if latest is None:
+        return {"audio": None, "sample_rate": None}
+
+    audio, sample_rate = latest
+    return {
+        "audio": base64.b64encode(audio).decode(),
+        "sample_rate": sample_rate,
+    }
 
 
 @app.post("/api/reset")

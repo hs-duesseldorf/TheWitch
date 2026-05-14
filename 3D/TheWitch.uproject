@@ -1,6 +1,6 @@
 {
 	"FileVersion": 3,
-	"EngineAssociation": "5.7",
+	"EngineAssociation": "EEAE32FB-510F-4B60-8C80-1251968AC184",
 	"Category": "",
 	"Description": "",
 	"Modules": [
@@ -14,10 +14,7 @@
 		{
 			"Name": "EasyWebsockets",
 			"Enabled": true,
-			"SupportedTargetPlatforms": [
-				"Win64",
-				"Linux"
-			]
+			"MarketplaceURL": "com.epicgames.launcher://ue/marketplace/product/4b5a7cbf6dda4b91878824a47104c596"
 		},
 		{
 			"Name": "ModelingToolsEditorMode",
@@ -80,6 +77,18 @@
 		{
 			"Name": "LiveLinkCurveDebugUI",
 			"Enabled": true
+		},
+		{
+			"Name": "JsonBlueprintUtilities",
+			"Enabled": true
+		},
+		{
+			"Name": "TheWitchUtilities",
+			"Enabled": true,
+			"SupportedTargetPlatforms": [
+				"Win64",
+				"Linux"
+			]
 		}
 	]
 }

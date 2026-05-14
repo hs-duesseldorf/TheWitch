@@ -12,10 +12,16 @@ docker compose up --build
 
 Debug UI: http://localhost:8080/
 
-If the Docker host has NVIDIA container GPU support configured, use the GPU override:
+If the Docker host has NVIDIA container GPU support configured, use the desktop GPU override on a normal NVIDIA PC:
 
 ```bash
 docker compose -f compose.yaml -f compose.gpu.yaml up --build
+```
+
+On Jetson, use the Jetson override instead:
+
+```bash
+docker compose -f compose.yaml -f compose.jetson.yaml up --build
 ```
 
 On Windows, use the Windows commands below instead so the camera bridge is enabled.
@@ -91,7 +97,7 @@ On Windows, start the webcam bridge first, then use the same `docker compose` co
 3. Run only the camera client:
 
 ```bash
-docker compose up --build ip
+docker compose -f compose.yaml -f compose.jetson.yaml up --build ip
 ```
 
 ## Windows

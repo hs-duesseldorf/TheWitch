@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import asyncio
-import base64
 import copy
 import logging
 from typing import Any
@@ -16,11 +15,9 @@ from state_machine.state_machine import (
 )
 from shared.events import (
     AnalysisStartedEvent,
-    AnimationEvent,
-    AnimationTrigger,
     ErrorEvent,
+    EventDoneEvent,
     FortuneEvent,
-    FortuneRequestEvent,
     HandEvent,
     PersonEvent,
     Scene,
@@ -49,6 +46,8 @@ class WitchRuntime:
         self._analysis_stage = "idle"
         self._hand_data: dict | None = None
         self._pending_fortune_event: FortuneEvent | None = None
+        self._latest_tts_audio: bytes | None = None
+        self._latest_tts_sample_rate: int | None = None
         self._ip_channel = EventChannel(
             ws_server=self.ws_server,
             path="/ws/ip-ai",
@@ -66,8 +65,7 @@ class WitchRuntime:
             PersonEvent: self._handle_ip_person_event,
         }
         self._unreal_handlers = {
-            AnimationEvent: self._handle_unreal_animation_event,
-            FortuneRequestEvent: self._handle_unreal_fortune_request,
+            EventDoneEvent: self._handle_unreal_event_done,
         }
 
         self._register_routes()
@@ -107,10 +105,14 @@ class WitchRuntime:
         if event is None:
             return
         await self.handle_unreal(connection, event)
-        await self._ai3d_channel.broadcast(event, origin="Unreal", exclude=connection)
 
     def state(self) -> str:
         return self.state_machine.state
+
+    def latest_tts_audio(self) -> tuple[bytes, int | None] | None:
+        if self._latest_tts_audio is None:
+            return None
+        return self._latest_tts_audio, self._latest_tts_sample_rate
 
     def force_state(self, state: str) -> str:
         self.state_machine.force_state(state)
@@ -177,30 +179,11 @@ class WitchRuntime:
             return
         await handler(connection, message)
 
-    async def _handle_unreal_animation_event(self, connection: Any, message: AnimationEvent) -> None:
-        if message.trigger is AnimationTrigger.FINISHED:
-            await self._handle_animation_finished(message)
-
-    async def _handle_unreal_fortune_request(self, connection: Any, message: FortuneRequestEvent) -> None:
-        await self._handle_fortune_request(connection)
-
-    async def _handle_fortune_request(self, connection: Any) -> None:
-        if self._hand_data:
-            await self._start_analysis()
-            return
-        await self._ai3d_channel.send_to(
-            connection,
-            ErrorEvent(
-                message="No hand data available",
-            ),
-        )
-
-    async def _handle_animation_finished(self, message: AnimationEvent) -> None:
+    async def _handle_unreal_event_done(self, connection: Any, message: EventDoneEvent) -> None:
         previous_state = self.state_machine.state
-        scene = message.scene.value if message.scene else previous_state
-        transitions = self.state_machine.animation_finished(scene)
+        transitions = self.state_machine.event_done(previous_state)
         if not transitions:
-            logger.debug("Ignoring animation_finished for %s while state is %s", scene, previous_state)
+            logger.debug("Ignoring event_done while state is %s", previous_state)
             return
 
         for transition in transitions:
@@ -247,9 +230,10 @@ class WitchRuntime:
             self._analysis_stage = "tts"
             tts_result = await self.tts.synthesize(fortune)
             audio, sample_rate = tts_result if tts_result is not None else (None, None)
+            self._latest_tts_audio = audio
+            self._latest_tts_sample_rate = sample_rate
             self._pending_fortune_event = FortuneEvent(
                 text=fortune,
-                audio=base64.b64encode(audio).decode() if audio else None,
                 sample_rate=sample_rate,
             )
             await self._broadcast_event_to_unreal(self._pending_fortune_event)

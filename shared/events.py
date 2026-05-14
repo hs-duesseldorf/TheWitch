@@ -21,10 +21,6 @@ class PersonTrigger(str, Enum):
     ABSENT = "person_absent"
 
 
-class AnimationTrigger(str, Enum):
-    FINISHED = "animation_finished"
-
-
 class Hand(str, Enum):
     LEFT = "left"
     RIGHT = "right"
@@ -80,13 +76,7 @@ class SceneCommandEvent(Event, tag="scene_command"):
     trigger: str | None = None
 
 
-class AnimationEvent(Event, tag="animation"):
-    trigger: AnimationTrigger
-    scene: Scene
-    animation: str | None = None
-
-
-class FortuneRequestEvent(Event, tag="fortune_request"):
+class EventDoneEvent(Event, tag="event_done"):
     pass
 
 
@@ -100,7 +90,6 @@ class AnalysisResultEvent(Event, tag="analysis_result"):
 
 class FortuneEvent(Event, tag="fortune"):
     text: str
-    audio: str | None = None
     sample_rate: int | None = None
 
 
@@ -112,8 +101,7 @@ WitchEvent: TypeAlias = (
     HandEvent
     | PersonEvent
     | SceneCommandEvent
-    | AnimationEvent
-    | FortuneRequestEvent
+    | EventDoneEvent
     | AnalysisStartedEvent
     | AnalysisResultEvent
     | FortuneEvent
