@@ -1,0 +1,16 @@
+services:
+  ip:
+    build:
+      context: .
+      dockerfile: ImageProcessing/Dockerfile
+      args:
+        BASE_IMAGE: nvcr.io/nvidia/pytorch:25.05-py3-igpu
+        INSTALL_TORCH: "0"
+    runtime: nvidia
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=all
+    ipc: host
+    ulimits:
+      memlock: -1
+      stack: 67108864
