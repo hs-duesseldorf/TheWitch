@@ -4,9 +4,9 @@ from typing import Any
 
 import msgspec
 
-from message_parser import decode_event
+from .message_parser import decode_event
 from shared.events import WitchEvent
-from websocket_server.websocket_server import WebSocketServer
+from .websocket_server.websocket_server import WebSocketServer
 
 
 class EventChannel:

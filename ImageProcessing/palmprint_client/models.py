@@ -13,7 +13,7 @@ from mediapipe.tasks.python import vision as mp_vision
 
 from .constants import IMAGENET_MEAN, IMAGENET_STD, MODEL_INPUT_SIZE, MODEL_RESIZE_SIZE
 from .embedding import load_embedding_checkpoint
-from .preprocessing import RoiToneSettings, prepare_cnn_input_roi
+from .preprocessing import prepare_cnn_input_roi
 from .utils import l2_normalize
 
 WEIGHTS_DIR = Path(__file__).resolve().parents[1] / "assets" / "weights"
@@ -45,13 +45,11 @@ class TextureCNN:
         *,
         device: torch.device,
         embedding_model: str = DEFAULT_EMBEDDING_MODEL,
-        roi_tone_settings: RoiToneSettings,
     ):
         self.device = device
         self.model_id = embedding_model
         self.weights_path = self._model_path(embedding_model)
         self.display_name = EMBEDDING_MODELS[self.model_id][0]
-        self.roi_tone_settings = roi_tone_settings
         self.model, self.preprocess, self.source, self.input_mode, self.embedding_dim = self._build_model()
 
     def _model_path(self, model_id: str) -> Path:
@@ -112,7 +110,7 @@ class TextureCNN:
         return feat.detach().cpu().numpy().astype(np.float32)
 
     def embed(self, roi_bgr: np.ndarray) -> np.ndarray:
-        gray = prepare_cnn_input_roi(roi_bgr, self.roi_tone_settings)
+        gray = prepare_cnn_input_roi(roi_bgr)
         return self.embed_preprocessed(gray)
 
     def embed_preprocessed(self, roi_gray: np.ndarray) -> np.ndarray:

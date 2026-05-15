@@ -1,19 +1,15 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
 from functools import lru_cache
 
 import cv2
 import numpy as np
 
-
-@dataclass(frozen=True)
-class RoiToneSettings:
-    brightness: float = -8.0
-    contrast: float = 1.2
-    gamma: float = 1.1
-    clahe_clip_limit: float = 1.8
-    clahe_tile_size: int = 8
+ROI_BRIGHTNESS: float = -8.0
+ROI_CONTRAST: float = 2.0
+ROI_GAMMA: float = 1.1
+ROI_CLAHE_CLIP_LIMIT: float = 0.0
+ROI_CLAHE_TILE_SIZE: int = 8
 
 
 @lru_cache(maxsize=8)
@@ -48,16 +44,16 @@ def enhance_palm_roi(roi_bgr: np.ndarray) -> np.ndarray:
     return np.clip(enhanced, 0, 255).astype(np.uint8)
 
 
-def prepare_cnn_input_roi(roi_bgr: np.ndarray, settings: RoiToneSettings) -> np.ndarray:
+def prepare_cnn_input_roi(roi_bgr: np.ndarray) -> np.ndarray:
     if roi_bgr.ndim == 2:
         gray = roi_bgr.astype(np.uint8, copy=False)
     else:
         gray = cv2.cvtColor(roi_bgr, cv2.COLOR_BGR2GRAY)
 
     processed = gray
-    if settings.clahe_clip_limit > 0:
-        tile = max(1, int(settings.clahe_tile_size))
-        processed = _clahe(float(settings.clahe_clip_limit), tile).apply(processed)
+    if ROI_CLAHE_CLIP_LIMIT > 0:
+        tile = max(1, int(ROI_CLAHE_TILE_SIZE))
+        processed = _clahe(float(ROI_CLAHE_CLIP_LIMIT), tile).apply(processed)
 
-    lut = _tone_lut(float(settings.contrast), float(settings.brightness), float(settings.gamma))
+    lut = _tone_lut(float(ROI_CONTRAST), float(ROI_BRIGHTNESS), float(ROI_GAMMA))
     return cv2.LUT(processed, lut)

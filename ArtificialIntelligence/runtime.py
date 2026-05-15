@@ -6,8 +6,8 @@ import logging
 from typing import Any
 
 import httpx
-from message_channels import EventChannel
-from state_machine.state_machine import (
+from .message_channels import EventChannel
+from .state_machine.state_machine import (
     SCENES_THAT_DELIVER_FORTUNE,
     SCENES_THAT_START_ANALYSIS,
     StateChange,
@@ -24,7 +24,7 @@ from shared.events import (
     SceneCommandEvent,
     WitchEvent,
 )
-from websocket_server.websocket_server import WebSocketServer
+from .websocket_server.websocket_server import WebSocketServer
 
 logger = logging.getLogger(__name__)
 

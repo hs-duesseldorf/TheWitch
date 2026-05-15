@@ -1,0 +1,11 @@
+torch==2.5.1
+torchvision==0.20.1
+numpy<2
+protobuf>=4.25.3,<5
+websockets
+msgspec
+opencv-python-headless
+mediapipe
+adafruit-blinka
+adafruit-circuitpython-vl53l0x
+python-dotenv>=1.0.1

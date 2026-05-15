@@ -15,7 +15,7 @@ import numpy as np
 import torch
 
 from .models import TextureCNN, create_hand_landmarker
-from .preprocessing import RoiToneSettings, prepare_cnn_input_roi
+from .preprocessing import prepare_cnn_input_roi
 from .transport import WebSocketClient
 from .utils import l2_normalize, parse_camera_source
 from shared.events import Hand, HandEvent, HandTrigger
@@ -44,18 +44,14 @@ CAMERA_HEIGHT = 480
 VIDEO_STREAM_FPS = 15.0
 VIDEO_STREAM_WIDTH = 640
 VIDEO_STREAM_INTERVAL_S = 1.0 / VIDEO_STREAM_FPS
-WEBCAM_BRIDGE_URL = "http://host.docker.internal:8090/video"
+WEBCAM_BRIDGE_URL = "http://host.containers.internal:8090/video"
 CAMERA_SOURCE = os.getenv("WITCH_CAMERA_SOURCE", "0")
 FRAME_INTERVAL_MS = int(round(1000.0 / CAMERA_FPS))
 HISTORY_SIZE = 45
 ROI_SIZE = 256
 EMBED_EVERY = 3
 EMBEDDING_MODEL = "arcface"
-ROI_BRIGHTNESS = -8.0
-ROI_CONTRAST = 1.2
-ROI_GAMMA = 1.1
-ROI_CLAHE_CLIP_LIMIT = 0.0
-ROI_CLAHE_TILE_SIZE = 8
+
 HAND_LANDMARK_VISIBILITY_MARGIN_PX = 2.0
 GEOMETRY_FEATURE_KEYS = (
     "palm_width",
@@ -112,7 +108,7 @@ class HeadlessPalmClient:
         if not self.cap.isOpened():
             raise RuntimeError(
                 f"Could not open camera source {CAMERA_SOURCE!r}. "
-                f"Start the webcam bridge if running in Docker Desktop without device passthrough: {WEBCAM_BRIDGE_URL}"
+                f"Start the webcam bridge if running in Podman Desktop without device passthrough: {WEBCAM_BRIDGE_URL}"
             )
         self._configure_capture_resolution()
         with suppress(cv2.error):
@@ -121,17 +117,9 @@ class HeadlessPalmClient:
         self.landmarker = create_hand_landmarker(DEFAULT_HAND_MODEL_PATH)
         self.device = resolve_torch_device()
         logger.info("Palm embedding torch device: %s", self.device)
-        self.roi_tone_settings = RoiToneSettings(
-            brightness=ROI_BRIGHTNESS,
-            contrast=ROI_CONTRAST,
-            gamma=ROI_GAMMA,
-            clahe_clip_limit=ROI_CLAHE_CLIP_LIMIT,
-            clahe_tile_size=ROI_CLAHE_TILE_SIZE,
-        )
         self.cnn = TextureCNN(
             device=self.device,
             embedding_model=EMBEDDING_MODEL,
-            roi_tone_settings=self.roi_tone_settings,
         )
 
         self.geom_history: deque[dict[str, float]] = deque(maxlen=HISTORY_SIZE)
@@ -373,16 +361,13 @@ class HeadlessPalmClient:
                     roi = warp_roi_from_quad(raw_frame, raw_roi_quad, self.roi_size)
 
                     should_publish_roi = self._should_publish_roi_frame()
+                    roi_enhanced = prepare_cnn_input_roi(roi)
                     run_embed = (self.frame_counter % self.embed_every == 0) or not self.embedding_history
                     if run_embed:
-                        model_input = prepare_cnn_input_roi(roi, self.roi_tone_settings)
-                        embedding = self.cnn.embed_preprocessed(model_input)
+                        embedding = self.cnn.embed_preprocessed(roi_enhanced)
                         self.embedding_history.append(embedding)
-                        if should_publish_roi:
-                            self._publish_roi_frame(model_input)
-                    else:
-                        if should_publish_roi:
-                            self._publish_roi_frame(roi)
+                    if should_publish_roi:
+                        self._publish_roi_frame(roi_enhanced)
 
                     self.geom_history.append(geometry)
                     self._update_feature_cache()

@@ -10,7 +10,7 @@ import uvicorn
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
-from main import App
+from .app import App
 
 logging.basicConfig(
     level=logging.INFO,
@@ -104,7 +104,11 @@ def reset_state():
     return {"state": result}
 
 
-if __name__ == "__main__":
+def main() -> None:
     port = int(os.getenv("WITCH_AI_UI_PORT"))
     logger.info("FastAPI server starting on 0.0.0.0:%d", port)
     uvicorn.run(app, host="0.0.0.0", port=port)
+
+
+if __name__ == "__main__":
+    main()
