@@ -38,45 +38,45 @@ Prerequisite: Podman with Compose support.
 Run the full stack:
 
 ```bash
-podman compose up --build
+podman-compose up --build
 ```
 
 Open the debug UI:
 
 ```text
-http://localhost:8080/
+http://localhost:10030/
 ```
 
 Run selected services:
 
 ```bash
-podman compose up --build ai llm tts
-podman compose up --build ip
-podman compose up --build ai ip
+podman-compose up --build ai llm tts
+podman-compose up --build ip
+podman-compose up --build ai ip
 ```
 
 For a desktop NVIDIA GPU or Podman host with NVIDIA CDI:
 
 ```bash
-podman compose -f compose.yaml -f compose.gpu.yaml up --build
+podman-compose -f compose.yaml -f compose.gpu.yaml up --build
 ```
 
 For Jetson / Jetson Nano:
 
 ```bash
-podman compose -f compose.yaml -f compose.jetson.yaml up --build
+podman-compose -f compose.yaml -f compose.jetson.yaml up --build ip
 ```
 
 For a split setup, run `ai`, `llm`, and `tts` on the desktop or compute server:
 
 ```bash
-podman compose -f compose.yaml -f compose.gpu.yaml up --build ai llm tts
+podman-compose -f compose.yaml -f compose.gpu.yaml up --build ai llm tts
 ```
 
 Then run `ip` on the Jetson or camera machine:
 
 ```bash
-podman compose -f compose.yaml -f compose.jetson.yaml up --build ip
+podman-compose -f compose.yaml -f compose.jetson.yaml up --build ip
 ```
 
 ## Services
@@ -88,7 +88,7 @@ podman compose -f compose.yaml -f compose.jetson.yaml up --build ip
 
 ## Configure
 
-`.env` is the shared configuration file. Local Python loads it with `python-dotenv`; Podman Compose injects it with `env_file`.
+`.env` is the shared configuration file. Local Python loads it with `python-dotenv`; podman-compose injects it with `env_file`.
 
 For an all-local run on one machine:
 
@@ -126,27 +126,22 @@ Do not use `localhost` for cross-machine connections. Inside a container it poin
 
 ### Windows Camera
 
-Podman Desktop for Windows runs Linux containers inside WSL2 and cannot reliably pass the Windows webcam directly into the `ip` container. Keep a host-side webcam bridge running on Windows.
+Podman Desktop for Windows runs Linux containers inside WSL2 and cannot pass the Windows webcam into the `ip` container. Keep a host-side webcam bridge running on Windows.
+
+Create the venv and start the bridge:
 
 ```powershell
-pip install opencv-python websockets
-python ImageProcessing\webcam_bridge.py
-```
-
-Then start Podman in another PowerShell terminal:
-
-```powershell
-podman compose up --build
+python -m venv ImageProcessing\.venv
+ImageProcessing\.venv\Scripts\pip install -r ImageProcessing\requirements.txt
+ImageProcessing\.venv\Scripts\python ImageProcessing\webcam_bridge.py
 ```
 
 Optional camera selection:
 
 ```powershell
-python ImageProcessing\webcam_bridge.py --list
-python ImageProcessing\webcam_bridge.py --camera 1
+python ImageProcessing/webcam_bridge.py --list
+python ImageProcessing/webcam_bridge.py --camera 1
 ```
-
-The bridge is only needed for Windows hosts. On Linux desktops and Jetson devices, use the normal USB camera device, usually `WITCH_CAMERA_SOURCE=0`.
 
 ## Local Python
 
@@ -288,8 +283,8 @@ ws://<AI-machine-LAN-IP>:8081/ws/ai-3d-roi
 ## Useful Commands
 
 ```bash
-podman compose logs -f
-podman compose logs -f ai
-podman compose stop
-podman compose down
+podman-compose logs -f
+podman-compose logs -f ai
+podman-compose stop
+podman-compose down
 ```

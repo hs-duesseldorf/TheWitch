@@ -18,13 +18,13 @@ from torch.optim.lr_scheduler import CosineAnnealingLR
 from torch.utils.data import DataLoader, Dataset, Sampler
 from torchvision import transforms
 
-from ImageProcessing.palmprint_client.constants import IMAGENET_MEAN, IMAGENET_STD, MODEL_RESIZE_SIZE
-from ImageProcessing.palmprint_client.embedding import (
+from ImageProcessing.palm_processing.constants import IMAGENET_MEAN, IMAGENET_STD, MODEL_RESIZE_SIZE
+from ImageProcessing.palm_processing.embedding import (
     ArcMarginProduct,
     ResNet18EmbeddingNet,
     build_embedding_checkpoint,
 )
-from ImageProcessing.palmprint_client.utils import set_deterministic
+from ImageProcessing.palm_processing.utils import set_deterministic
 
 IMAGES_PER_PALM_PER_SESSION = 10
 PALMS_PER_PERSON = 2
@@ -79,7 +79,7 @@ def infer_label_from_path(path: Path, label_mode: str) -> int:
 def pil_to_enhanced_gray(image: Image.Image) -> Image.Image:
     import cv2
 
-    from ImageProcessing.palmprint_client.preprocessing import enhance_palm_roi
+    from ImageProcessing.palm_processing.preprocessing import enhance_palm_roi
 
     gray = np.array(image.convert("L"), dtype=np.uint8)
     enhanced = enhance_palm_roi(cv2.cvtColor(gray, cv2.COLOR_GRAY2BGR))

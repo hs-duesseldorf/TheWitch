@@ -7,7 +7,7 @@ x-llm-image: &llm-image
     args:
       OLLAMA_PORT: ${WITCH_LLM_PORT}
       OLLAMA_MODEL: ${WITCH_LLM_MODEL}
-  image: thewitch-llm:latest
+  image: localhost/thewitch-llm:latest
 
 x-tts-image: &tts-image
   build:
@@ -16,7 +16,7 @@ x-tts-image: &tts-image
     args:
       WITCH_TTS_PORT: ${WITCH_TTS_PORT}
       WITCH_TTS_MODEL: ${WITCH_TTS_MODEL}
-  image: thewitch-tts:latest
+  image: localhost/thewitch-tts:latest
 
 services:
   ai:
@@ -26,12 +26,14 @@ services:
       args:
         WITCH_AI_PORT: ${WITCH_AI_PORT}
         WITCH_AI_UI_PORT: ${WITCH_AI_UI_PORT}
+    image: localhost/thewitch-ai:latest
     env_file: [.env]
     ports:
       - "${WITCH_AI_UI_PORT}:${WITCH_AI_UI_PORT}"
       - "${WITCH_AI_PORT}:${WITCH_AI_PORT}"
     volumes:
-      - ./ArtificialIntelligence/assets:/app/ArtificialIntelligence/assets:ro
+      - ./ArtificialIntelligence:/app/ArtificialIntelligence:ro,Z
+      - ./shared:/app/shared:ro,Z
     restart: unless-stopped
     networks: [witch-net]
 
@@ -51,7 +53,7 @@ services:
     volumes:
       - tts_models:/root/.local/share/tts
       - ./ArtificialIntelligence/assets:/assets:ro
-      - ./ArtificialIntelligence/assets:/app/assets:ro
+      - ./ArtificialIntelligence/servers/tts_server:/app:ro,Z
     ports:
       - "${WITCH_TTS_PORT}:${WITCH_TTS_PORT}"
     restart: unless-stopped
@@ -64,7 +66,7 @@ services:
     privileged: true
     env_file: [.env]
     volumes:
-      - ./ImageProcessing/assets:/app/ImageProcessing/assets:ro
+      - ./ImageProcessing:/app/ImageProcessing:ro
     restart: unless-stopped
     networks: [witch-net]
 

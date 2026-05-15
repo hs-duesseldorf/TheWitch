@@ -1,16 +1,4 @@
 services:
-  llm:
-    runtime: nvidia
-    environment:
-      - NVIDIA_VISIBLE_DEVICES=all
-      - NVIDIA_DRIVER_CAPABILITIES=all
-
-  tts:
-    runtime: nvidia
-    environment:
-      - NVIDIA_VISIBLE_DEVICES=all
-      - NVIDIA_DRIVER_CAPABILITIES=all
-
   ip:
     build:
       context: .
@@ -18,11 +6,11 @@ services:
       args:
         BASE_IMAGE: nvcr.io/nvidia/pytorch:25.05-py3-igpu
         INSTALL_TORCH: "0"
-    runtime: nvidia
     environment:
       - NVIDIA_VISIBLE_DEVICES=all
       - NVIDIA_DRIVER_CAPABILITIES=all
+    devices:
+      - nvidia.com/gpu=all
+    security_opt:
+      - label=disable
     ipc: host
-    ulimits:
-      memlock: -1
-      stack: 67108864

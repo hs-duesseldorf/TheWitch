@@ -8,9 +8,9 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-from .palmprint_client.seat_sensor import SeatPresenceMonitor
-from .palmprint_client.runtime import HeadlessPalmClient
-from .palmprint_client.transport import WebSocketClient
+from .palm_processing.seat_sensor import SeatPresenceMonitor
+from .palm_processing.pipeline import HeadlessPalmClient
+from .palm_processing.transport import WebSocketClient
 
 
 def ws_url(host_var: str, port_var: str) -> str:
