@@ -4,14 +4,22 @@ import os
 import time
 from contextlib import suppress
 
-from palmprint_client.seat_sensor import SeatPresenceMonitor
-from palmprint_client.runtime import HeadlessPalmClient
-from palmprint_client.transport import WebSocketClient
+from dotenv import load_dotenv
+
+load_dotenv()
+
+from .palm_processing.seat_sensor import SeatPresenceMonitor
+from .palm_processing.pipeline import HeadlessPalmClient
+from .palm_processing.transport import WebSocketClient
+
+
+def ws_url(host_var: str, port_var: str) -> str:
+    return f"ws://{os.getenv(host_var)}:{os.getenv(port_var)}"
 
 
 class App:
     def __init__(self):
-        ai_ws_base_url = os.getenv("WITCH_AI_BASE_URL").strip().rstrip("/")
+        ai_ws_base_url = ws_url("WITCH_AI_HOST", "WITCH_AI_PORT")
 
         pipeline_ws_url = f"{ai_ws_base_url}/ws/ip-ai"
         video_ws_url = f"{ai_ws_base_url}/ws/ip-ai-video"

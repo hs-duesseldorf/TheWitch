@@ -1,0 +1,16 @@
+services:
+  ip:
+    build:
+      context: .
+      dockerfile: ImageProcessing/Containerfile
+      args:
+        BASE_IMAGE: nvcr.io/nvidia/pytorch:25.05-py3-igpu
+        INSTALL_TORCH: "0"
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=all
+    devices:
+      - nvidia.com/gpu=all
+    security_opt:
+      - label=disable
+    ipc: host

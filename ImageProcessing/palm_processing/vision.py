@@ -100,34 +100,35 @@ def is_palm_frontal(points3d: np.ndarray, hand: Hand | None, *, min_confidence: 
     return abs(score) >= min_confidence
 
 
-def are_hand_landmarks_fully_visible(
-    landmarks_px: np.ndarray,
+def are_normalized_hand_landmarks_fully_visible(
+    landmarks: list[Any],
     frame_width: int,
     frame_height: int,
     *,
     margin_px: float = 0.0,
 ) -> bool:
-    points = np.asarray(landmarks_px, dtype=np.float32)
-    if points.ndim != 2 or points.shape[0] < 21 or points.shape[1] < 2:
-        return False
+    min_x = margin_px / float(frame_width)
+    min_y = margin_px / float(frame_height)
+    max_x = (float(frame_width - 1) - margin_px) / float(frame_width)
+    max_y = (float(frame_height - 1) - margin_px) / float(frame_height)
 
-    xy = points[:, :2]
-    if not np.isfinite(xy).all():
-        return False
+    lo_x = float("inf")
+    lo_y = float("inf")
+    hi_x = float("-inf")
+    hi_y = float("-inf")
+    for landmark in landmarks:
+        x = landmark.x
+        y = landmark.y
+        if x < lo_x:
+            lo_x = x
+        if x > hi_x:
+            hi_x = x
+        if y < lo_y:
+            lo_y = y
+        if y > hi_y:
+            hi_y = y
 
-    min_x = margin_px
-    min_y = margin_px
-    max_x = float(frame_width - 1) - margin_px
-    max_y = float(frame_height - 1) - margin_px
-    if max_x < min_x or max_y < min_y:
-        return False
-
-    return bool(
-        (xy[:, 0] >= min_x).all()
-        and (xy[:, 0] <= max_x).all()
-        and (xy[:, 1] >= min_y).all()
-        and (xy[:, 1] <= max_y).all()
-    )
+    return lo_x >= min_x and hi_x <= max_x and lo_y >= min_y and hi_y <= max_y
 
 
 def extract_geometry_features(points3d: np.ndarray) -> dict[str, float]:
@@ -217,12 +218,7 @@ def roi_quad_from_pose(pose: RoiPose) -> np.ndarray:
     return np.float32([tl, tr, br, bl])
 
 
-def warp_roi_from_quad(frame_bgr: np.ndarray, quad: np.ndarray, roi_size: int) -> np.ndarray | None:
-    if quad.shape != (4, 2) or not np.isfinite(quad).all():
-        return None
-    if abs(float(cv2.contourArea(quad.astype(np.float32)))) < 16.0:
-        return None
-
+def warp_roi_from_quad(frame_bgr: np.ndarray, quad: np.ndarray, roi_size: int) -> np.ndarray:
     dst = np.float32(
         [
             [0, 0],
@@ -233,19 +229,16 @@ def warp_roi_from_quad(frame_bgr: np.ndarray, quad: np.ndarray, roi_size: int) -
     )
 
     matrix = cv2.getPerspectiveTransform(quad.astype(np.float32), dst)
-    roi = cv2.warpPerspective(
+    return cv2.warpPerspective(
         frame_bgr,
         matrix,
         (roi_size, roi_size),
         flags=cv2.INTER_LINEAR,
         borderMode=cv2.BORDER_REFLECT_101,
     )
-    return roi
 
 
-def mirror_quad_horizontally(quad: np.ndarray | None, frame_width: int) -> np.ndarray | None:
-    if quad is None:
-        return None
+def mirror_quad_horizontally(quad: np.ndarray, frame_width: int) -> np.ndarray:
     mirrored = np.array(quad, dtype=np.float32, copy=True)
     mirrored[:, 0] = (frame_width - 1) - mirrored[:, 0]
     return mirrored
@@ -263,10 +256,8 @@ def draw_hand_overlay(frame_bgr: np.ndarray, points_xy: np.ndarray) -> np.ndarra
     return out
 
 
-def draw_roi_quad(frame_bgr: np.ndarray, quad: np.ndarray | None) -> np.ndarray:
+def draw_roi_quad(frame_bgr: np.ndarray, quad: np.ndarray) -> np.ndarray:
     out = frame_bgr.copy()
-    if quad is None:
-        return out
     pts = quad.astype(np.int32).reshape((-1, 1, 2))
     cv2.polylines(out, [pts], isClosed=True, color=(255, 180, 0), thickness=2, lineType=cv2.LINE_AA)
     return out

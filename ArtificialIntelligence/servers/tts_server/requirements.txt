@@ -1,0 +1,5 @@
+fastapi>=0.110.0
+uvicorn[standard]>=0.29.0
+soundfile>=0.12.1
+TTS==0.21.3
+python-dotenv>=1.0.1

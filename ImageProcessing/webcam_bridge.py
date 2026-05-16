@@ -1,54 +1,72 @@
 #!/usr/bin/env python3
-from __future__ import annotations
 
 import argparse
+import socketserver
 import threading
 import time
-from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from http.server import BaseHTTPRequestHandler, HTTPServer
+from typing import Optional
 
 import cv2
 
 BRIDGE_PORT = 8090
 JPEG_QUALITY = 82
-CAPTURE_DELAY_SECONDS = 0.03
+CAPTURE_FPS = 15.0
+CAPTURE_WIDTH = 640
+CAPTURE_HEIGHT = 480
+CAPTURE_DELAY_SECONDS = 1.0 / CAPTURE_FPS
+
+
+class ThreadingHTTPServer(socketserver.ThreadingMixIn, HTTPServer):
+    daemon_threads = True
 
 
 class FrameStore:
-    def __init__(self) -> None:
+    def __init__(self):
         self.condition = threading.Condition()
-        self.frame: bytes | None = None
+        self.frame = None  # type: Optional[bytes]
         self.running = True
 
-    def set_frame(self, frame: bytes) -> None:
+    def set_frame(self, frame):
         with self.condition:
             self.frame = frame
             self.condition.notify_all()
 
-    def wait_frame(self, timeout: float = 1.0) -> bytes | None:
+    def wait_frame(self, timeout=1.0):
         with self.condition:
             if self.frame is None:
                 self.condition.wait(timeout)
             return self.frame
 
 
-def capture_loop(store: FrameStore, camera: str) -> None:
-    source: int | str = int(camera) if camera.lstrip("-").isdigit() else camera
+def capture_loop(store, camera):
+    source = int(camera) if camera.lstrip("-").isdigit() else camera
     cap = cv2.VideoCapture(source)
     if not cap.isOpened():
         raise RuntimeError(f"Could not open camera source {camera!r}")
 
+    cap.set(cv2.CAP_PROP_FPS, CAPTURE_FPS)
+    cap.set(cv2.CAP_PROP_FRAME_WIDTH, CAPTURE_WIDTH)
+    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, CAPTURE_HEIGHT)
+
     while store.running:
+        started = time.monotonic()
         ok, frame = cap.read()
         if ok:
+            height, width = frame.shape[:2]
+            if width != CAPTURE_WIDTH or height != CAPTURE_HEIGHT:
+                frame = cv2.resize(frame, (CAPTURE_WIDTH, CAPTURE_HEIGHT), interpolation=cv2.INTER_AREA)
             encoded_ok, encoded = cv2.imencode(".jpg", frame, [int(cv2.IMWRITE_JPEG_QUALITY), JPEG_QUALITY])
             if encoded_ok:
                 store.set_frame(encoded.tobytes())
-        time.sleep(CAPTURE_DELAY_SECONDS)
+        remaining = CAPTURE_DELAY_SECONDS - (time.monotonic() - started)
+        if remaining > 0:
+            time.sleep(remaining)
 
     cap.release()
 
 
-def list_cameras() -> None:
+def list_cameras():
     found = False
     for index in range(11):
         cap = cv2.VideoCapture(index)
@@ -64,7 +82,7 @@ def list_cameras() -> None:
 
 def make_handler(store: FrameStore):
     class WebcamHandler(BaseHTTPRequestHandler):
-        def do_GET(self) -> None:
+        def do_GET(self):
             if self.path not in {"/", "/video"}:
                 self.send_response(404)
                 self.end_headers()
@@ -95,14 +113,14 @@ def make_handler(store: FrameStore):
                 except OSError:
                     break
 
-        def log_message(self, format: str, *args) -> None:
+        def log_message(self, format, *args):
             return
 
     return WebcamHandler
 
 
-def main() -> None:
-    parser = argparse.ArgumentParser(description="Expose a local webcam as an MJPEG stream for Docker containers")
+def main():
+    parser = argparse.ArgumentParser(description="Expose a local webcam as an MJPEG stream for Podman containers")
     parser.add_argument("--camera", default="0", help="OpenCV camera index or source string")
     parser.add_argument("--list", action="store_true", help="List available camera indexes and exit")
     args = parser.parse_args()

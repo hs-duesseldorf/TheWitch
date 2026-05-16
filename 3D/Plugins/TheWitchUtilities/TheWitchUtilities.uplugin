@@ -1,0 +1,27 @@
+{
+	"FileVersion": 3,
+	"Version": 1,
+	"VersionName": "1.0",
+	"FriendlyName": "TheWitchUtilities",
+	"Description": "Blueprint utility functions for TheWitch.",
+	"Category": "Blueprint",
+	"CreatedBy": "",
+	"EngineVersion": "5.7.0",
+	"CanContainContent": false,
+	"Installed": false,
+	"SupportedTargetPlatforms": [
+		"Win64",
+		"Linux"
+	],
+	"Modules": [
+		{
+			"Name": "TheWitchUtilities",
+			"Type": "Runtime",
+			"LoadingPhase": "Default",
+			"PlatformAllowList": [
+				"Win64",
+				"Linux"
+			]
+		}
+	]
+}

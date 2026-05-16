@@ -7,36 +7,41 @@ on:
 
 jobs:
   linux-smoke-test:
-    name: Docker Compose smoke test on Linux
+    name: Podman Compose smoke test on Linux
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Check Docker Compose
-        run: docker compose version
+      - name: Install Podman Compose
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y podman podman-compose
+
+      - name: Check Podman Compose
+        run: podman compose version
 
       - name: Build and start containers
-        run: docker compose up --build -d
+        run: podman compose up --build -d
 
       - name: Let containers run for 60 seconds
         run: sleep 60
 
       - name: Verify containers are still running
         run: |
-          docker compose ps
+          podman compose ps
 
-          if [ "$(docker compose ps -q --status exited | wc -l)" -gt 0 ]; then
+          if [ "$(podman compose ps -q --status exited | wc -l)" -gt 0 ]; then
             echo "One or more containers exited during the smoke test."
-            docker compose logs
+            podman compose logs
             exit 1
           fi
 
       - name: Show logs
         if: always()
-        run: docker compose logs
+        run: podman compose logs
 
       - name: Stop containers
         if: always()
-        run: docker compose down
+        run: podman compose down

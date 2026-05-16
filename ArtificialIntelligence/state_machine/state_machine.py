@@ -61,7 +61,7 @@ TRANSITIONS = [
     transition("ip_hand_wrong", SCANNING, HAND_CORRECTION),
     transition("ip_scan_complete", SCANNING, SCAN_COMPLETE),
 
-    # Animation-finished events from Unreal.
+    # Generic completion ACKs from Unreal.
     transition("scan_complete_output_done", SCAN_COMPLETE, TRANSFORMATION),
     transition("transformation_done", TRANSFORMATION, INTRODUCTION),
     transition("introduction_done", INTRODUCTION, SHOT_1_VISUAL),
@@ -199,7 +199,7 @@ class WitchStateMachine:
         change = self.advance("ip_person_seated")
         return [change] if change else []
 
-    def animation_finished(self, scene: str | None = None) -> list[StateChange]:
+    def event_done(self, scene: str | None = None) -> list[StateChange]:
         if scene is not None and scene != self.state:
             return []
         change = self.advance(ANIMATION_TRIGGER_BY_STATE.get(self.state))
@@ -236,7 +236,7 @@ class WitchStateMachine:
 def hand_condition(event: HandEvent) -> str:
     if event.trigger is HandTrigger.ABSENT:
         return "absent"
-    if event.trigger in {HandTrigger.WRONG_SIDE, HandTrigger.TILTED}:
+    if event.trigger in {HandTrigger.WRONG_SIDE, HandTrigger.NOT_FULLY_IN_VIEW, HandTrigger.TILTED}:
         return "wrong"
     return "ready" if event.vector else "present"
 

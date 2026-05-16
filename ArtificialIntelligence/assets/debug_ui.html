@@ -230,12 +230,12 @@
             addEventListener("DOMContentLoaded", init);
             $("resetButton").onclick = async () => {
                 await fetch(`${API}/api/reset`, { method: "POST" });
-                await updateState();
-                loadGraph();
+                const changed = await updateState();
+                if (!changed) loadGraph();
             };
 
             async function init() {
-                await loadGraph();
+                await updateState();
                 const { ws_port } = await json("/api/config");
                 const wsBase = `${location.protocol === "https:" ? "wss" : "ws"}://${location.hostname}:${ws_port}`;
                 stream("camera", `${wsBase}/ws/ai-3d-video`);
@@ -243,15 +243,12 @@
                 socket(`${wsBase}/ws/ip-ai`, (ev) => {
                     show(ev.origin, ev);
                     updateState();
-                    loadGraph();
                 });
                 socket(`${wsBase}/ws/ai-3d`, (ev) => {
-                    if (ev.type === "fortune" && ev.audio) setAudio(ev);
+                    if (ev.type === "fortune") updateAudio();
                     show(ev.origin, ev);
                     updateState();
-                    loadGraph();
                 });
-                updateState();
             }
 
             async function json(path) {
@@ -264,7 +261,9 @@
                 if (nextState !== currentState) {
                     currentState = nextState;
                     loadGraph();
+                    return true;
                 }
+                return false;
             }
 
             function socket(url, target, binary = false) {
@@ -289,21 +288,16 @@
             }
 
             function show(name, event) {
-                const visible = event.audio
-                    ? {
-                          ...event,
-                          audio: `[wav ${Math.round(event.audio.length * 0.75)} bytes]`,
-                      }
-                    : event;
                 $(`${name}Events`).textContent = JSON.stringify(
-                    visible,
+                    event,
                     null,
                     2,
                 );
             }
 
-            function setAudio(event) {
-                if (event.audio === currentAudio) return;
+            async function updateAudio() {
+                const event = await json("/api/tts-audio");
+                if (!event.audio || event.audio === currentAudio) return;
                 currentAudio = event.audio;
                 $("ttsAudio").src = `data:audio/wav;base64,${event.audio}`;
             }

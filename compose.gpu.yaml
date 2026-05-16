@@ -1,9 +1,27 @@
 services:
   llm:
-    gpus: all
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=all
+    devices:
+      - nvidia.com/gpu=all
+    security_opt:
+      - label=disable
 
   tts:
-    gpus: all
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=all
+    devices:
+      - nvidia.com/gpu=all
+    security_opt:
+      - label=disable
 
   ip:
-    gpus: all
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=all
+    devices:
+      - nvidia.com/gpu=all
+    security_opt:
+      - label=disable

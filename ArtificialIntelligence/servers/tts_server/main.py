@@ -8,6 +8,7 @@ import os
 from contextlib import asynccontextmanager
 from pathlib import Path
 
+from dotenv import load_dotenv
 import soundfile as sf
 import torch
 import uvicorn
@@ -21,6 +22,8 @@ logging.basicConfig(
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
 )
 logger = logging.getLogger("tts-server")
+
+load_dotenv()
 
 MODEL_NAME = os.getenv("WITCH_TTS_MODEL")
 SPEAKER_DIR = Path("/assets")

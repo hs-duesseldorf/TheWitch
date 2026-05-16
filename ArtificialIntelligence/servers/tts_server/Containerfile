@@ -1,4 +1,4 @@
-FROM pytorch/pytorch:2.5.1-cuda12.1-cudnn9-runtime
+FROM docker.io/pytorch/pytorch:2.5.1-cuda12.1-cudnn9-runtime
 
 WORKDIR /app
 
@@ -10,17 +10,14 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 ARG WITCH_TTS_MODEL
 ENV WITCH_TTS_MODEL=${WITCH_TTS_MODEL}
 
-RUN pip install --no-cache-dir \
-    fastapi>=0.110.0 \
-    uvicorn[standard]>=0.29.0 \
-    soundfile>=0.12.1 \
-    TTS==0.21.3
+COPY requirements.txt ./requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt
 
 ENV COQUI_TOS_AGREED=1
 
 RUN python -c "from TTS.api import TTS; TTS('${WITCH_TTS_MODEL}')"
 
-COPY main.py .
+COPY . .
 
 RUN mkdir -p /assets
 

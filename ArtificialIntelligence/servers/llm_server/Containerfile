@@ -1,6 +1,4 @@
-# syntax=docker/dockerfile:1.7
-
-FROM ollama/ollama:latest
+FROM docker.io/ollama/ollama:latest
 
 ARG OLLAMA_MODEL
 ARG OLLAMA_PORT
