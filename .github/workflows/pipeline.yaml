@@ -14,34 +14,38 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Install Podman Compose
+      - name: Install Podman and Podman Compose
         run: |
           sudo apt-get update
           sudo apt-get install -y podman podman-compose
 
-      - name: Check Podman Compose
-        run: podman compose version
+      - name: Show versions
+        run: |
+          podman --version
+          podman-compose --version
 
       - name: Build and start containers
-        run: podman compose up --build -d
+        run: podman-compose up --build -d
 
       - name: Let containers run for 60 seconds
         run: sleep 60
 
       - name: Verify containers are still running
         run: |
-          podman compose ps
+          podman-compose ps
 
-          if [ "$(podman compose ps -q --status exited | wc -l)" -gt 0 ]; then
+          EXITED=$(podman ps -a --filter status=exited --format "{{.Names}}" | wc -l)
+
+          if [ "$EXITED" -gt 0 ]; then
             echo "One or more containers exited during the smoke test."
-            podman compose logs
+            podman-compose logs
             exit 1
           fi
 
       - name: Show logs
         if: always()
-        run: podman compose logs
+        run: podman-compose logs
 
       - name: Stop containers
         if: always()
-        run: podman compose down
+        run: podman-compose down
