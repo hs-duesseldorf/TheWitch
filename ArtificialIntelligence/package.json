@@ -1,0 +1,151 @@
+{
+  "intro": [
+    "Sit down. The room has already noticed you.",
+    "You did not appear here by chance.",
+    "Your breath carries stories with it.",
+    "I have been expecting you, even if you didn't know it.",
+    "Do not speak. I can already see enough.",
+    "The moment has led you to me."
+  ],
+  "general_statements": [
+    "You carry a decision within you that you haven't yet acknowledged.",
+    "A part of you is holding on, while another has long wanted to let go.",
+    "You seek clarity, but fear what it might show you.",
+    "Something unspoken has been accompanying you for a long time.",
+    "You are closer to a change than you believe.",
+    "Your path is not blocked, only delayed."
+  ],
+  "elements": {
+    "wood": {
+      "too_strong": [
+        "Your wood grows uncontrollably. It pushes forward without direction.",
+        "Too much wood within you makes you restless.",
+        "Your growth is fast, but not stable."
+      ],
+      "too_weak": [
+        "Your wood is weak. You lack the power to break through.",
+        "The growth within you is inhibited.",
+        "You hold yourself back, even though movement is necessary."
+      ],
+      "in_balance": [
+        "Your wood is in balance. Growth and direction are in harmony.",
+        "You develop at your own pace.",
+        "Your path unfolds naturally."
+      ],
+      "blocked": [
+        "Your wood is blocked. Something prevents you from moving forward.",
+        "Your growth encounters invisible resistance.",
+        "You want to move, but something is holding you fast."
+      ]
+    },
+    "fire": {
+      "too_strong": [
+        "Your fire burns too bright. It consumes more than it warms.",
+        "Too much fire brings restlessness to your heart.",
+        "Your energy is strong, but difficult to control."
+      ],
+      "too_weak": [
+        "Your fire is weak. You lack drive.",
+        "The warmth within you has receded.",
+        "You hesitate where determination is needed."
+      ],
+      "in_balance": [
+        "Your fire is balanced. It gives you strength and clarity.",
+        "Your energy carries you without burning you out.",
+        "You act with warmth and awareness."
+      ],
+      "blocked": [
+        "Your fire is trapped. It cannot unfold.",
+        "Your energy finds no expression.",
+        "Something is suppressing your inner power."
+      ]
+    },
+    "earth": {
+      "too_strong": [
+        "Your earth is too heavy. It holds you down.",
+        "Too much earth makes you immobile.",
+        "You are clinging to security."
+      ],
+      "too_weak": [
+        "Your earth is weak. You lack stability.",
+        "You cannot find a firm footing.",
+        "Stability eludes you."
+      ],
+      "in_balance": [
+        "Your earth is in balance. It carries you safely.",
+        "You are grounded and stable.",
+        "You find peace within yourself."
+      ],
+      "blocked": [
+        "Your earth is blocked. Your stability is disturbed.",
+        "You seek support but cannot find it.",
+        "Something prevents you from finding rest."
+      ]
+    },
+    "metal": {
+      "too_strong": [
+        "Your metal is too sharp. It severs more than it clarifies.",
+        "Too much metal makes you hard.",
+        "You judge too quickly and too severely."
+      ],
+      "too_weak": [
+        "Your metal is weak. You lack clarity.",
+        "Boundaries are becoming blurred for you.",
+        "You let too much through that weakens you."
+      ],
+      "in_balance": [
+        "Your metal is in balance. Clarity accompanies you.",
+        "You recognize what may stay and what must go.",
+        "Your decisions are precise."
+      ],
+      "blocked": [
+        "Your metal is blocked. Clarity remains hidden.",
+        "You see, but you do not recognize.",
+        "Something hinders your power of discernment."
+      ]
+    },
+    "water": {
+      "too_strong": [
+        "Your water is too deep. You are losing yourself in it.",
+        "Too much water brings uncertainty.",
+        "You are withdrawing too far."
+      ],
+      "too_weak": [
+        "Your water is weak. You lack depth.",
+        "You avoid what lies beneath the surface.",
+        "Your intuition has grown quiet."
+      ],
+      "in_balance": [
+        "Your water is calm and clear.",
+        "You trust your inner depth.",
+        "Your intuition leads you safely."
+      ],
+      "blocked": [
+        "Your water is stagnant. It cannot flow.",
+        "Feelings remain locked away.",
+        "Something prevents you from letting go."
+      ]
+    }
+  },
+  "connection": [
+    "You stand between movement and standstill.",
+    "Two forces within you are fighting for direction.",
+    "You seek control, yet something wants to unfold.",
+    "Your strength and your uncertainty are more closely linked than you think.",
+    "What protects you is also holding you back."
+  ],
+  "future": [
+    "The right moment is approaching, but it is not yet here.",
+    "If you act now, you will change more than planned.",
+    "A new path will reveal itself when you are ready.",
+    "You will have to choose, even if you want to avoid it.",
+    "What comes next depends on your next step."
+  ],
+  "closing": [
+    "The circle is not yet closed.",
+    "We will meet again.",
+    "The shadow still follows you.",
+    "Pay attention to what repeats itself.",
+    "Not everything has been said."
+  ]
+}
