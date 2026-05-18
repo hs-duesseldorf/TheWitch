@@ -6,11 +6,12 @@ services:
       args:
         BASE_IMAGE: nvcr.io/nvidia/pytorch:25.05-py3-igpu
         INSTALL_TORCH: "0"
-    environment:
-      - NVIDIA_VISIBLE_DEVICES=all
-      - NVIDIA_DRIVER_CAPABILITIES=all
+    runtime: /usr/bin/nvidia-container-runtime
+    group_add:
+      - keep-groups
     devices:
-      - nvidia.com/gpu=all
+      - /dev/video0:/dev/video0
+    privileged: false
     security_opt:
       - label=disable
     ipc: host
