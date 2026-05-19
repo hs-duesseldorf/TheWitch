@@ -188,7 +188,10 @@
                             state:
                             <span id="currentState" class="state">-</span>
                         </div>
-                        <div><button id="resetButton">Reset</button></div>
+                        <div>
+                            <button id="resetButton">Reset</button>
+                            <button id="playVirtualCableButton">Play TTS to VB-CABLE</button>
+                        </div>
                         <audio id="ttsAudio" controls></audio>
                     </div>
                 </section>
@@ -232,6 +235,19 @@
                 await fetch(`${API}/api/reset`, { method: "POST" });
                 const changed = await updateState();
                 if (!changed) loadGraph();
+            };
+            
+            $("playVirtualCableButton").onclick = async () => {
+                const response = await fetch(`${API}/api/tts/play-virtual-cable`, {
+                    method: "POST",
+                });
+
+                const text = await response.text();
+                console.log("VB-CABLE response:", response.status, text);
+
+                if (!response.ok) {
+                    alert(`Failed to play audio: ${response.status}\n${text}`);
+                }
             };
 
             async function init() {

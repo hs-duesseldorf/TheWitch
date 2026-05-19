@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import asyncio
 import copy
 import logging
@@ -279,3 +280,25 @@ class WitchRuntime:
 
     async def _broadcast_event_to_unreal(self, event: WitchEvent) -> None:
         await self._ai3d_channel.broadcast(event)
+
+    async def play_latest_tts_to_virtual_cable(self) -> bool:
+        if self._latest_tts_audio is None:
+            print("No latest TTS audio available")
+            return False
+
+        audio_bridge_host = os.getenv("WITCH_AUDIO_BRIDGE_HOST", "host.containers.internal")
+        audio_bridge_port = os.getenv("WITCH_AUDIO_BRIDGE_PORT", "8765")
+        audio_bridge_url = f"http://{audio_bridge_host}:{audio_bridge_port}/play"
+
+        print("Sending TTS audio to:", audio_bridge_url)
+
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            files = {
+                "file": ("tts.wav", self._latest_tts_audio, "audio/wav"),
+            }
+
+            response = await client.post(audio_bridge_url, files=files)
+            print("Audio bridge response:", response.status_code, response.text)
+            response.raise_for_status()
+
+        return True
