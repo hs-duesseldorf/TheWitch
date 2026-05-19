@@ -147,7 +147,7 @@ python ImageProcessing/webcam_bridge.py --camera 1
 
 For Windows/Mac: first download https://vb-audio.com/Cable/ afterwards you'll have to restart your device once
 
-For Lixnus: instead run the following command 
+For Linux: instead run the following command 
 
 ```bash
 pactl load-module module-null-sink sink_name=WitchVirtualCable sink_properties=device.description=WitchVirtualCable
