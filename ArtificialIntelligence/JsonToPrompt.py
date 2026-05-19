@@ -1,5 +1,6 @@
 import json
 from typing import Dict, Any
+import random
 
 ELEMENTS = ["holz", "feuer", "erde", "metall", "wasser"]
 
@@ -158,6 +159,21 @@ def build_result(input_payload: Dict[str, Any]) -> Dict[str, Any]:
         "blocked_elements": blocked_elements
     }
 
+def GetLines(result: Dict[str, Any]) -> list[str]:
+    lines_list = []
+
+    with open("package.json", "r") as json_file:
+        lines = json.loads(json_file.read())
+
+
+    for key, values in result["element_states"].items():
+        one_line = lines.get("elemente").get(key).get(values)
+        if not one_line==None :
+            lines_list.append(one_line[random.randint(0,2)])
+            #print(one_line[0])
+
+    return lines_list
+
 
 if __name__ == "__main__":
     sample_input = {
@@ -177,4 +193,8 @@ if __name__ == "__main__":
     }
 
     result = build_result(sample_input)
+    Lines = GetLines(result)
     print(json.dumps(result, ensure_ascii=False, indent=2))
+
+    for line in Lines:
+        print(line)
