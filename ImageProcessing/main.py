@@ -14,7 +14,7 @@ from .palm_processing.transport import WebSocketClient
 
 
 def ws_url(host_var: str, port_var: str) -> str:
-    return f"ws://{os.getenv(host_var)}:{os.getenv(port_var)}"
+    return f"ws://{os.environ[host_var]}:{os.environ[port_var]}"
 
 
 class App:

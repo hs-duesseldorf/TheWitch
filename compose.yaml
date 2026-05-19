@@ -1,11 +1,5 @@
 name: thewitch
 
-x-vllm-image: &vllm-image
-  build:
-    context: ArtificialIntelligence/servers/vllm_server
-    dockerfile: Containerfile
-  image: localhost/thewitch-vllm:latest
-
 services:
   ai:
     build:
@@ -25,30 +19,19 @@ services:
     restart: unless-stopped
     networks: [witch-net]
 
-  vllm:
-    <<: *vllm-image
-    env_file: [.env]
-    volumes:
-      - vllm_models:/root/.cache/huggingface
-    ports:
-      - "${WITCH_LLM_PORT}:${WITCH_LLM_PORT}"
-      - "${WITCH_TTS_PORT}:${WITCH_TTS_PORT}"
-    restart: unless-stopped
-    networks: [witch-net]
-
   ip:
     build:
       context: .
       dockerfile: ImageProcessing/Containerfile
     privileged: true
+    devices:
+      - /dev/video0:/dev/video0
+      - /dev/video1:/dev/video1
     env_file: [.env]
     volumes:
       - ./ImageProcessing:/app/ImageProcessing:ro
     restart: unless-stopped
     networks: [witch-net]
-
-volumes:
-  vllm_models:
 
 networks:
   witch-net:

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import re
 import time
@@ -14,9 +15,15 @@ logger = logging.getLogger(__name__)
 REQUEST_ATTEMPTS = 5
 RETRY_DELAY_SECONDS = 1.0
 BOUNDARY_RE = re.compile(r"([.!?,;:]+)\s+")
-MAX_CHUNK_LATENCY_SECONDS = 0.45
-FIRST_CHUNK_WORDS = 8
-LATER_CHUNK_WORDS = 14
+MAX_CHUNK_LATENCY_SECONDS = 0.2
+FIRST_CHUNK_WORDS = 200
+LATER_CHUNK_WORDS = 200
+NO_THINKING_SYSTEM_PROMPT = (
+    "Antworte ausschliesslich auf Deutsch. "
+    "Zeige niemals <think>, interne Ueberlegungen oder Analyse. "
+    "Gib nur die finale gesprochene Antwort aus."
+)
+THINK_BLOCK_RE = re.compile(r"<think\b[^>]*>.*?</think>", re.IGNORECASE | re.DOTALL)
 
 
 class LLMClient:
@@ -47,13 +54,13 @@ class LLMClient:
             try:
                 session = await self._ensure_session()
                 async with session.post(
-                    urljoin(self.base_url, "/v1/completions"),
+                    urljoin(self.base_url, "/v1/chat/completions"),
                     json={
                         "model": self.model,
-                        "prompt": prompt,
+                        "messages": self._messages(prompt),
                         "temperature": 0.8,
                         "top_p": 0.9,
-                        "max_tokens": 256,
+                        "max_tokens": 512,
                     },
                     timeout=aiohttp.ClientTimeout(total=60),
                 ) as resp:
@@ -63,7 +70,8 @@ class LLMClient:
             except Exception:
                 logger.warning("LLM request failed on attempt %d; retrying", attempt)
                 await asyncio.sleep(RETRY_DELAY_SECONDS * min(attempt, 10))
-        text = (data.get("choices", [{}])[0].get("text") or "").strip()
+        message = data.get("choices", [{}])[0].get("message") or {}
+        text = self._strip_thinking(message.get("content") or "")
         logger.info("LLM response: chars=%d elapsed=%.2fs", len(text), time.perf_counter() - started_at)
         return text
 
@@ -76,14 +84,15 @@ class LLMClient:
             try:
                 session = await self._ensure_session()
                 async with session.post(
-                    urljoin(self.base_url, "/v1/completions"),
+                    urljoin(self.base_url, "/v1/chat/completions"),
                     json={
                         "model": self.model,
-                        "prompt": prompt,
+                        "messages": self._messages(prompt),
                         "temperature": 0.8,
                         "top_p": 0.9,
-                        "max_tokens": 256,
+                        "max_tokens": 1024,
                         "stream": True,
+                        "think_disable": True,
                     },
                     timeout=aiohttp.ClientTimeout(total=120),
                 ) as resp:
@@ -95,10 +104,12 @@ class LLMClient:
                         if line == "data: [DONE]":
                             return
                         try:
-                            data = line[5:].strip()
-                            if not data:
+                            payload = line[5:].strip()
+                            if not payload:
                                 continue
-                            chunk = data.get("choices", [{}])[0].get("text") or ""
+                            data = json.loads(payload)
+                            delta = data.get("choices", [{}])[0].get("delta") or {}
+                            chunk = delta.get("content") or ""
                             if chunk:
                                 yield chunk
                         except Exception:
@@ -119,9 +130,13 @@ class LLMClient:
     async def stream_spoken_chunks(self, prompt: str) -> AsyncIterator[str]:
         buffer = ""
         emitted = False
+        in_think_block = False
         last_flush_check = time.perf_counter()
 
         async for token in self.stream_generate(prompt):
+            token, in_think_block = self._filter_thinking_chunk(token, in_think_block)
+            if not token:
+                continue
             buffer += token
             now = time.perf_counter()
             chunk, buffer = self._pop_spoken_chunk(
@@ -158,3 +173,39 @@ class LLMClient:
             return cleaned, ""
 
         return None, buffer
+
+    def _messages(self, prompt: str) -> list[dict[str, str]]:
+        return [
+            {"role": "system", "content": NO_THINKING_SYSTEM_PROMPT},
+            {"role": "user", "content": prompt},
+        ]
+
+    def _strip_thinking(self, text: str) -> str:
+        text = THINK_BLOCK_RE.sub("", text)
+        text = re.sub(r"</?think\b[^>]*>", "", text, flags=re.IGNORECASE)
+        return text.strip()
+
+    def _filter_thinking_chunk(self, chunk: str, in_think_block: bool) -> tuple[str, bool]:
+        output = []
+        pos = 0
+        while pos < len(chunk):
+            if in_think_block:
+                end = chunk.lower().find("</think>", pos)
+                if end == -1:
+                    return "".join(output), True
+                pos = end + len("</think>")
+                in_think_block = False
+                continue
+
+            start = chunk.lower().find("<think", pos)
+            if start == -1:
+                output.append(chunk[pos:])
+                break
+            output.append(chunk[pos:start])
+            close = chunk.find(">", start)
+            if close == -1:
+                return "".join(output), True
+            pos = close + 1
+            in_think_block = True
+
+        return "".join(output), in_think_block

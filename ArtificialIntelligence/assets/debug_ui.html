@@ -95,9 +95,6 @@
                 margin-bottom: 6px;
                 font-size: 11px;
             }
-            audio {
-                width: 100%;
-            }
             .stream-wrap {
                 position: relative;
                 aspect-ratio: var(--video-ratio, 16 / 9);
@@ -221,6 +218,9 @@
             const $ = (id) => document.getElementById(id);
             let currentState = "";
             let graphRenderId = 0;
+            let audioContext;
+            let audioQueue = [];
+            let isAudioPlaying = false;
             mermaid.initialize({
                 startOnLoad: false,
                 theme: "dark",
@@ -240,6 +240,11 @@
                 const wsBase = `${location.protocol === "https:" ? "wss" : "ws"}://${location.hostname}:${ws_port}`;
                 stream("camera", `${wsBase}/ws/ai-3d-video`);
                 stream("roi", `${wsBase}/ws/ai-3d-roi`);
+                socket(
+                    `${wsBase}/ws/ai-3d-audio`,
+                    (data) => playAudio(data),
+                    true,
+                );
                 socket(`${wsBase}/ws/ip-ai`, (ev) => {
                     show(ev.origin, ev);
                     updateState();
@@ -356,6 +361,44 @@
                     },
                     true,
                 );
+            }
+
+            async function playAudio(data) {
+                audioQueue.push(data);
+                console.log("Audio queued:", data.byteLength, "queue length:", audioQueue.length);
+                processAudioQueue();
+            }
+
+            async function processAudioQueue() {
+                if (isAudioPlaying || audioQueue.length === 0) return;
+
+                if (!audioContext) audioContext = new AudioContext();
+                if (audioContext.state === "suspended") {
+                    await audioContext.resume();
+                }
+
+                isAudioPlaying = true;
+                const data = audioQueue.shift();
+
+                const pcm = new Int16Array(data);
+                const buffer = audioContext.createBuffer(
+                    1,
+                    pcm.length,
+                    24000,
+                );
+                const channel = buffer.getChannelData(0);
+                for (let i = 0; i < pcm.length; i++) {
+                    channel[i] = pcm[i] / 32768;
+                }
+
+                const source = audioContext.createBufferSource();
+                source.buffer = buffer;
+                source.connect(audioContext.destination);
+                source.onended = () => {
+                    isAudioPlaying = false;
+                    processAudioQueue();
+                };
+                source.start(0);
             }
 
             let graphPending = false;

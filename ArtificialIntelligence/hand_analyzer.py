@@ -4,9 +4,9 @@ from shared.events import HandEvent
 
 
 _SYSTEM_PROMPT = (
-    "Schreibe eine kurze mystische Handlese-Wahrsagung auf Deutsch.\n"
-    "Antwort nur mit 2 Saetzen, ohne Einleitung und ohne Aufzaehlung.\n"
-    "Schreibe natuerlich gesprochen, mit kurzen vollstaendigen Saetzen.\n"
+    "Schreibe eine mystische Handlese-Wahrsagung auf Deutsch.\n"
+    "Antwort mit 4-6 kurzen vollstaendigen Saetzen.\n"
+    "Schreibe natuerlich gesprochen, fliessend.\n"
     "Kein Markdown, keine Klammern, keine Emojis.\n"
     "Ton: weise, leicht dunkel, konkret.\n"
 )

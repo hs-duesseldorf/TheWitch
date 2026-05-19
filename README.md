@@ -35,12 +35,13 @@ flowchart LR
 
 ## Quick Start
 
-Prerequisite: Podman with Compose support.
+Prerequisites: Podman with Compose support for `ai` and `ip`, plus a local or remote vLLM/vLLM-Omni install for LLM and TTS.
 
 Run the full stack:
 
 ```bash
-podman-compose up --build
+scripts/run_vllm.sh
+podman-compose up --build ai ip
 ```
 
 `--build` belongs to the `up` command; `podman-compose --build` by itself is not a valid compose command.
@@ -54,12 +55,12 @@ http://localhost:10030/
 Run selected services:
 
 ```bash
-podman-compose up --build ai vllm
+podman-compose up --build ai
 podman-compose up --build ip
-podman-compose up --build ai vllm ip
+podman-compose up --build ai ip
 ```
 
-For a desktop NVIDIA GPU or Podman host with NVIDIA CDI, use the GPU override when you also want GPU access for `vllm` and `ip`.
+For a desktop NVIDIA GPU or Podman host with NVIDIA CDI, use the GPU override when you want GPU access for `ip`.
 
 ```bash
 podman-compose -f compose.yaml -f compose.gpu.yaml up --build
@@ -71,10 +72,10 @@ For Jetson / Jetson Nano:
 podman-compose -f compose.yaml -f compose.jetson.yaml up --build ip
 ```
 
-For a split setup, run `ai` and `vllm` on the desktop or compute server:
+For a split setup, run `ai` and `ip` on the desktop:
 
 ```bash
-podman-compose -f compose.yaml -f compose.gpu.yaml up --build ai vllm
+podman-compose -f compose.yaml -f compose.gpu.yaml up --build ai ip
 ```
 
 Then run `ip` on the Jetson or camera machine:
@@ -85,7 +86,7 @@ podman-compose -f compose.yaml -f compose.jetson.yaml up --build ip
 
 ## Services
 
-- `vllm`: vLLM-Omni serving LLM and TTS models
+- `vllm`: external vLLM-Omni process serving LLM and TTS models
 - `ai`: state machine, LLM/TTS orchestration, WebSocket API, debug UI
 - `ip`: camera, hand tracking, palm ROI, and seat sensor client
 
@@ -127,16 +128,6 @@ Audio bridge: http://${WITCH_AUDIO_PLAY_HOST}:${WITCH_AUDIO_BRIDGE_PORT}
 ```
 
 Do not use `localhost` for cross-machine connections. Inside a container it points back to that same container.
-
-The `vllm` service builds `localhost/thewitch-vllm:latest` from the official `vllm/vllm-omni` image. The AI service connects to `WITCH_LLM_HOST:WITCH_LLM_PORT` and `WITCH_TTS_HOST:WITCH_TTS_PORT` over HTTP.
-
-```bash
-podman-compose up --build vllm
-```
-
-```dotenv
-WITCH_TTS_VOICE=A female speaker speaking German. Natural prosody, realistic, not theatrical.
-```
 
 ### Windows Camera
 
@@ -223,8 +214,7 @@ Linux:
 `vllm` (LLM + TTS):
 
 ```bash
-source ArtificialIntelligence/.venv/bin/activate
-python ArtificialIntelligence/servers/main.py
+scripts/run_vllm.sh
 ```
 
 `ai`:
@@ -246,8 +236,7 @@ Windows PowerShell:
 `vllm` (LLM + TTS):
 
 ```powershell
-ArtificialIntelligence\.venv\Scripts\Activate.ps1
-python ArtificialIntelligence\servers\main.py
+bash scripts/run_vllm.sh
 ```
 
 `ai`:
@@ -264,7 +253,7 @@ ImageProcessing\.venv\Scripts\Activate.ps1
 python -m ImageProcessing.main
 ```
 
-The `run_vllm.py` script starts vLLM-Omni serving both LLM and TTS models.
+The `scripts/run_vllm.sh` script starts vLLM-Omni serving both LLM and TTS models, and stops both child processes when interrupted.
 
 ## Seat Sensor
 
@@ -276,7 +265,7 @@ WITCH_SEAT_SENSOR_OVERRIDE=true
 
 ## Custom TTS Voice
 
-Set `WITCH_TTS_VOICE` in `.env` to the Qwen3-TTS voice-design instruction you want to use.
+Qwen3-TTS uses the built-in `vivian` CustomVoice speaker by default.
 
 ## Unreal Engine Connection
 
@@ -299,7 +288,6 @@ ws://<AI-machine-LAN-IP>:10031/ws/ai-3d-roi
 ```bash
 podman-compose logs -f
 podman-compose logs -f ai
-podman-compose -f compose.yaml -f compose.gpu.yaml logs -f vllm
 podman-compose stop
 podman-compose down
 ```

@@ -19,9 +19,39 @@ logging.basicConfig(
 logger = logging.getLogger("ai")
 logging.getLogger("transitions").setLevel(logging.ERROR)
 
+def llm_model_name() -> str:
+    llm_hf = os.environ["WITCH_LLM_HF"]
+    if ":" not in llm_hf:
+        raise RuntimeError(
+            "WITCH_LLM_HF must be repo:file, e.g. "
+            "unsloth/Qwen3-4B-GGUF:Qwen3-4B-Q4_K_M.gguf"
+        )
+
+    repo, model_file = llm_hf.split(":", 1)
+    if not repo or not model_file:
+        raise RuntimeError(f"Invalid WITCH_LLM_HF: {llm_hf}")
+    return model_file
+
+
+LLM_MODEL = llm_model_name()
+
 
 def http_url(host_var: str, port_var: str) -> str:
-    return f"http://{os.getenv(host_var)}:{os.getenv(port_var)}"
+    return f"http://{os.environ[host_var]}:{os.environ[port_var]}"
+
+
+def get_llm_url() -> str:
+    host = os.getenv("WITCH_LLM_HOST", "")
+    if host in ("localhost", "127.0.0.1", "ai", ""):
+        return http_url("WITCH_LLM_HOST", "WITCH_LLM_PORT")
+    return http_url("WITCH_LLM_HOST", "WITCH_LLM_PORT_EXT")
+
+
+def get_tts_url() -> str:
+    host = os.getenv("WITCH_TTS_HOST", "")
+    if host in ("localhost", "127.0.0.1", "ai", ""):
+        return http_url("WITCH_TTS_HOST", "WITCH_TTS_PORT")
+    return http_url("WITCH_TTS_HOST", "WITCH_TTS_PORT_EXT")
 
 
 class App:
@@ -33,11 +63,12 @@ class App:
             ws_server=self.ws_server,
             state_machine=self.state_machine,
             llm=LLMClient(
-                base_url=http_url("WITCH_LLM_HOST", "WITCH_LLM_PORT"),
-                model=os.getenv("WITCH_LLM_MODEL"),
+                base_url=get_llm_url(),
+                model=LLM_MODEL,
             ),
             tts=TTSClient(
-                base_url=http_url("WITCH_TTS_HOST", "WITCH_TTS_PORT"),
+                base_url=get_tts_url(),
+                model=os.environ["WITCH_TTS_MODEL"],
             ),
         )
 

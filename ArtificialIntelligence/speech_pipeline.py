@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import asyncio
-import copy
 import logging
 import os
 import platform
@@ -11,6 +10,7 @@ from typing import Any, Awaitable, Callable
 
 import httpx
 import numpy as np
+import soundfile as sf
 
 try:
     import sounddevice as sd
@@ -20,19 +20,21 @@ except (ImportError, OSError):
     HAS_SOUNDDEVICE = False
     sd = None
 
-from shared.events import AnalysisStartedEvent, ErrorEvent, FortuneEvent, Scene
+from shared.events import AnalysisStartedEvent, ErrorEvent, Scene
 
 logger = logging.getLogger(__name__)
 
 SR = 48000
 
 _AUDIO_PLAY_HOST = os.getenv("WITCH_AUDIO_PLAY_HOST")
-_AUDIO_BRIDGE_PORT = os.getenv("WITCH_AUDIO_BRIDGE_PORT", "10034")
+_AUDIO_BRIDGE_PORT = os.environ["WITCH_AUDIO_BRIDGE_PORT"]
 
 
-async def _play_audio_http(audio: bytes) -> bool:
+async def _play_audio_http(audio: bytes, *, sample_rate: int, format: str) -> bool:
     if not _AUDIO_PLAY_HOST:
         return False
+    if format != "wav":
+        audio = _pcm_to_wav(audio, sample_rate)
     url = f"http://{_AUDIO_PLAY_HOST}:{_AUDIO_BRIDGE_PORT}/play"
     try:
         async with httpx.AsyncClient(timeout=30.0) as client:
@@ -41,6 +43,18 @@ async def _play_audio_http(audio: bytes) -> bool:
     except Exception as e:
         logger.warning(f"HTTP audio error: {e}")
         return False
+
+
+def _pcm_to_wav(audio: bytes, sample_rate: int) -> bytes:
+    import wave
+
+    output = __import__("io").BytesIO()
+    with wave.open(output, "wb") as wav_file:
+        wav_file.setnchannels(1)
+        wav_file.setsampwidth(2)
+        wav_file.setframerate(sample_rate)
+        wav_file.writeframes(audio)
+    return output.getvalue()
 
 
 def find_audio_devices() -> tuple[int | None, int | None]:
@@ -71,9 +85,10 @@ def find_audio_devices() -> tuple[int | None, int | None]:
     return virtual, default
 
 AnalysisCallbacks = Callable[
-    [AnalysisStartedEvent | FortuneEvent | ErrorEvent],
+    [AnalysisStartedEvent | ErrorEvent],
     Awaitable[None],
 ]
+AudioCallbacks = Callable[[bytes], Awaitable[None]]
 
 
 class StreamingAudioPlayer:
@@ -141,16 +156,21 @@ class StreamingAudioPlayer:
         except queue.Empty:
             outdata.fill(0)
 
-    def put(self, audio_chunk: bytes) -> None:
+    def put(self, audio_chunk: bytes, *, format: str = "pcm") -> None:
         try:
-            data = (
-                np.frombuffer(audio_chunk, dtype=np.int16).astype(np.float32) / 32768.0
-            )
+            if format == "wav":
+                data, sample_rate = sf.read(
+                    __import__("io").BytesIO(audio_chunk),
+                    dtype="float32",
+                )
+            else:
+                data = np.frombuffer(audio_chunk, dtype=np.int16).astype(np.float32) / 32768.0
+                sample_rate = self._sample_rate
 
-            if self._sample_rate != SR:
+            if sample_rate != SR:
                 from scipy.signal import resample_poly
 
-                data = resample_poly(data, SR, self._sample_rate)
+                data = resample_poly(data, SR, sample_rate)
 
             if len(data.shape) == 1:
                 data = np.column_stack((data, data))
@@ -177,10 +197,12 @@ class SpeechPipeline:
         llm: Any,
         tts: Any,
         broadcast_callback: AnalysisCallbacks,
+        audio_callback: AudioCallbacks | None = None,
     ):
         self._llm = llm
         self._tts = tts
         self._broadcast_callback = broadcast_callback
+        self._audio_callback = audio_callback
         self._current_task: asyncio.Task | None = None
         self._stage = "idle"
 
@@ -218,50 +240,42 @@ class SpeechPipeline:
                 AnalysisStartedEvent(scene=scene),
             )
 
-            fortune_parts: list[str] = []
-
-            async def fortune_chunks():
-                async for chunk in self._llm.stream_fortune_chunks(prompt):
-                    fortune_parts.append(chunk)
-                    yield chunk
-
             self._stage = "tts_stream"
-            audio_chunks: list[bytes] = []
-
             try:
                 player.start()
                 use_direct = player.is_active()
             except Exception:
                 use_direct = False
 
-            if use_direct:
-                async for frame in self._tts.stream_synthesize(fortune_chunks()):
-                    audio_chunks.append(frame.audio)
-                    player.put(frame.audio)
-            else:
+            if not use_direct:
                 logger.info("No audio device, using HTTP bridge")
-                async for frame in self._tts.stream_synthesize(fortune_chunks()):
-                    audio_chunks.append(frame.audio)
 
-            fortune = " ".join(
-                part.strip() for part in fortune_parts if part.strip()
-            ).strip()
-            logger.info("Analysis stream result: chars=%d", len(fortune))
+            debug_text_parts: list[str] = []
 
-            if not use_direct and audio_chunks:
-                wav_audio = self._pcm_to_wav(b"".join(audio_chunks), frame.sample_rate)
-                if wav_audio:
-                    await _play_audio_http(wav_audio)
-            else:
-                player.stop()
+            async def text_chunks():
+                async for chunk in self._llm.stream_fortune_chunks(prompt):
+                    debug_text_parts.append(chunk)
+                    yield chunk
 
-            await self._broadcast_callback(
-                FortuneEvent(
-                    text=fortune,
-                    sample_rate=frame.sample_rate,
-                ),
-            )
+            frame_count = 0
+            async for frame in self._tts.stream_synthesize(text_chunks()):
+                frame_count += 1
+                logger.info(f"TTS frame {frame_count}: {len(frame.audio)} bytes")
+                if self._audio_callback:
+                    await self._audio_callback(frame.audio)
 
+                if use_direct:
+                    player.put(frame.audio, format=frame.format)
+                else:
+                    await _play_audio_http(
+                        frame.audio,
+                        sample_rate=frame.sample_rate,
+                        format=frame.format,
+                    )
+            logger.info(f"TTS complete: {frame_count} frames total")
+
+            debug_text = " ".join(part.strip() for part in debug_text_parts if part.strip())
+            logger.info("Analysis stream result: chars=%d", len(debug_text))
             self._stage = "done"
 
         except httpx.HTTPError as e:
@@ -271,16 +285,4 @@ class SpeechPipeline:
             self._stage = "error"
             logger.exception("Analysis error")
         finally:
-            if not self._audio_play_host:
-                player.stop()
-
-    def _pcm_to_wav(self, audio: bytes, sample_rate: int) -> bytes:
-        import wave
-
-        output = __import__("io").BytesIO()
-        with wave.open(output, "wb") as wav_file:
-            wav_file.setnchannels(1)
-            wav_file.setsampwidth(2)
-            wav_file.setframerate(sample_rate)
-            wav_file.writeframes(audio)
-        return output.getvalue()
+            player.stop()
