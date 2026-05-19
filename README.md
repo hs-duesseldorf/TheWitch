@@ -143,6 +143,25 @@ python ImageProcessing/webcam_bridge.py --list
 python ImageProcessing/webcam_bridge.py --camera 1
 ```
 
+### Audio Bridge
+
+For Windows/Mac: first download https://vb-audio.com/Cable/ afterwards you'll have to restart your device once
+
+For Linux: instead run the following command 
+
+```bash
+pactl load-module module-null-sink sink_name=WitchVirtualCable sink_properties=device.description=WitchVirtualCable
+```
+
+Afterwards create venv and start the bridge:
+
+```powershell
+python -m venv ArtificialIntelligence\.venv
+ArtificialIntelligence\.venv\Scripts\pip install -r ArtificialIntelligence\requirements.txt
+ArtificialIntelligence\.venv\Scripts\python ArtificialIntelligence\audio_bridge.py
+```
+
+
 ## Local Python
 
 Prerequisites:

@@ -96,6 +96,13 @@ def get_tts_audio():
         "audio": base64.b64encode(audio).decode(),
         "sample_rate": sample_rate,
     }
+    
+@app.post("/api/tts/play-virtual-cable")
+async def play_tts_virtual_cable():
+    print("Play virtual cable button pressed")
+    played = await get_runtime().runtime.play_latest_tts_to_virtual_cable()
+    print("Play virtual cable result:", played)
+    return {"played": played}
 
 
 @app.post("/api/reset")
