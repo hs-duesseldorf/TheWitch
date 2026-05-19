@@ -162,15 +162,20 @@ def build_result(input_payload: Dict[str, Any]) -> Dict[str, Any]:
 def GetLines(result: Dict[str, Any]) -> list[str]:
     lines_list = []
 
-    with open("package.json", "r") as json_file:
-        lines = json.loads(json_file.read())
-
+    try :
+        with open("package.json", "r") as json_file:
+            lines = json.loads(json_file.read())
+    except:
+        print("the json file is not valid")
+        return lines_list
 
     for key, values in result["element_states"].items():
         one_line = lines.get("elemente").get(key).get(values)
         if not one_line==None :
             lines_list.append(one_line[random.randint(0,2)])
             #print(one_line[0])
+        else :
+            print("the line is not available")
 
     return lines_list
 
