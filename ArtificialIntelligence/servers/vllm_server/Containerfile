@@ -1,0 +1,15 @@
+FROM docker.io/vllm/vllm-omni:v0.18.0
+
+WORKDIR /app
+
+COPY entrypoint.sh ./entrypoint.sh
+RUN chmod +x entrypoint.sh
+
+ENV HF_HOME=/models/huggingface
+ENV VLLM_WORKER_MULTIPROC_METHOD=spawn
+
+RUN mkdir -p /models
+
+EXPOSE 8082 8083
+
+CMD ["./entrypoint.sh"]

@@ -9,8 +9,7 @@ flowchart LR
     ip[ImageProcessing]
     ai[AI<br/>ws://localhost:8081]
     debug[Debug UI<br/>http://localhost:8080/]
-    llm[LLM<br/>http://localhost:8082]
-    tts[TTS<br/>http://localhost:8083]
+    vllm[vLLM-Omni<br/>LLM + TTS]
     unreal[3D / Unreal]
 
     ip <-- "WebSocket /ws/ip-ai" --> ai
@@ -27,8 +26,11 @@ flowchart LR
     unreal <-- "WebSocket /ws/ai-3d-video" --> ai
     unreal <-- "WebSocket /ws/ai-3d-roi" --> ai
 
-    ai -- "HTTP Ollama API" --> llm
-    ai -- "HTTP POST /api/generate" --> tts
+    ai -- "HTTP /v1/chat/completions" --> vllm
+    ai -- "HTTP /v1/audio/speech/stream" --> vllm
+    ai -- "audio" --> speakers
+
+    speakers[Speakers + VB-Cable]
 ```
 
 ## Quick Start
@@ -41,6 +43,8 @@ Run the full stack:
 podman-compose up --build
 ```
 
+`--build` belongs to the `up` command; `podman-compose --build` by itself is not a valid compose command.
+
 Open the debug UI:
 
 ```text
@@ -50,12 +54,12 @@ http://localhost:10030/
 Run selected services:
 
 ```bash
-podman-compose up --build ai llm tts
+podman-compose up --build ai vllm
 podman-compose up --build ip
-podman-compose up --build ai ip
+podman-compose up --build ai vllm ip
 ```
 
-For a desktop NVIDIA GPU or Podman host with NVIDIA CDI:
+For a desktop NVIDIA GPU or Podman host with NVIDIA CDI, use the GPU override when you also want GPU access for `vllm` and `ip`.
 
 ```bash
 podman-compose -f compose.yaml -f compose.gpu.yaml up --build
@@ -67,10 +71,10 @@ For Jetson / Jetson Nano:
 podman-compose -f compose.yaml -f compose.jetson.yaml up --build ip
 ```
 
-For a split setup, run `ai`, `llm`, and `tts` on the desktop or compute server:
+For a split setup, run `ai` and `vllm` on the desktop or compute server:
 
 ```bash
-podman-compose -f compose.yaml -f compose.gpu.yaml up --build ai llm tts
+podman-compose -f compose.yaml -f compose.gpu.yaml up --build ai vllm
 ```
 
 Then run `ip` on the Jetson or camera machine:
@@ -81,8 +85,7 @@ podman-compose -f compose.yaml -f compose.jetson.yaml up --build ip
 
 ## Services
 
-- `llm`: Ollama model server
-- `tts`: text-to-speech API
+- `vllm`: vLLM-Omni serving LLM and TTS models
 - `ai`: state machine, LLM/TTS orchestration, WebSocket API, debug UI
 - `ip`: camera, hand tracking, palm ROI, and seat sensor client
 
@@ -120,9 +123,20 @@ The app derives service URLs from those host and port values:
 LLM: http://${WITCH_LLM_HOST}:${WITCH_LLM_PORT}
 TTS: http://${WITCH_TTS_HOST}:${WITCH_TTS_PORT}
 AI: ws://${WITCH_AI_HOST}:${WITCH_AI_PORT}
+Audio bridge: http://${WITCH_AUDIO_PLAY_HOST}:${WITCH_AUDIO_BRIDGE_PORT}
 ```
 
 Do not use `localhost` for cross-machine connections. Inside a container it points back to that same container.
+
+The `vllm` service builds `localhost/thewitch-vllm:latest` from the official `vllm/vllm-omni` image. The AI service connects to `WITCH_LLM_HOST:WITCH_LLM_PORT` and `WITCH_TTS_HOST:WITCH_TTS_PORT` over HTTP.
+
+```bash
+podman-compose up --build vllm
+```
+
+```dotenv
+WITCH_TTS_VOICE=A female speaker speaking German. Natural prosody, realistic, not theatrical.
+```
 
 ### Windows Camera
 
@@ -145,20 +159,30 @@ python ImageProcessing/webcam_bridge.py --camera 1
 
 ### Audio Bridge
 
-For Windows/Mac: first download https://vb-audio.com/Cable/ afterwards you'll have to restart your device once
+The AI plays TTS audio directly to VB-Cable (for Unreal) and default speakers.
 
-For Linux: instead run the following command 
+**Local Python (Linux/Mac/Windows):**
 
+For Windows/Mac: download https://vb-audio.com/Cable/ and restart device
+
+For Linux:
 ```bash
 pactl load-module module-null-sink sink_name=WitchVirtualCable sink_properties=device.description=WitchVirtualCable
 ```
 
-Afterwards create venv and start the bridge:
+Audio plays automatically via sounddevice - no bridge needed.
 
+**Container on Windows with Podman:**
+
+On Windows host, start audio bridge:
 ```powershell
-python -m venv ArtificialIntelligence\.venv
-ArtificialIntelligence\.venv\Scripts\pip install -r ArtificialIntelligence\requirements.txt
-ArtificialIntelligence\.venv\Scripts\python ArtificialIntelligence\audio_bridge.py
+python ArtificialIntelligence\audio_bridge.py
+```
+
+In `.env`, tell AI to use HTTP audio:
+```dotenv
+WITCH_AUDIO_PLAY_HOST=host.docker.internal
+WITCH_AUDIO_BRIDGE_PORT=10034
 ```
 
 
@@ -166,8 +190,7 @@ ArtificialIntelligence\.venv\Scripts\python ArtificialIntelligence\audio_bridge.
 
 Prerequisites:
 
-- Python 3.11+
-- Ollama installed and available as `ollama` on `PATH`, or `OLLAMA_BINARY` set to the Ollama executable path
+- vLLM-Omni installed locally so the `vllm` command is on `PATH`
 - Camera and sensor access configured for the host machine
 - `.env` hosts set to values reachable by the local services, usually `localhost` for an all-local run
 
@@ -176,32 +199,20 @@ Create the venvs once:
 Linux:
 
 ```bash
-python3 -m venv ArtificialIntelligence/.venv
+python3.13 -m venv ArtificialIntelligence/.venv
 ArtificialIntelligence/.venv/bin/pip install -r ArtificialIntelligence/requirements.txt
 
-python3 -m venv ArtificialIntelligence/servers/llm_server/.venv
-ArtificialIntelligence/servers/llm_server/.venv/bin/pip install -r ArtificialIntelligence/servers/llm_server/requirements.txt
-
-python3 -m venv ArtificialIntelligence/servers/tts_server/.venv
-ArtificialIntelligence/servers/tts_server/.venv/bin/pip install -r ArtificialIntelligence/servers/tts_server/requirements.txt
-
-python3 -m venv ImageProcessing/.venv
+python3.13 -m venv ImageProcessing/.venv
 ImageProcessing/.venv/bin/pip install -r ImageProcessing/requirements.txt
 ```
 
 Windows PowerShell:
 
 ```powershell
-py -3.11 -m venv ArtificialIntelligence\.venv
+py -3.13 -m venv ArtificialIntelligence\.venv
 ArtificialIntelligence\.venv\Scripts\pip install -r ArtificialIntelligence\requirements.txt
 
-py -3.11 -m venv ArtificialIntelligence\servers\llm_server\.venv
-ArtificialIntelligence\servers\llm_server\.venv\Scripts\pip install -r ArtificialIntelligence\servers\llm_server\requirements.txt
-
-py -3.11 -m venv ArtificialIntelligence\servers\tts_server\.venv
-ArtificialIntelligence\servers\tts_server\.venv\Scripts\pip install -r ArtificialIntelligence\servers\tts_server\requirements.txt
-
-py -3.11 -m venv ImageProcessing\.venv
+py -3.13 -m venv ImageProcessing\.venv
 ImageProcessing\.venv\Scripts\pip install -r ImageProcessing\requirements.txt
 ```
 
@@ -209,18 +220,11 @@ Start the services in separate terminals:
 
 Linux:
 
-`llm`:
+`vllm` (LLM + TTS):
 
 ```bash
-source ArtificialIntelligence/servers/llm_server/.venv/bin/activate
-python ArtificialIntelligence/servers/llm_server/main.py
-```
-
-`tts`:
-
-```bash
-source ArtificialIntelligence/servers/tts_server/.venv/bin/activate
-python ArtificialIntelligence/servers/tts_server/main.py
+source ArtificialIntelligence/.venv/bin/activate
+python ArtificialIntelligence/servers/main.py
 ```
 
 `ai`:
@@ -239,18 +243,11 @@ python -m ImageProcessing.main
 
 Windows PowerShell:
 
-`llm`:
+`vllm` (LLM + TTS):
 
 ```powershell
-ArtificialIntelligence\servers\llm_server\.venv\Scripts\Activate.ps1
-python ArtificialIntelligence\servers\llm_server\main.py
-```
-
-`tts`:
-
-```powershell
-ArtificialIntelligence\servers\tts_server\.venv\Scripts\Activate.ps1
-python ArtificialIntelligence\servers\tts_server\main.py
+ArtificialIntelligence\.venv\Scripts\Activate.ps1
+python ArtificialIntelligence\servers\main.py
 ```
 
 `ai`:
@@ -267,7 +264,7 @@ ImageProcessing\.venv\Scripts\Activate.ps1
 python -m ImageProcessing.main
 ```
 
-The `llm` launcher starts the installed Ollama executable on `WITCH_LLM_PORT` and pulls `WITCH_LLM_MODEL`.
+The `run_vllm.py` script starts vLLM-Omni serving both LLM and TTS models.
 
 ## Seat Sensor
 
@@ -279,24 +276,22 @@ WITCH_SEAT_SENSOR_OVERRIDE=true
 
 ## Custom TTS Voice
 
-```bash
-cp your-voice.wav ArtificialIntelligence/assets/default.wav
-```
-
-If the file is missing, TTS uses the model default voice.
+Set `WITCH_TTS_VOICE` in `.env` to the Qwen3-TTS voice-design instruction you want to use.
 
 ## Unreal Engine Connection
 
+Audio goes to VB-Cable which Unreal can capture as input.
+
 ```text
 # Same PC as AI, native Unreal:
-ws://localhost:8081/ws/ai-3d
+ws://localhost:10031/ws/ai-3d
 
 # Different PC:
-ws://<AI-machine-LAN-IP>:8081/ws/ai-3d
+ws://<AI-machine-LAN-IP>:10031/ws/ai-3d
 
 # AI video and ROI streams:
-ws://<AI-machine-LAN-IP>:8081/ws/ai-3d-video
-ws://<AI-machine-LAN-IP>:8081/ws/ai-3d-roi
+ws://<AI-machine-LAN-IP>:10031/ws/ai-3d-video
+ws://<AI-machine-LAN-IP>:10031/ws/ai-3d-roi
 ```
 
 ## Useful Commands
@@ -304,6 +299,7 @@ ws://<AI-machine-LAN-IP>:8081/ws/ai-3d-roi
 ```bash
 podman-compose logs -f
 podman-compose logs -f ai
+podman-compose -f compose.yaml -f compose.gpu.yaml logs -f vllm
 podman-compose stop
 podman-compose down
 ```

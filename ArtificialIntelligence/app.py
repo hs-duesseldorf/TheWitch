@@ -38,8 +38,6 @@ class App:
             ),
             tts=TTSClient(
                 base_url=http_url("WITCH_TTS_HOST", "WITCH_TTS_PORT"),
-                speaker_wav=None,
-                language="de",
             ),
         )
 

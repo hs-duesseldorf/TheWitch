@@ -1,12 +1,12 @@
 from __future__ import annotations
 
-import os
 import asyncio
-import copy
 import logging
-from typing import Any
+import os
+from typing import Any, Awaitable, Callable
 
-import httpx
+from .hand_analyzer import build_prompt
+from .speech_pipeline import SpeechPipeline
 from .message_channels import EventChannel
 from .state_machine.state_machine import (
     SCENES_THAT_DELIVER_FORTUNE,
@@ -14,6 +14,7 @@ from .state_machine.state_machine import (
     StateChange,
     WitchStateMachine,
 )
+from .websocket_server.websocket_server import WebSocketServer
 from shared.events import (
     AnalysisStartedEvent,
     ErrorEvent,
@@ -25,9 +26,127 @@ from shared.events import (
     SceneCommandEvent,
     WitchEvent,
 )
-from .websocket_server.websocket_server import WebSocketServer
 
 logger = logging.getLogger(__name__)
+
+
+class StateCoordinator:
+    def __init__(
+        self,
+        state_machine: WitchStateMachine,
+        analysis_engine: SpeechPipeline,
+        broadcast_to_unreal: Callable[[WitchEvent], Awaitable[None]],
+    ):
+        self._state_machine = state_machine
+        self._analysis_engine = analysis_engine
+        self._broadcast_to_unreal = broadcast_to_unreal
+        self._hand_event: HandEvent | None = None
+
+        self._setup_handlers()
+
+    def _setup_handlers(self) -> None:
+        self._state_machine.register_transition_handler("ip_scan_complete", self._on_scan_complete)
+        self._state_machine.register_transition_handler("ip_hand_right", self._on_hand_scan_ready)
+
+    async def _on_scan_complete(self, change: StateChange) -> None:
+        pass
+
+    async def _on_hand_scan_ready(self, change: StateChange) -> None:
+        pass
+
+    @property
+    def state(self) -> str:
+        return self._state_machine.state
+
+    def get_hand_data(self) -> HandEvent | None:
+        return self._hand_event
+
+    async def handle_hand_event(self, event: HandEvent) -> list[StateChange]:
+        self._hand_event = event
+
+        transitions = self._state_machine.hand_event(event)
+        await self._apply_transition_effects(transitions)
+        return transitions
+
+    async def handle_person_event(self, event: PersonEvent) -> list[StateChange]:
+        transitions = self._state_machine.person_event(event)
+        await self._apply_transition_effects(transitions)
+        return transitions
+
+    async def handle_event_done(self) -> list[StateChange]:
+        previous_state = self._state_machine.state
+        transitions = self._state_machine.event_done(previous_state)
+        if not transitions:
+            logger.debug("Ignoring event_done while state is %s", previous_state)
+            return []
+
+        await self._apply_transition_effects(transitions)
+        return transitions
+
+    async def force_state(self, state: str) -> str:
+        self._state_machine.force_state(state)
+        await self._apply_state_effects()
+        return self._state_machine.state
+
+    def force_state_sync(self, state: str) -> str:
+        self._state_machine.force_state(state)
+        return self._state_machine.state
+
+    async def trigger_event(self, event: str) -> str:
+        if not event:
+            return self._state_machine.state
+        self._state_machine.advance(event)
+        await self._apply_state_effects()
+        return self._state_machine.state
+
+    def trigger_event_sync(self, event: str) -> str:
+        if not event:
+            return self._state_machine.state
+        self._state_machine.advance(event)
+        return self._state_machine.state
+
+    async def _apply_state_effects(self) -> None:
+        if self._state_machine.state not in SCENES_THAT_START_ANALYSIS:
+            return
+        if self._hand_event:
+            await self._trigger_analysis()
+
+    async def _trigger_analysis(self) -> None:
+        if self._analysis_engine.is_running():
+            return
+        prompt = build_prompt(self._hand_event)
+        await self._analysis_engine.run_analysis(
+            prompt,
+            Scene(self._state_machine.state),
+        )
+
+    async def _apply_transition_effects(self, transitions: list[StateChange] | None = None) -> None:
+        if not transitions:
+            if self._state_machine.state in SCENES_THAT_START_ANALYSIS:
+                await self._trigger_analysis()
+            return
+
+        for change in transitions:
+            await self._broadcast_transition(change)
+
+            for handler in self._state_machine.get_transition_handlers(change.trigger):
+                await handler(change)
+
+        if self._reached_state(transitions, SCENES_THAT_START_ANALYSIS):
+            await self._trigger_analysis()
+
+    def _reached_state(self, transitions: list[StateChange], states: frozenset[str]) -> bool:
+        return any(transition.dest in states for transition in transitions)
+
+    async def _broadcast_transition(self, transition: StateChange) -> None:
+        await self._broadcast_to_unreal(
+            SceneCommandEvent(
+                scene=Scene(transition.dest),
+                animation=transition.dest,
+                effects={},
+                trigger=transition.trigger,
+            ),
+        )
 
 
 class WitchRuntime:
@@ -39,64 +158,72 @@ class WitchRuntime:
         llm: Any,
         tts: Any,
     ):
-        self.ws_server = ws_server
-        self.state_machine = state_machine
-        self.llm = llm
-        self.tts = tts
-        self._analysis_task: asyncio.Task | None = None
-        self._analysis_stage = "idle"
-        self._hand_data: dict | None = None
-        self._pending_fortune_event: FortuneEvent | None = None
-        self._latest_tts_audio: bytes | None = None
-        self._latest_tts_sample_rate: int | None = None
+        self._ws_server = ws_server
+
         self._ip_channel = EventChannel(
-            ws_server=self.ws_server,
+            ws_server=ws_server,
             path="/ws/ip-ai",
             default_origin="ImageProcessing",
             decode_source="ip",
         )
         self._ai3d_channel = EventChannel(
-            ws_server=self.ws_server,
+            ws_server=ws_server,
             path="/ws/ai-3d",
             default_origin="ArtificialIntelligence",
             decode_source="ai-3d",
         )
-        self._ip_handlers = {
-            HandEvent: self._handle_ip_hand_event,
-            PersonEvent: self._handle_ip_person_event,
-        }
-        self._unreal_handlers = {
-            EventDoneEvent: self._handle_unreal_event_done,
-        }
+
+        self._speech_pipeline = SpeechPipeline(
+            llm=llm,
+            tts=tts,
+            broadcast_callback=self._on_analysis_event,
+        )
+
+        self._coordinator = StateCoordinator(
+            state_machine=state_machine,
+            analysis_engine=self._speech_pipeline,
+            broadcast_to_unreal=self._broadcast_event_to_unreal,
+        )
 
         self._register_routes()
 
+    async def _broadcast_event_to_unreal(self, event: WitchEvent) -> None:
+        await self._ai3d_channel.broadcast(event)
+
     def _register_routes(self) -> None:
-        self.ws_server.add_route("/ws/ip-ai", self._on_ip_ai_message)
-        self.ws_server.add_route("/ws/ip-ai-video", self._on_ip_ai_video_message)
-        self.ws_server.add_route("/ws/ip-roi", self._on_ip_roi_message)
-        self.ws_server.add_route("/ws/ai-3d", self._on_ai_3d_message)
-        self.ws_server.add_route("/ws/ai-3d-video", self._on_ai_3d_video_message)
-        self.ws_server.add_route("/ws/ai-3d-roi", self._on_ai_3d_roi_message)
+        self._ws_server.add_route("/ws/ip-ai", self._on_ip_ai_message)
+        self._ws_server.add_route("/ws/ip-ai-video", self._on_ip_ai_video_message)
+        self._ws_server.add_route("/ws/ip-roi", self._on_ip_roi_message)
+        self._ws_server.add_route("/ws/ai-3d", self._on_ai_3d_message)
+        self._ws_server.add_route("/ws/ai-3d-audio", self._on_ai_3d_audio_message)
+        self._ws_server.add_route("/ws/ai-3d-video", self._on_ai_3d_video_message)
+        self._ws_server.add_route("/ws/ai-3d-roi", self._on_ai_3d_roi_message)
 
     async def _on_ip_ai_message(self, server: WebSocketServer, connection: Any, message: str | bytes) -> None:
         event = self._ip_channel.decode(message)
         if event is None:
             return
-        await self.handle_ip_event(connection, event)
-        await self._ip_channel.broadcast(event)
+
+        if isinstance(event, HandEvent):
+            transitions = await self._coordinator.handle_hand_event(event)
+            for transition in transitions:
+                await self._ip_channel.broadcast(event)
+        elif isinstance(event, PersonEvent):
+            transitions = await self._coordinator.handle_person_event(event)
+            for transition in transitions:
+                await self._ip_channel.broadcast(event)
 
     async def _on_ip_ai_video_message(self, server: WebSocketServer, connection: Any, message: str | bytes) -> None:
         if isinstance(message, bytes):
-            await self.ws_server.broadcast(message, path="/ws/ai-3d-video")
+            await self._ws_server.broadcast(message, path="/ws/ai-3d-video")
 
     async def _on_ip_roi_message(self, server: WebSocketServer, connection: Any, message: str | bytes) -> None:
         if isinstance(message, bytes):
-            await self.ws_server.broadcast(message, path="/ws/ai-3d-roi")
+            await self._ws_server.broadcast(message, path="/ws/ai-3d-roi")
 
     async def _on_ai_3d_roi_message(self, server: WebSocketServer, connection: Any, message: str | bytes) -> None:
         if isinstance(message, bytes):
-            await self.ws_server.broadcast(message, path="/ws/ai-3d-roi")
+            await self._ws_server.broadcast(message, path="/ws/ai-3d-roi")
 
     async def _on_ai_3d_video_message(self, server: WebSocketServer, connection: Any, message: str | bytes) -> None:
         return
@@ -105,200 +232,39 @@ class WitchRuntime:
         event = self._ai3d_channel.decode(message)
         if event is None:
             return
-        await self.handle_unreal(connection, event)
 
-    def state(self) -> str:
-        return self.state_machine.state
+        if isinstance(event, EventDoneEvent):
+            await self._coordinator.handle_event_done()
 
-    def latest_tts_audio(self) -> tuple[bytes, int | None] | None:
-        if self._latest_tts_audio is None:
-            return None
-        return self._latest_tts_audio, self._latest_tts_sample_rate
+    async def _on_ai_3d_audio_message(self, server: WebSocketServer, connection: Any, message: str | bytes) -> None:
+        return
 
-    def force_state(self, state: str) -> str:
-        self.state_machine.force_state(state)
-        self._apply_state_effects_from_current_loop()
-        return self.state_machine.state
-
-    def trigger_state_event(self, event: str) -> str:
-        if not event:
-            return self.state_machine.state
-        self.state_machine.advance(event)
-        self._apply_state_effects_from_current_loop()
-        return self.state_machine.state
-
-    def _apply_state_effects_from_current_loop(self) -> None:
-        if self.state_machine.state not in SCENES_THAT_START_ANALYSIS:
-            self._analysis_stage = "idle"
-            return
-        if self._hand_data:
-            self._start_analysis_from_current_loop()
-
-    def _start_analysis_from_current_loop(self) -> None:
-        if self._analysis_task is not None and not self._analysis_task.done():
-            return
-        if not self._hand_data:
-            return
-        self._analysis_stage = "queued"
-        try:
-            loop = asyncio.get_running_loop()
-        except RuntimeError:
-            return
-        self._pending_fortune_event = None
-        self._analysis_task = loop.create_task(self._run_analysis())
-
-    async def handle_ip_event(self, connection: Any, event: WitchEvent) -> None:
-        handler = self._ip_handlers.get(type(event))
-        if handler is None:
-            return
-        await handler(connection, event)
-
-    async def _handle_ip_hand_event(self, connection: Any, event: HandEvent) -> None:
-        self._hand_data = {
-            "trigger": event.trigger.value,
-            "hand": event.hand.value if event.hand else None,
-            "lengths": event.lengths,
-            "vector": event.vector,
-        }
-
-        transitions = self.state_machine.hand_event(event)
-        for transition in transitions:
-            await self._broadcast_transition(transition)
-
-        await self._apply_transition_effects(transitions)
-
-    async def _handle_ip_person_event(self, connection: Any, event: PersonEvent) -> None:
-        transitions = self.state_machine.person_event(event)
-        for transition in transitions:
-            await self._broadcast_transition(transition)
-
-        await self._apply_transition_effects(transitions)
-
-    async def handle_unreal(self, connection: Any, message: WitchEvent):
-        handler = self._unreal_handlers.get(type(message))
-        if handler is None:
-            return
-        await handler(connection, message)
-
-    async def _handle_unreal_event_done(self, connection: Any, message: EventDoneEvent) -> None:
-        previous_state = self.state_machine.state
-        transitions = self.state_machine.event_done(previous_state)
-        if not transitions:
-            logger.debug("Ignoring event_done while state is %s", previous_state)
-            return
-
-        for transition in transitions:
-            await self._broadcast_transition(transition)
-
-        await self._apply_transition_effects(transitions)
-
-    async def _apply_transition_effects(self, transitions: list[StateChange] | None = None) -> None:
-        if (
-            self._reached_state(transitions, SCENES_THAT_DELIVER_FORTUNE)
-            and await self._broadcast_pending_fortune_if_ready()
-        ):
-            return
-        if self._reached_state(transitions, SCENES_THAT_START_ANALYSIS):
-            await self._start_analysis()
-
-    def _reached_state(self, transitions: list[StateChange] | None, states: frozenset[str]) -> bool:
-        if transitions is None:
-            return self.state_machine.state in states
-        return any(transition.dest in states for transition in transitions)
-
-    async def _start_analysis(self) -> None:
-        if self._analysis_task is not None and not self._analysis_task.done():
-            return
-        if not self._hand_data:
-            return
-        self._pending_fortune_event = None
-        self._analysis_stage = "queued"
-        self._analysis_task = asyncio.create_task(self._run_analysis())
-
-    async def _run_analysis(self):
-        hand_data = copy.deepcopy(self._hand_data or {})
-        try:
-            self._analysis_stage = "llm"
-            await self._broadcast_event_to_unreal(
-                AnalysisStartedEvent(
-                    scene=Scene(self.state_machine.state),
-                ),
-            )
-
-            fortune = await self.llm.generate_fortune(hand_data)
-            logger.info("Analysis result: chars=%d", len(fortune))
-
-            self._analysis_stage = "tts"
-            tts_result = await self.tts.synthesize(fortune)
-            audio, sample_rate = tts_result if tts_result is not None else (None, None)
-            self._latest_tts_audio = audio
-            self._latest_tts_sample_rate = sample_rate
-            self._pending_fortune_event = FortuneEvent(
-                text=fortune,
-                sample_rate=sample_rate,
-            )
-            await self._broadcast_event_to_unreal(self._pending_fortune_event)
-
-            self._analysis_stage = "done"
-
-        except httpx.HTTPError as e:
-            self._analysis_stage = "error"
-            logger.error("LLM/TTS request failed: %s", e)
-            await self._broadcast_event_to_unreal(
-                ErrorEvent(
-                    message=f"Analysis failed: {e}",
-                ),
-            )
-        except Exception as e:
-            self._analysis_stage = "error"
-            logger.exception("Analysis error")
-            await self._broadcast_event_to_unreal(
-                ErrorEvent(
-                    message=f"Unexpected error: {e}",
-                ),
-            )
-
-    async def _broadcast_transition(self, transition: StateChange) -> None:
-        await self._broadcast_event_to_unreal(
-            SceneCommandEvent(
-                scene=Scene(transition.dest),
-                animation=transition.dest,
-                effects={},
-                trigger=transition.trigger,
-            ),
-        )
-
-    async def _broadcast_pending_fortune_if_ready(self) -> bool:
-        if (
-            self.state_machine.state not in SCENES_THAT_DELIVER_FORTUNE
-            or self._pending_fortune_event is None
-        ):
-            return False
-        await self._broadcast_event_to_unreal(self._pending_fortune_event)
-        self._pending_fortune_event = None
-        return True
-
-    async def _broadcast_event_to_unreal(self, event: WitchEvent) -> None:
+    async def _on_analysis_event(
+        self,
+        event: AnalysisStartedEvent | FortuneEvent | ErrorEvent,
+    ) -> None:
         await self._ai3d_channel.broadcast(event)
 
-    async def play_latest_tts_to_virtual_cable(self) -> bool:
-        if self._latest_tts_audio is None:
-            print("No latest TTS audio available")
-            return False
+    @property
+    def state(self) -> str:
+        return self._coordinator.state
 
-        audio_bridge_host = os.getenv("WITCH_AUDIO_BRIDGE_HOST", "host.containers.internal")
-        audio_bridge_port = os.getenv("WITCH_AUDIO_BRIDGE_PORT", "8765")
-        audio_bridge_url = f"http://{audio_bridge_host}:{audio_bridge_port}/play"
+    @property
+    def analysis_stage(self) -> str:
+        return self._speech_pipeline.stage
 
-        print("Sending TTS audio to:", audio_bridge_url)
+    def latest_tts_audio(self) -> tuple[bytes, int | None] | None:
+        return None
 
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            files = {
-                "file": ("tts.wav", self._latest_tts_audio, "audio/wav"),
-            }
+    def force_state(self, state: str) -> str:
+        return self._coordinator.force_state_sync(state)
 
-            response = await client.post(audio_bridge_url, files=files)
-            print("Audio bridge response:", response.status_code, response.text)
-            response.raise_for_status()
+    def trigger_state_event(self, event: str) -> str:
+        return self._coordinator.trigger_event_sync(event)
 
-        return True
+    def _trigger_apply_effects(self) -> None:
+        try:
+            loop = asyncio.get_running_loop()
+            loop.create_task(self._coordinator._apply_state_effects())
+        except RuntimeError:
+            pass

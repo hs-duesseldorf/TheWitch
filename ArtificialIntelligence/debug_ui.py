@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import base64
 import logging
 import os
 import threading
@@ -61,22 +60,19 @@ def get_ui():
 
 @app.get("/api/state")
 def get_state():
-    return {"state": get_runtime().runtime.state()}
+    return {"state": get_runtime().runtime.state}
 
 
 @app.get("/api/state-machine-graph")
 def get_state_machine_graph():
-    global state_machine_graph
-    if state_machine_graph is not None:
-        return {"graph": state_machine_graph}
-
     sm = get_runtime().state_machine.machine
+    current_state = get_runtime().runtime.state
     try:
-        state_machine_graph = sm.get_graph().source.replace("direction LR", "direction TB")
+        graph = sm.get_graph(current_state).source.replace("direction LR", "direction TB")
     except Exception as e:
         logger.warning("Failed to generate state machine graph: %s", e)
-        state_machine_graph = "graph TD\n  error[Graph unavailable]"
-    return {"graph": state_machine_graph}
+        graph = "graph TD\n  error[Graph unavailable]"
+    return {"graph": graph}
 
 
 @app.get("/api/config")
@@ -85,29 +81,21 @@ def get_config():
     return {"ws_port": ws_port}
 
 
-@app.get("/api/tts-audio")
-def get_tts_audio():
-    latest = get_runtime().runtime.latest_tts_audio()
-    if latest is None:
-        return {"audio": None, "sample_rate": None}
-
-    audio, sample_rate = latest
-    return {
-        "audio": base64.b64encode(audio).decode(),
-        "sample_rate": sample_rate,
-    }
-    
-@app.post("/api/tts/play-virtual-cable")
-async def play_tts_virtual_cable():
-    print("Play virtual cable button pressed")
-    played = await get_runtime().runtime.play_latest_tts_to_virtual_cable()
-    print("Play virtual cable result:", played)
-    return {"played": played}
-
-
 @app.post("/api/reset")
 def reset_state():
     result = get_runtime().runtime.trigger_state_event("reset")
+    return {"state": result}
+
+
+@app.post("/api/trigger/{event}")
+def trigger_event(event: str):
+    result = get_runtime().runtime.trigger_state_event(event)
+    return {"state": result}
+
+
+@app.post("/api/state/{state}")
+def set_state(state: str):
+    result = get_runtime().runtime.force_state(state)
     return {"state": result}
 
 
