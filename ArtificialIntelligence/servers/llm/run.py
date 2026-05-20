@@ -20,9 +20,6 @@ def run() -> None:
         if key not in os.environ:
             sys.exit(f"ERROR: {key} required")
 
-    version = os.environ.get("LLAMA_VERSION", "9222")
-    tag = f"b{version}"
-
     llama_dir = SERVER_DIR / "llama-cpp"
     llama_server = llama_dir / "llama-server"
     models_dir = SERVER_DIR / "models"
@@ -38,12 +35,14 @@ def run() -> None:
     })
 
     if not llama_server.exists():
+        version = os.environ.get("LLAMA_VERSION", "9222")
+        tag = f"b{version}"
         llama_dir.mkdir(parents=True, exist_ok=True)
         print(f"[run_llm] Downloading llama.cpp {tag}...", flush=True)
         archive = llama_dir / f"llama-{tag}-bin-ubuntu-vulkan-x64.tar.gz"
         url = f"https://github.com/ggml-org/llama.cpp/releases/download/{tag}/{archive.name}"
         urllib.request.urlretrieve(url, archive)
-        subprocess.run(["tar", "-xzf", str(archive), "-C", str(llama_dir)], check=True)
+        subprocess.run(["tar", "-xzf", str(archive), "-C", str(llama_dir), "--strip-components=1"], check=True)
         subprocess.check_call(["chmod", "+x", str(llama_server)])
 
     repo, file = os.environ["WITCH_LLM_HF"].split(":", 1)

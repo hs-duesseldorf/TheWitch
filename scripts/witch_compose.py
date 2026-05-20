@@ -104,38 +104,6 @@ def ensure_service(service: Service, python_bin: str) -> None:
     stamp.write_text(str(time.time()), encoding="utf-8")
 
 
-def ensure_llm(service: Service, python_bin: str) -> None:
-    assert service.venv is not None
-    assert service.requirements is not None
-    python = venv_python(service.venv)
-    stamp = service.venv / ".requirements.stamp"
-    if stamp.exists() and python.exists():
-        req_mtime = service.requirements.stat().st_mtime
-        if float(stamp.read_text(encoding="utf-8") or 0) >= req_mtime:
-            return
-    log(f"[{service.name}] creating venv")
-    subprocess.check_call([python_bin, "-m", "venv", str(service.venv)], cwd=ROOT)
-    log(f"[{service.name}] installing requirements")
-    subprocess.check_call([str(python), "-m", "pip", "install", "-U", "pip"], cwd=ROOT)
-    subprocess.check_call([str(python), "-m", "pip", "install", "-r", str(service.requirements)], cwd=ROOT)
-    stamp.write_text(str(time.time()), encoding="utf-8")
-
-    llama_dir = service.venv / "llama-cpp"
-    llama_server = llama_dir / "llama-server"
-    if llama_server.exists():
-        return
-    log("[llm] downloading llama.cpp")
-    env = load_env_file(ENV_FILE)
-    version = env.get("LLAMA_VERSION", "9222")
-    tag = f"b{version}"
-    archive = llama_dir / f"llama-{tag}-bin-ubuntu-vulkan-x64.tar.gz"
-    url = f"https://github.com/ggml-org/llama.cpp/releases/download/{tag}/{archive.name}"
-    llama_dir.mkdir(parents=True, exist_ok=True)
-    subprocess.check_call(["curl", "-fL", "--retry", "3", "--retry-delay", "2", "-o", str(archive), url])
-    subprocess.check_call(["tar", "-xzf", str(archive), "-C", str(llama_dir)])
-    subprocess.check_call(["chmod", "+x", str(llama_server)])
-
-
 def pump_output(name: str, process: subprocess.Popen[str]) -> None:
     assert process.stdout is not None
     for line in process.stdout:
@@ -214,15 +182,11 @@ def main() -> int:
 
     if args.build:
         for service in services:
-            if service.name == "llm":
-                ensure_llm(service, python_bin)
-            elif service.venv is not None:
+            if service.venv is not None:
                 ensure_service(service, python_bin)
     else:
         for service in services:
-            if service.name == "llm":
-                ensure_llm(service, python_bin)
-            elif service.venv is not None:
+            if service.venv is not None:
                 if not (service.venv / ".requirements.stamp").exists():
                     ensure_service(service, python_bin)
 
