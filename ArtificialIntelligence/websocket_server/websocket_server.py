@@ -69,10 +69,10 @@ class WebSocketServer:
             return
         clients, callback = route
         clients.add(websocket)
-        logger.debug("Client connected on %s. Total: %s", request_path, len(clients))
+        logger.info("Client connected on %s. Total: %s", request_path, len(clients))
         try:
             async for message in websocket:
-                if callback:
+                if callback is not None:
                     await callback(self, websocket, message)
         except ConnectionClosedOK:
             logger.debug("WebSocket closed on %s", request_path)

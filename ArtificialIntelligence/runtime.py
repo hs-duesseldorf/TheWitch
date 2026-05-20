@@ -3,11 +3,13 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
-from typing import Any, Awaitable, Callable
+from typing import Any
 
+from .clients.llm_client import LLMClient
+from .clients.tts_client import TTSClient
 from .hand_analyzer import build_prompt
-from .speech_pipeline import SpeechPipeline
 from .message_channels import EventChannel
+from .speech_pipeline import SpeechPipeline
 from .state_machine.state_machine import (
     SCENES_THAT_DELIVER_FORTUNE,
     SCENES_THAT_START_ANALYSIS,
@@ -16,6 +18,7 @@ from .state_machine.state_machine import (
 )
 from .websocket_server.websocket_server import WebSocketServer
 from shared.events import (
+    AnalysisResultEvent,
     AnalysisStartedEvent,
     ErrorEvent,
     EventDoneEvent,
@@ -26,127 +29,7 @@ from shared.events import (
     WitchEvent,
 )
 
-logger = logging.getLogger(__name__)
-
-
-class StateCoordinator:
-    def __init__(
-        self,
-        state_machine: WitchStateMachine,
-        analysis_engine: SpeechPipeline,
-        broadcast_to_unreal: Callable[[WitchEvent], Awaitable[None]],
-    ):
-        self._state_machine = state_machine
-        self._analysis_engine = analysis_engine
-        self._broadcast_to_unreal = broadcast_to_unreal
-        self._hand_event: HandEvent | None = None
-
-        self._setup_handlers()
-
-    def _setup_handlers(self) -> None:
-        self._state_machine.register_transition_handler("ip_scan_complete", self._on_scan_complete)
-        self._state_machine.register_transition_handler("ip_hand_right", self._on_hand_scan_ready)
-
-    async def _on_scan_complete(self, change: StateChange) -> None:
-        pass
-
-    async def _on_hand_scan_ready(self, change: StateChange) -> None:
-        pass
-
-    @property
-    def state(self) -> str:
-        return self._state_machine.state
-
-    def get_hand_data(self) -> HandEvent | None:
-        return self._hand_event
-
-    async def handle_hand_event(self, event: HandEvent) -> list[StateChange]:
-        self._hand_event = event
-
-        transitions = self._state_machine.hand_event(event)
-        await self._apply_transition_effects(transitions)
-        return transitions
-
-    async def handle_person_event(self, event: PersonEvent) -> list[StateChange]:
-        transitions = self._state_machine.person_event(event)
-        await self._apply_transition_effects(transitions)
-        return transitions
-
-    async def handle_event_done(self) -> list[StateChange]:
-        previous_state = self._state_machine.state
-        transitions = self._state_machine.event_done(previous_state)
-        if not transitions:
-            logger.debug("Ignoring event_done while state is %s", previous_state)
-            return []
-
-        await self._apply_transition_effects(transitions)
-        return transitions
-
-    async def force_state(self, state: str) -> str:
-        self._state_machine.force_state(state)
-        await self._apply_state_effects()
-        return self._state_machine.state
-
-    def force_state_sync(self, state: str) -> str:
-        self._state_machine.force_state(state)
-        return self._state_machine.state
-
-    async def trigger_event(self, event: str) -> str:
-        if not event:
-            return self._state_machine.state
-        self._state_machine.advance(event)
-        await self._apply_state_effects()
-        return self._state_machine.state
-
-    def trigger_event_sync(self, event: str) -> str:
-        if not event:
-            return self._state_machine.state
-        self._state_machine.advance(event)
-        return self._state_machine.state
-
-    async def _apply_state_effects(self) -> None:
-        if self._state_machine.state not in SCENES_THAT_START_ANALYSIS:
-            return
-        if self._hand_event:
-            await self._trigger_analysis()
-
-    async def _trigger_analysis(self) -> None:
-        if self._analysis_engine.is_running():
-            return
-        prompt = build_prompt(self._hand_event)
-        await self._analysis_engine.run_analysis(
-            prompt,
-            Scene(self._state_machine.state),
-        )
-
-    async def _apply_transition_effects(self, transitions: list[StateChange] | None = None) -> None:
-        if not transitions:
-            if self._state_machine.state in SCENES_THAT_START_ANALYSIS:
-                await self._trigger_analysis()
-            return
-
-        for change in transitions:
-            await self._broadcast_transition(change)
-
-            for handler in self._state_machine.get_transition_handlers(change.trigger):
-                await handler(change)
-
-        if self._reached_state(transitions, SCENES_THAT_START_ANALYSIS):
-            await self._trigger_analysis()
-
-    def _reached_state(self, transitions: list[StateChange], states: frozenset[str]) -> bool:
-        return any(transition.dest in states for transition in transitions)
-
-    async def _broadcast_transition(self, transition: StateChange) -> None:
-        await self._broadcast_to_unreal(
-            SceneCommandEvent(
-                scene=Scene(transition.dest),
-                animation=transition.dest,
-                effects={},
-                trigger=transition.trigger,
-            ),
-        )
-
+logger = logging.getLogger("ai")
 
 class WitchRuntime:
     def __init__(
@@ -158,6 +41,9 @@ class WitchRuntime:
         tts: Any,
     ):
         self._ws_server = ws_server
+        self._state_machine = state_machine
+        self._hand_event: HandEvent | None = None
+        self._pending_scene_changes: list[StateChange] = []
 
         self._ip_channel = EventChannel(
             ws_server=ws_server,
@@ -177,27 +63,19 @@ class WitchRuntime:
             tts=tts,
             broadcast_callback=self._on_analysis_event,
             audio_callback=self._on_analysis_audio,
-        )
-
-        self._coordinator = StateCoordinator(
-            state_machine=state_machine,
-            analysis_engine=self._speech_pipeline,
-            broadcast_to_unreal=self._broadcast_event_to_unreal,
+            done_callback=self._on_analysis_done,
         )
 
         self._register_routes()
-
-    async def _broadcast_event_to_unreal(self, event: WitchEvent) -> None:
-        await self._ai3d_channel.broadcast(event)
 
     def _register_routes(self) -> None:
         self._ws_server.add_route("/ws/ip-ai", self._on_ip_ai_message)
         self._ws_server.add_route("/ws/ip-ai-video", self._on_ip_ai_video_message)
         self._ws_server.add_route("/ws/ip-roi", self._on_ip_roi_message)
         self._ws_server.add_route("/ws/ai-3d", self._on_ai_3d_message)
-        self._ws_server.add_route("/ws/ai-3d-audio", self._on_ai_3d_audio_message)
-        self._ws_server.add_route("/ws/ai-3d-video", self._on_ai_3d_video_message)
-        self._ws_server.add_route("/ws/ai-3d-roi", self._on_ai_3d_roi_message)
+        self._ws_server.add_route("/ws/ai-3d-audio", None)
+        self._ws_server.add_route("/ws/ai-3d-video", None)
+        self._ws_server.add_route("/ws/ai-3d-roi", None)
 
     async def _on_ip_ai_message(self, server: WebSocketServer, connection: Any, message: str | bytes) -> None:
         event = self._ip_channel.decode(message)
@@ -205,13 +83,46 @@ class WitchRuntime:
             return
 
         if isinstance(event, HandEvent):
-            transitions = await self._coordinator.handle_hand_event(event)
-            for transition in transitions:
-                await self._ip_channel.broadcast(event)
+            logger.info("Broadcasting hand event: %s", event.trigger)
+            await self._handle_hand_event(event)
+            await self._ip_channel.broadcast(event)
         elif isinstance(event, PersonEvent):
-            transitions = await self._coordinator.handle_person_event(event)
-            for transition in transitions:
-                await self._ip_channel.broadcast(event)
+            changes = self._state_machine.person_event(event)
+            for change in changes:
+                await self._ai3d_channel.broadcast(
+                    SceneCommandEvent(
+                        scene=Scene(change.dest),
+                        animation=change.dest,
+                        effects={},
+                        trigger=change.trigger,
+                    ),
+                )
+            await self._ip_channel.broadcast(event)
+
+    async def _handle_hand_event(self, event: HandEvent) -> None:
+        self._hand_event = event
+        changes = self._state_machine.hand_event(event)
+        for change in changes:
+            await self._ai3d_channel.broadcast(
+                SceneCommandEvent(
+                    scene=Scene(change.dest),
+                    animation=change.dest,
+                    effects={},
+                    trigger=change.trigger,
+                ),
+            )
+        if self._state_machine.state in SCENES_THAT_START_ANALYSIS:
+            await self._trigger_analysis(changes)
+
+    async def _trigger_analysis(self, pending_changes: list[StateChange]) -> None:
+        if self._speech_pipeline.is_running():
+            return
+        self._pending_scene_changes = pending_changes
+        prompt = build_prompt(self._hand_event)
+        await self._speech_pipeline.run_analysis(
+            prompt,
+            Scene(self._state_machine.state),
+        )
 
     async def _on_ip_ai_video_message(self, server: WebSocketServer, connection: Any, message: str | bytes) -> None:
         if isinstance(message, bytes):
@@ -221,23 +132,24 @@ class WitchRuntime:
         if isinstance(message, bytes):
             await self._ws_server.broadcast(message, path="/ws/ai-3d-roi")
 
-    async def _on_ai_3d_roi_message(self, server: WebSocketServer, connection: Any, message: str | bytes) -> None:
-        if isinstance(message, bytes):
-            await self._ws_server.broadcast(message, path="/ws/ai-3d-roi")
-
-    async def _on_ai_3d_video_message(self, server: WebSocketServer, connection: Any, message: str | bytes) -> None:
-        return
-
     async def _on_ai_3d_message(self, server: WebSocketServer, connection: Any, message: str | bytes) -> None:
         event = self._ai3d_channel.decode(message)
         if event is None:
             return
 
         if isinstance(event, EventDoneEvent):
-            await self._coordinator.handle_event_done()
-
-    async def _on_ai_3d_audio_message(self, server: WebSocketServer, connection: Any, message: str | bytes) -> None:
-        return
+            changes = self._state_machine.event_done(self._state_machine.state)
+            for change in changes:
+                await self._ai3d_channel.broadcast(
+                    SceneCommandEvent(
+                        scene=Scene(change.dest),
+                        animation=change.dest,
+                        effects={},
+                        trigger=change.trigger,
+                    ),
+                )
+            if self._state_machine.state in SCENES_THAT_DELIVER_FORTUNE:
+                await self._trigger_analysis([])
 
     async def _on_analysis_event(
         self,
@@ -245,7 +157,24 @@ class WitchRuntime:
     ) -> None:
         await self._ai3d_channel.broadcast(event)
 
+    async def _on_analysis_done(self, text: str) -> None:
+        await self._ai3d_channel.broadcast(
+            AnalysisResultEvent(text=text),
+        )
+
     async def _on_analysis_audio(self, audio: bytes) -> None:
+        if self._pending_scene_changes:
+            for change in self._pending_scene_changes:
+                await self._ai3d_channel.broadcast(
+                    SceneCommandEvent(
+                        scene=Scene(change.dest),
+                        animation=change.dest,
+                        effects={},
+                        trigger=change.trigger,
+                    ),
+                )
+            self._pending_scene_changes = []
+
         logger.debug(
             "Audio broadcast: %d bytes, clients: %d",
             len(audio),
@@ -255,24 +184,37 @@ class WitchRuntime:
 
     @property
     def state(self) -> str:
-        return self._coordinator.state
+        return self._state_machine.state
 
     @property
     def analysis_stage(self) -> str:
         return self._speech_pipeline.stage
 
-    def latest_tts_audio(self) -> tuple[bytes, int | None] | None:
-        return None
-
     def force_state(self, state: str) -> str:
-        return self._coordinator.force_state_sync(state)
-
-    def trigger_state_event(self, event: str) -> str:
-        return self._coordinator.trigger_event_sync(event)
-
-    def _trigger_apply_effects(self) -> None:
+        self._state_machine.force_state(state)
+        self._hand_event = None
+        self._pending_scene_changes = []
         try:
             loop = asyncio.get_running_loop()
-            loop.create_task(self._coordinator._apply_state_effects())
+            loop.create_task(self._speech_pipeline.cancel())
         except RuntimeError:
             pass
+        return self._state_machine.state
+
+    def trigger_state_event(self, event: str) -> str:
+        if event:
+            change = self._state_machine.advance(event)
+            logger.info("trigger_state_event: %s -> %s (change=%s)", self._state_machine.state, event, change)
+            if event == "reset" and change is None:
+                self._state_machine.force_state("scene_0_idle")
+                logger.info("Reset: force_state fallback used")
+            if event == "reset":
+                self._hand_event = None
+                self._pending_scene_changes = []
+                logger.info("Reset: cancelling speech pipeline")
+                try:
+                    loop = asyncio.get_running_loop()
+                    loop.create_task(self._speech_pipeline.cancel())
+                except RuntimeError:
+                    pass
+        return self._state_machine.state

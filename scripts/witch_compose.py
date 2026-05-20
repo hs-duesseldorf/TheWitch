@@ -191,7 +191,8 @@ def main() -> int:
                     ensure_service(service, python_bin)
 
     env = merged_env()
-    processes: list[subprocess.Popen[str]] = []
+    processes: list[tuple[Service, subprocess.Popen[str]]] = []
+    exit_code = 0
     try:
         for index, service in enumerate(services, start=1):
             cmd = list(service.command)
@@ -208,23 +209,25 @@ def main() -> int:
                 text=True,
                 bufsize=1,
             )
-            processes.append(process)
+            processes.append((service, process))
             threading.Thread(target=pump_output, args=(service.name, process), daemon=True).start()
 
         while processes:
-            for process in processes:
+            for service, process in list(processes):
                 code = process.poll()
                 if code is not None:
-                    terminate(processes)
-                    return code
+                    processes.remove((service, process))
+                    log(f"[{service.name}] exited with code {code}")
+                    if code and exit_code == 0:
+                        exit_code = code
             time.sleep(0.25)
     except KeyboardInterrupt:
         log("\n[+] stopping services")
         return 130
     finally:
-        terminate(processes)
+        terminate(process for _, process in processes)
 
-    return 0
+    return exit_code
 
 
 if __name__ == "__main__":

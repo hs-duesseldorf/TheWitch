@@ -218,9 +218,6 @@
             const $ = (id) => document.getElementById(id);
             let currentState = "";
             let graphRenderId = 0;
-            let audioContext;
-            let audioQueue = [];
-            let isAudioPlaying = false;
             mermaid.initialize({
                 startOnLoad: false,
                 theme: "dark",
@@ -240,11 +237,6 @@
                 const wsBase = `${location.protocol === "https:" ? "wss" : "ws"}://${location.hostname}:${ws_port}`;
                 stream("camera", `${wsBase}/ws/ai-3d-video`);
                 stream("roi", `${wsBase}/ws/ai-3d-roi`);
-                socket(
-                    `${wsBase}/ws/ai-3d-audio`,
-                    (data) => playAudio(data),
-                    true,
-                );
                 socket(`${wsBase}/ws/ip-ai`, (ev) => {
                     show(ev.origin, ev);
                     updateState();
@@ -361,50 +353,6 @@
                     },
                     true,
                 );
-            }
-
-            async function playAudio(data) {
-                audioQueue.push(data);
-                processAudioQueue();
-            }
-
-            async function processAudioQueue() {
-                if (isAudioPlaying || audioQueue.length === 0) return;
-
-                if (!audioContext) audioContext = new AudioContext();
-                if (audioContext.state === "suspended") {
-                    await audioContext.resume();
-                }
-
-                try {
-                    isAudioPlaying = true;
-                    const data = audioQueue.shift();
-                    const pcm = new Int16Array(data);
-                    if (pcm.length === 0) throw new Error("empty audio frame");
-
-                    const buffer = audioContext.createBuffer(
-                        1,
-                        pcm.length,
-                        24000,
-                    );
-                    const channel = buffer.getChannelData(0);
-                    for (let i = 0; i < pcm.length; i++) {
-                        channel[i] = pcm[i] / 32768;
-                    }
-
-                    const source = audioContext.createBufferSource();
-                    source.buffer = buffer;
-                    source.connect(audioContext.destination);
-                    source.onended = () => {
-                        isAudioPlaying = false;
-                        processAudioQueue();
-                    };
-                    source.start(0);
-                } catch (error) {
-                    console.warn("Audio playback failed:", error);
-                    isAudioPlaying = false;
-                    processAudioQueue();
-                }
             }
 
             let graphPending = false;

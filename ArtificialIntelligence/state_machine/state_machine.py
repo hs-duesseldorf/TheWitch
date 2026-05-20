@@ -71,6 +71,9 @@ TRANSITIONS = [
     _transition("return_done", RETURN, SMOKE_END),
     _transition("end_done", [SMOKE_END, VANISH_END], END),
     _transition("reset", ANY_SOURCE, IDLE),
+    _transition("reset", SCAN_COMPLETE, IDLE),
+    _transition("reset", SCANNING, IDLE),
+    _transition("reset", HAND_CORRECTION, IDLE),
 ]
 
 TRANSITION_IDS = list(dict.fromkeys(item["trigger"] for item in TRANSITIONS))
@@ -136,7 +139,7 @@ HAND_TRIGGER_BY_STATE: dict[str, dict[str, str]] = {
 }
 
 
-SCENES_THAT_START_ANALYSIS = frozenset({SCAN_COMPLETE, SHOT_1_VISUAL})
+SCENES_THAT_START_ANALYSIS = frozenset({SHOT_1_VISUAL})
 SCENES_THAT_DELIVER_FORTUNE = frozenset({SHOT_1_VISUAL})
 
 

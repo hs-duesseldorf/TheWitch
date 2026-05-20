@@ -13,9 +13,8 @@ import soundfile as sf
 
 try:
     import sounddevice as sd
-
     HAS_SOUNDDEVICE = True
-except (ImportError, OSError):
+except Exception:
     HAS_SOUNDDEVICE = False
     sd = None
 
@@ -69,7 +68,7 @@ class StreamingAudioPlayer:
 
     def start(self) -> None:
         if not HAS_SOUNDDEVICE:
-            logger.warning("sounddevice not available")
+            logger.warning("sounddevice import failed")
             return
         if self._streams:
             return
@@ -159,6 +158,9 @@ class StreamingAudioPlayer:
         self._streams.clear()
 
 
+AnalysisDoneCallbacks = Callable[[str], Awaitable[None]]
+
+
 class SpeechPipeline:
     def __init__(
         self,
@@ -166,11 +168,13 @@ class SpeechPipeline:
         tts: Any,
         broadcast_callback: AnalysisCallbacks,
         audio_callback: AudioCallbacks | None = None,
+        done_callback: AnalysisDoneCallbacks | None = None,
     ):
         self._llm = llm
         self._tts = tts
         self._broadcast_callback = broadcast_callback
         self._audio_callback = audio_callback
+        self._done_callback = done_callback
         self._current_task: asyncio.Task | None = None
         self._stage = "idle"
 
@@ -195,56 +199,66 @@ class SpeechPipeline:
         self._current_task = loop.create_task(self._execute(prompt, scene))
 
     async def cancel(self) -> None:
+        logger.info("cancel() called, current_task=%s", self._current_task)
         if self._current_task and not self._current_task.done():
             self._current_task.cancel()
+            logger.info("Task cancelled")
         self._stage = "idle"
+        logger.info("Stage set to idle")
+
+    INITIAL_RETRY_DELAY = 2.0
+    MAX_RETRY_DELAY = 60.0
 
     async def _execute(self, prompt: str, scene: Scene) -> None:
         player = StreamingAudioPlayer()
+        delay = self.INITIAL_RETRY_DELAY
 
         try:
-            self._stage = "llm"
-            await self._broadcast_callback(
-                AnalysisStartedEvent(scene=scene),
-            )
+            while True:
+                try:
+                    self._stage = "llm"
+                    await self._broadcast_callback(
+                        AnalysisStartedEvent(scene=scene),
+                    )
 
-            self._stage = "tts_stream"
-            try:
-                player.start()
-                use_direct = player.is_active()
-            except Exception:
-                use_direct = False
+                    self._stage = "tts_stream"
+                    try:
+                        player.start()
+                        use_direct = player.is_active()
+                    except Exception:
+                        use_direct = False
 
-            if not use_direct:
-                logger.info("No local audio device; using websocket audio only")
+                    if not use_direct:
+                        logger.info("No local audio device; using websocket audio only")
 
-            debug_text_parts: list[str] = []
+                    debug_text_parts: list[str] = []
 
-            async def text_chunks():
-                async for chunk in self._llm.stream_fortune_chunks(prompt):
-                    debug_text_parts.append(chunk)
-                    yield chunk
+                    async def text_chunks():
+                        async for chunk in self._llm.stream_fortune_chunks(prompt):
+                            debug_text_parts.append(chunk)
+                            yield chunk
 
-            frame_count = 0
-            async for frame in self._tts.stream_synthesize(text_chunks()):
-                frame_count += 1
-                logger.debug("TTS frame %d: %d bytes", frame_count, len(frame.audio))
-                if self._audio_callback:
-                    await self._audio_callback(frame.audio)
+                    frame_count = 0
+                    async for frame in self._tts.stream_synthesize(text_chunks()):
+                        frame_count += 1
+                        logger.debug("TTS frame %d: %d bytes", frame_count, len(frame.audio))
+                        if self._audio_callback:
+                            await self._audio_callback(frame.audio)
 
-                if use_direct:
-                    player.put(frame.audio, format=frame.format)
-            logger.info(f"TTS complete: {frame_count} frames total")
+                        if use_direct:
+                            player.put(frame.audio, format=frame.format)
+                    logger.info(f"TTS complete: {frame_count} frames total")
 
-            debug_text = " ".join(part.strip() for part in debug_text_parts if part.strip())
-            logger.info("Analysis stream result: chars=%d", len(debug_text))
-            self._stage = "done"
+                    debug_text = " ".join(part.strip() for part in debug_text_parts if part.strip())
+                    logger.info("Analysis stream result: chars=%d", len(debug_text))
+                    self._stage = "done"
+                    if self._done_callback and debug_text:
+                        await self._done_callback(debug_text)
+                    return
 
-        except httpx.HTTPError as e:
-            self._stage = "error"
-            logger.error("LLM/TTS request failed: %s", e)
-        except Exception as e:
-            self._stage = "error"
-            logger.exception("Analysis error")
+                except Exception as e:
+                    logger.warning(f"Analysis failed, retrying in %ss: %s", delay, e)
+                    await asyncio.sleep(delay)
+                    delay = min(delay * 2, self.MAX_RETRY_DELAY)
         finally:
             player.stop()

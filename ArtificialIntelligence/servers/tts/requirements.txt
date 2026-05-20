@@ -1,14 +1,3 @@
-torch>=2.5.0
-vllm>=0.21.0
-vllm-omni>=0.21.0rc1
-accelerate
-diffusers
-soundfile
-scipy
-pydub
-openai-whisper
-omegaconf
-aenum
-httpx
-msgspec
+vllm==0.21.0
+vllm-omni==0.21.0rc1
 python-dotenv>=1.0.0

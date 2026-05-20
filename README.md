@@ -6,10 +6,11 @@ A digital installation featuring a virtual fortune teller that reads visitors' p
 
 ```mermaid
 flowchart LR
-    ip[ImageProcessing]
-    ai[AI<br/>ws://localhost:8081]
-    debug[Debug UI<br/>http://localhost:8080/]
-    vllm[vLLM-Omni<br/>LLM + TTS]
+    ip[ImageProcessing<br/>Camera + Hand Tracking]
+    ai[AI Service<br/>State Machine + Orchestration]
+    llm[LLM Server<br/>llama.cpp]
+    tts[TTS Server<br/>vLLM-Omni]
+    debug[Debug UI<br/>http://localhost:10030/]
     unreal[3D / Unreal]
 
     ip <-- "WebSocket /ws/ip-ai" --> ai
@@ -26,8 +27,8 @@ flowchart LR
     unreal <-- "WebSocket /ws/ai-3d-video" --> ai
     unreal <-- "WebSocket /ws/ai-3d-roi" --> ai
 
-    ai -- "HTTP /v1/chat/completions" --> vllm
-    ai -- "HTTP /v1/audio/speech/stream" --> vllm
+    ai -- "HTTP /v1/chat/completions" --> llm
+    ai -- "HTTP /v1/audio/speech/stream" --> tts
     ai -- "audio" --> speakers
 
     speakers[Speakers + VB-Cable]
@@ -35,20 +36,21 @@ flowchart LR
 
 ## Quick Start
 
-Prerequisites: Python with `venv` support, camera/sensor access on the host, and a local or remote vLLM/vLLM-Omni install for LLM and TTS.
+Prerequisites: Python with `venv` support, camera/sensor access on the host.
 
-Run the full stack:
+Run the full stack with witch-compose:
 
 ```bash
-scripts/witch-compose up
+./witch-compose up
 ```
 
-The runner creates missing venvs and updates requirements automatically.
+The orchestrator creates missing venvs and installs requirements automatically.
 
-Run selected services by naming them:
+Run selected services:
 
 ```bash
-scripts/witch-compose up ai ip
+./witch-compose up ai ip
+./witch-compose up llm tts
 ```
 
 Open the debug UI:
@@ -57,29 +59,22 @@ Open the debug UI:
 http://localhost:10030/
 ```
 
-Run selected services:
-
-```bash
-scripts/witch-compose up ai
-scripts/witch-compose up ip
-scripts/witch-compose up ai ip
-```
-
 For a split setup, run `ai` on the desktop and `ip` on the Jetson or camera machine. Set `WITCH_AI_HOST` in `.env` on the camera machine to the desktop address.
 
 ```bash
-scripts/witch-compose up ip
+./witch-compose up ip
 ```
 
 ## Services
 
-- `vllm`: external vLLM-Omni process serving LLM and TTS models
+- `llm`: llama.cpp server for LLM inference
+- `tts`: vLLM-Omni server for text-to-speech
 - `ai`: state machine, LLM/TTS orchestration, WebSocket API, debug UI
 - `ip`: camera, hand tracking, palm ROI, and seat sensor client
 
 ## Configure
 
-`.env` is the shared configuration file. Local Python loads it with `python-dotenv`; `scripts/witch-compose` also injects it into child processes.
+`.env` is the shared configuration file. Local Python loads it with `python-dotenv`; `witch-compose` also injects it into child processes.
 
 For an all-local run on one machine:
 
@@ -125,52 +120,37 @@ Audio plays automatically via sounddevice.
 
 Prerequisites:
 
-- vLLM-Omni installed locally so the `vllm` command is on `PATH`
 - Camera and sensor access configured for the host machine
 - `.env` hosts set to values reachable by the local services, usually `localhost` for an all-local run
 
 Create the venvs once:
 
-All platforms:
-
 ```bash
-scripts/witch-compose build ai ip
-```
-
-Manual Linux setup:
-
-```bash
-python3.13 -m venv ArtificialIntelligence/.venv
-ArtificialIntelligence/.venv/bin/pip install -r ArtificialIntelligence/requirements.txt
-
-python3.13 -m venv ImageProcessing/.venv
-ImageProcessing/.venv/bin/pip install -r ImageProcessing/requirements.txt
-```
-
-Windows PowerShell:
-
-```powershell
-py -3.13 -m venv ArtificialIntelligence\.venv
-ArtificialIntelligence\.venv\Scripts\pip install -r ArtificialIntelligence\requirements.txt
-
-py -3.13 -m venv ImageProcessing\.venv
-ImageProcessing\.venv\Scripts\pip install -r ImageProcessing\requirements.txt
+./witch-compose --build
 ```
 
 Start the services together:
 
 ```bash
-scripts/witch-compose up
+./witch-compose up
 ```
 
 Or start them in separate terminals:
 
 Linux:
 
-`vllm` (LLM + TTS):
+`llm`:
 
 ```bash
-scripts/run_server.sh
+source ArtificialIntelligence/servers/llm/.venv/bin/activate
+python ArtificialIntelligence/servers/llm/run.py
+```
+
+`tts`:
+
+```bash
+source ArtificialIntelligence/servers/tts/.venv/bin/activate
+python ArtificialIntelligence/servers/tts/run.py
 ```
 
 `ai`:
@@ -189,10 +169,20 @@ python -m ImageProcessing.main
 
 Windows PowerShell:
 
-`vllm` (LLM + TTS):
+`llm`:
 
 ```powershell
-bash scripts/run_server.sh
+cd ArtificialIntelligence\servers\llm
+.venv\Scripts\Activate.ps1
+python ArtificialIntelligence\servers\llm\run.py
+```
+
+`tts`:
+
+```powershell
+cd ArtificialIntelligence\servers\tts
+.venv\Scripts\Activate.ps1
+python ArtificialIntelligence\servers\tts\run.py
 ```
 
 `ai`:
@@ -208,8 +198,6 @@ python -m ArtificialIntelligence.main
 ImageProcessing\.venv\Scripts\Activate.ps1
 python -m ImageProcessing.main
 ```
-
-The `scripts/run_server.sh` script starts the local LLM and TTS model servers, and stops both child processes when interrupted.
 
 ## Seat Sensor
 
@@ -242,8 +230,9 @@ ws://<AI-machine-LAN-IP>:10031/ws/ai-3d-roi
 ## Useful Commands
 
 ```bash
-scripts/witch-compose up
-scripts/witch-compose up ai
-scripts/witch-compose up ip
-scripts/witch-compose build
+./witch-compose up
+./witch-compose up ai ip
+./witch-compose up llm tts
+./witch-compose --build
+./witch-compose kill
 ```
