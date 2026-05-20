@@ -31,6 +31,13 @@ from shared.events import (
 
 logger = logging.getLogger("ai")
 
+POST_SCAN_NO_WAIT_STATES = frozenset({
+    Scene.SCENE_3_SCAN_COMPLETE.value,
+    Scene.SCENE_4_TRANSFORMATION.value,
+    Scene.SCENE_5_INTRODUCTION.value,
+})
+
+
 class WitchRuntime:
     def __init__(
         self,
@@ -64,6 +71,7 @@ class WitchRuntime:
             broadcast_callback=self._on_analysis_event,
             audio_callback=self._on_analysis_audio,
             done_callback=self._on_analysis_done,
+            tts_seed=int(os.environ.get("WITCH_TTS_SEED", "42")),
         )
 
         self._register_routes()
@@ -102,6 +110,31 @@ class WitchRuntime:
     async def _handle_hand_event(self, event: HandEvent) -> None:
         self._hand_event = event
         changes = self._state_machine.hand_event(event)
+        await self._broadcast_scene_changes(changes)
+
+        if self._state_machine.state in POST_SCAN_NO_WAIT_STATES:
+            changes = await self._advance_post_scan_without_3d_events()
+
+        if self._state_machine.state in SCENES_THAT_START_ANALYSIS:
+            await self._trigger_analysis([])
+
+    async def _advance_post_scan_without_3d_events(self) -> list[StateChange]:
+        changes: list[StateChange] = []
+        while self._state_machine.state in POST_SCAN_NO_WAIT_STATES:
+            next_changes = self._state_machine.event_done(self._state_machine.state)
+            if not next_changes:
+                break
+            changes.extend(next_changes)
+
+        if changes:
+            logger.info(
+                "Auto-advanced post-scan flow without 3D event_done: %s",
+                " -> ".join(change.dest for change in changes),
+            )
+            await self._broadcast_scene_changes(changes)
+        return changes
+
+    async def _broadcast_scene_changes(self, changes: list[StateChange]) -> None:
         for change in changes:
             await self._ai3d_channel.broadcast(
                 SceneCommandEvent(
@@ -111,12 +144,11 @@ class WitchRuntime:
                     trigger=change.trigger,
                 ),
             )
-        if self._state_machine.state in SCENES_THAT_START_ANALYSIS:
-            await self._trigger_analysis(changes)
 
     async def _trigger_analysis(self, pending_changes: list[StateChange]) -> None:
         if self._speech_pipeline.is_running():
             return
+        self._speech_pipeline.stop_player()
         self._pending_scene_changes = pending_changes
         prompt = build_prompt(self._hand_event)
         await self._speech_pipeline.run_analysis(
@@ -139,15 +171,7 @@ class WitchRuntime:
 
         if isinstance(event, EventDoneEvent):
             changes = self._state_machine.event_done(self._state_machine.state)
-            for change in changes:
-                await self._ai3d_channel.broadcast(
-                    SceneCommandEvent(
-                        scene=Scene(change.dest),
-                        animation=change.dest,
-                        effects={},
-                        trigger=change.trigger,
-                    ),
-                )
+            await self._broadcast_scene_changes(changes)
             if self._state_machine.state in SCENES_THAT_DELIVER_FORTUNE:
                 await self._trigger_analysis([])
 
@@ -212,9 +236,5 @@ class WitchRuntime:
                 self._hand_event = None
                 self._pending_scene_changes = []
                 logger.info("Reset: cancelling speech pipeline")
-                try:
-                    loop = asyncio.get_running_loop()
-                    loop.create_task(self._speech_pipeline.cancel())
-                except RuntimeError:
-                    pass
+                self._speech_pipeline.cancel_sync()
         return self._state_machine.state

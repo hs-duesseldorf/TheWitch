@@ -38,6 +38,11 @@ class LLMClient:
 
     async def _ensure_session(self) -> aiohttp.ClientSession:
         if self._session is None or self._session.closed:
+            if self._session:
+                try:
+                    await self._session.close()
+                except Exception:
+                    pass
             self._session = aiohttp.ClientSession()
         return self._session
 
@@ -58,9 +63,10 @@ class LLMClient:
                     json={
                         "model": self.model,
                         "messages": self._messages(prompt),
-                        "temperature": 0.8,
+                        "temperature": 0.7,
                         "top_p": 0.9,
-                        "max_tokens": 512,
+                        "max_tokens": 1024,
+                        "think_disable": True,
                     },
                     timeout=aiohttp.ClientTimeout(total=60),
                 ) as resp:
@@ -114,11 +120,14 @@ class LLMClient:
                                 yield chunk
                         except Exception:
                             continue
-                logger.info("LLM stream done: elapsed=%.2fs", time.perf_counter() - started_at)
-                return
+                    logger.info("LLM stream done: elapsed=%.2fs", time.perf_counter() - started_at)
+                    return
             except Exception:
+                if attempt >= REQUEST_ATTEMPTS:
+                    logger.error("LLM stream failed after %d attempts", attempt)
+                    raise
                 logger.warning("LLM stream failed on attempt %d; retrying", attempt)
-                await asyncio.sleep(RETRY_DELAY_SECONDS * attempt)
+                await asyncio.sleep(RETRY_DELAY_SECONDS * min(attempt, 10))
 
     async def generate_fortune(self, prompt: str) -> str:
         return await self.generate(prompt)

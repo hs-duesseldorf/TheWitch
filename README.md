@@ -108,9 +108,37 @@ The AI plays TTS audio directly to VB-Cable (for Unreal) and default speakers.
 
 For Windows/Mac: download https://vb-audio.com/Cable/ and restart device
 
-For Linux:
+For Linux with PipeWire/PulseAudio compatibility, create a persistent null sink:
+
 ```bash
-pactl load-module module-null-sink sink_name=WitchVirtualCable sink_properties=device.description=WitchVirtualCable
+./scripts/setup_linux_virtual_audio.sh
+```
+
+This writes:
+
+```text
+~/.config/pipewire/pipewire-pulse.conf.d/10-witch-virtual-cable.conf
+```
+
+and loads a sink named `WitchVirtualCable` immediately. The capture source exposed by PipeWire is:
+
+```text
+WitchVirtualCable.monitor
+```
+
+Use `WitchVirtualCable.monitor` in Unreal or any other receiver that should listen to the AI voice. The AI process opens the operating system default output plus `WitchVirtualCable` when it is present, so Fedora Settings still controls the physical speaker/headphone output.
+
+Verify the setup:
+
+```bash
+pactl list short sinks | grep WitchVirtualCable
+pactl list short sources | grep WitchVirtualCable.monitor
+```
+
+If PipeWire/PulseAudio is restarted before the sink appears, restart the user service:
+
+```bash
+systemctl --user restart pipewire-pulse
 ```
 
 Audio plays automatically via sounddevice.
@@ -120,6 +148,7 @@ Audio plays automatically via sounddevice.
 
 Prerequisites:
 
+- `uv` available to create Python 3.12 venvs
 - Camera and sensor access configured for the host machine
 - `.env` hosts set to values reachable by the local services, usually `localhost` for an all-local run
 

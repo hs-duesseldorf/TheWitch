@@ -1,26 +1,30 @@
 from __future__ import annotations
 
 import asyncio
-import json
 import logging
-from collections.abc import AsyncIterable, AsyncIterator
+import wave
+from collections.abc import AsyncIterator
 from dataclasses import dataclass
-from urllib.parse import urlsplit, urlunsplit
+from urllib.parse import urljoin
 
-from websockets.asyncio.client import connect
+import aiohttp
 
 logger = logging.getLogger(__name__)
 
 DEFAULT_QWEN_SAMPLE_RATE = 24_000
-QWEN_WS_PATH = "/v1/audio/speech/stream"
+QWEN_SPEECH_PATH = "/v1/audio/speech"
+PCM_SAMPLE_WIDTH = 2
+PCM_CHUNK_SECONDS = 0.1
 DEFAULT_LANGUAGE = "German"
 DEFAULT_VOICE = "vivian"
 DEFAULT_INSTRUCTIONS = (
-    "A young female speaker, around 20 to 30 years old, speaking German with natural prosody. "
-    "Her voice has a subtle Asian accent, warm and realistic, never theatrical. "
-    "She sounds like she comes from a remote mountain region: calm, sharp-minded, slightly enigmatic. "
-    "Her delivery is witty, mysterious, composed, and quietly confident, with a hint of playful irony."
+    "A mystical fortune teller from the mountains. She speaks German with a very strong Korean accent, her voice "
+    "ancient yet youthful, carrying whispers of incense and distant valleys. Warm, calm, with quiet "
+    "wisdom and subtle mystery. Stable pitch and tone throughout."
 )
+
+REQUEST_ATTEMPTS = 5
+RETRY_DELAY_SECONDS = 1.0
 
 
 @dataclass(frozen=True)
@@ -52,79 +56,149 @@ class TTSClient:
         self.task_type = (task_type or self._task_type_from_model(self.model)).strip()
 
         configured_voice = (voice or "").strip()
-        if self.task_type == "CustomVoice" and self._looks_like_instructions(configured_voice):
+        if self.task_type == "CustomVoice" and self._looks_like_instructions(
+            configured_voice
+        ):
             self.voice = DEFAULT_VOICE
             self.instructions = (instructions or configured_voice).strip()
         else:
             self.voice = (configured_voice or DEFAULT_VOICE).strip()
             self.instructions = (instructions or DEFAULT_INSTRUCTIONS).strip()
+        self._session: aiohttp.ClientSession | None = None
+
+    async def _ensure_session(self) -> aiohttp.ClientSession:
+        if self._session is None or self._session.closed:
+            if self._session:
+                try:
+                    await self._session.close()
+                except Exception:
+                    pass
+            self._session = aiohttp.ClientSession()
+        return self._session
+
+    async def close(self) -> None:
+        if self._session and not self._session.closed:
+            await self._session.close()
 
     async def stream_synthesize(
-        self, text_chunks: AsyncIterable[str]
+        self, text: str, *, seed: int | None = None
     ) -> AsyncIterator[AudioFrame]:
-        url = self._websocket_url()
-        logger.info("Qwen WebSocket TTS stream: url=%s", url)
+        text = text.strip()
+        if not text:
+            return
 
-        async with connect(url, max_size=None) as websocket:
-            await websocket.send(json.dumps(self._session_config()))
-            producer = asyncio.create_task(self._send_text_chunks(websocket, text_chunks))
-            sample_rate = DEFAULT_QWEN_SAMPLE_RATE
-            audio_format = "pcm"
+        if len(text) < 5:
+            logger.warning("Text too short for TTS (%d chars), skipping", len(text))
+            return
 
+        url = urljoin(self.base_url + "/", QWEN_SPEECH_PATH.lstrip("/"))
+        logger.info("Qwen HTTP TTS stream: url=%s text_chars=%d", url, len(text))
+
+        attempt = 0
+        while True:
+            attempt += 1
             try:
-                async for message in websocket:
-                    if producer.done():
-                        producer.result()
-
-                    if isinstance(message, bytes):
-                        yield AudioFrame(
-                            audio=message,
-                            sample_rate=sample_rate,
-                            format=audio_format,
-                            mime_type="audio/pcm",
+                session = await self._ensure_session()
+                async with session.post(
+                    url,
+                    json=self._speech_request(text, seed=seed),
+                    timeout=aiohttp.ClientTimeout(total=None, sock_read=120),
+                ) as resp:
+                    if resp.status >= 400:
+                        body = await resp.text()
+                        raise RuntimeError(
+                            f"TTS stream failed: HTTP {resp.status}: {body}"
                         )
-                        continue
+                    async for chunk in self._pcm_chunks(resp):
+                        yield AudioFrame(
+                            audio=chunk,
+                            sample_rate=DEFAULT_QWEN_SAMPLE_RATE,
+                            format="pcm",
+                            mime_type=resp.headers.get("content-type", "audio/pcm"),
+                        )
+                    return
+            except Exception as e:
+                if attempt >= REQUEST_ATTEMPTS:
+                    logger.error("TTS stream failed after %d attempts: %s", attempt, e)
+                    raise
+                logger.warning(
+                    "TTS stream failed on attempt %d; retrying: %s", attempt, e
+                )
+                await asyncio.sleep(RETRY_DELAY_SECONDS * min(attempt, 10))
 
-                    event = json.loads(message)
-                    event_type = event.get("type")
-                    if event_type == "audio.start":
-                        sample_rate = int(event.get("sample_rate") or sample_rate)
-                        audio_format = event.get("format") or audio_format
-                    elif event_type == "session.done":
-                        break
-                    elif event_type == "error":
-                        raise RuntimeError(event.get("message") or "TTS stream failed")
-            finally:
-                await producer
-
-    def _session_config(self) -> dict[str, object]:
-        config: dict[str, object] = {
-            "type": "session.config",
+    def _speech_request(
+        self, text: str, *, seed: int | None = None
+    ) -> dict[str, object]:
+        request: dict[str, object] = {
             "model": self.model,
+            "input": text,
             "language": self.language,
             "response_format": "pcm",
             "task_type": self.task_type,
-            "stream_audio": True,
-            "split_granularity": "sentence",
+            "stream": True,
+            "speed": 1.0,
+            "temperature": 0.1,
+            "repetition_penalty": 1.2,
         }
 
         if self.task_type == "CustomVoice":
-            config["voice"] = self.voice
+            request["voice"] = self.voice
         if self.task_type in ("CustomVoice", "VoiceDesign") and self.instructions:
-            config["instructions"] = self.instructions
-        return config
+            request["instructions"] = self.instructions
+        if seed is not None:
+            request["seed"] = seed
+        return request
 
-    async def _send_text_chunks(self, websocket, text_chunks: AsyncIterable[str]) -> None:
-        async for chunk in text_chunks:
+    async def _pcm_chunks(self, resp: aiohttp.ClientResponse) -> AsyncIterator[bytes]:
+        content_type = resp.headers.get("content-type", "").lower()
+        if "wav" in content_type:
+            audio = await resp.read()
+            for chunk in self._decode_wav(audio):
+                yield chunk
+            return
+
+        min_chunk_bytes = (
+            int(DEFAULT_QWEN_SAMPLE_RATE * PCM_CHUNK_SECONDS) * PCM_SAMPLE_WIDTH
+        )
+        buffer = bytearray()
+        async for chunk in resp.content.iter_any():
             if not chunk:
                 continue
-            await websocket.send(json.dumps({"type": "input.text", "text": chunk}))
-        await websocket.send(json.dumps({"type": "input.done"}))
+            buffer.extend(chunk)
+            emit_len = (len(buffer) // min_chunk_bytes) * min_chunk_bytes
+            emit_len -= emit_len % PCM_SAMPLE_WIDTH
+            if emit_len <= 0:
+                continue
+            yield bytes(buffer[:emit_len])
+            del buffer[:emit_len]
 
-    def _websocket_url(self) -> str:
-        parsed = urlsplit(self.base_url)
-        scheme = "wss" if parsed.scheme == "https" else "ws"
-        return urlunsplit((scheme, parsed.netloc, QWEN_WS_PATH, "", ""))
+        if buffer:
+            if len(buffer) % PCM_SAMPLE_WIDTH:
+                logger.warning("Dropping trailing partial PCM sample from TTS stream")
+                buffer = buffer[:-1]
+            if buffer:
+                yield bytes(buffer)
+
+    def _decode_wav(self, audio: bytes) -> list[bytes]:
+        import io
+
+        with wave.open(io.BytesIO(audio), "rb") as wav:
+            if wav.getsampwidth() != PCM_SAMPLE_WIDTH:
+                raise RuntimeError(
+                    f"Unsupported WAV sample width: {wav.getsampwidth()}"
+                )
+            if wav.getnchannels() != 1:
+                raise RuntimeError(
+                    f"Unsupported WAV channel count: {wav.getnchannels()}"
+                )
+            if wav.getframerate() != DEFAULT_QWEN_SAMPLE_RATE:
+                raise RuntimeError(f"Unsupported WAV sample rate: {wav.getframerate()}")
+            pcm = wav.readframes(wav.getnframes())
+
+        chunk_bytes = (
+            int(DEFAULT_QWEN_SAMPLE_RATE * PCM_CHUNK_SECONDS) * PCM_SAMPLE_WIDTH
+        )
+        return [pcm[i : i + chunk_bytes] for i in range(0, len(pcm), chunk_bytes)]
 
     def _task_type_from_model(self, model: str) -> str:
         if model.endswith("-VoiceDesign"):
