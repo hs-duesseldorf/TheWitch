@@ -104,6 +104,7 @@ TRANSITIONS = [
 TRANSITION_IDS = list(dict.fromkeys(item["trigger"] for item in TRANSITIONS))
 
 ANIMATION_TRIGGER_BY_STATE = {
+    SC3_4_SCAN_DONE: "ip_scan_complete",
     SC4_TRANSFORM: "transformation_done",
     SC5_WITCH_ORIGIN_STORY: "originstory_done",
     SC6_VISUAL_IMAGE_HAND: "hand_visual_done",
@@ -191,8 +192,8 @@ HAND_TRIGGER_BY_STATE = {
     },
 }
 
-SCENES_THAT_START_ANALYSIS = frozenset({SCAN_COMPLETE, SHOT_1_VISUAL})
-SCENES_THAT_DELIVER_FORTUNE = frozenset({SHOT_1_VISUAL})
+SCENES_THAT_START_ANALYSIS = frozenset({SC3_4_SCAN_DONE, SC6_VISUAL_IMAGE_HAND})
+SCENES_THAT_DELIVER_FORTUNE = frozenset({SC6_VISUAL_IMAGE_HAND})
 
 STATE_DESCRIPTIONS = {
     IDLE: "Szene 0: Wahrsagerin reagiert nicht, Besucher betritt den Raum",
