@@ -16,8 +16,8 @@ def run() -> None:
     model = os.environ["WITCH_TTS_MODEL"]
     port = os.environ["WITCH_TTS_PORT"]
     print(f"[run_tts] Starting TTS: model={model} port={port}", flush=True)
-    python = SERVER_DIR / ".venv" / "bin" / "python"
-    os.execv(str(python), [str(python), "-m", "vllm", "serve", model,
+    python = SERVER_DIR / ".venv" / "bin" / "vllm"
+    os.execv(str(python), [str(python), "serve", model,
         "--host", "0.0.0.0",
         "--port", port,
         "--max-model-len", os.environ["TTS_MAX_MODEL_LEN"],
