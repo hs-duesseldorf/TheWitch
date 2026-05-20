@@ -31,6 +31,20 @@ TTS_VLLM_OMNI_VERSION="${TTS_VLLM_OMNI_VERSION:-0.21.0rc1}"
 children=()
 
 # ------------------------------------------------------------
+# Runtime safety limits
+# ------------------------------------------------------------
+
+export OPENBLAS_NUM_THREADS="${OPENBLAS_NUM_THREADS:-1}"
+export MKL_NUM_THREADS="${MKL_NUM_THREADS:-1}"
+export NUMEXPR_NUM_THREADS="${NUMEXPR_NUM_THREADS:-1}"
+export OMP_NUM_THREADS="${OMP_NUM_THREADS:-8}"
+export TORCH_NUM_THREADS="${TORCH_NUM_THREADS:-8}"
+export TOKENIZERS_PARALLELISM="${TOKENIZERS_PARALLELISM:-false}"
+export HF_HUB_DISABLE_SYMLINKS_WARNING="${HF_HUB_DISABLE_SYMLINKS_WARNING:-1}"
+
+LLM_THREADS="${LLM_THREADS:-8}"
+
+# ------------------------------------------------------------
 # Small helpers
 # ------------------------------------------------------------
 
@@ -46,7 +60,12 @@ die() {
 cleanup() {
     if ((${#children[@]})); then
         log "Stopping child processes..."
-        kill "${children[@]}" 2>/dev/null || true
+
+        for child in "${children[@]}"; do
+            kill -- "-$child" 2>/dev/null || true
+            kill "$child" 2>/dev/null || true
+        done
+
         wait "${children[@]}" 2>/dev/null || true
     fi
 }
@@ -106,7 +125,6 @@ install_system_packages() {
 
     local missing=()
 
-    # Packages that provide commands we actually use.
     for item in \
         "curl:curl" \
         "tar:tar" \
@@ -121,7 +139,6 @@ install_system_packages() {
         command -v "$cmd" >/dev/null 2>&1 || missing+=("$pkg")
     done
 
-    # ca-certificates is a package, not a command.
     dpkg -s ca-certificates >/dev/null 2>&1 || missing+=("ca-certificates")
 
     if ! "$PYTHON_BIN" -m venv --help >/dev/null 2>&1; then
@@ -235,15 +252,16 @@ start_llm() {
     log "  port:       $WITCH_LLM_PORT"
     log "  ctx:        $LLM_MAX_MODEL_LEN"
     log "  gpu layers: $LLM_N_GPU_LAYERS"
+    log "  threads:    $LLM_THREADS"
 
-    "$LLAMA_SERVER" \
+    setsid "$LLAMA_SERVER" \
         --model "$model_path" \
         --host 0.0.0.0 \
         --port "$WITCH_LLM_PORT" \
         --alias "$WITCH_LLM_FILE" \
         --ctx-size "$LLM_MAX_MODEL_LEN" \
         --n-gpu-layers "$LLM_N_GPU_LAYERS" \
-        --threads "$(nproc)" \
+        --threads "$LLM_THREADS" \
         --parallel 1 \
         &
 
@@ -294,14 +312,20 @@ install_tts_venv() {
 start_tts() {
     install_tts_venv
 
+    local deploy_config="$ROOT_DIR/vllm_omni/deploy/qwen3_tts.yaml"
+    if [[ ! -f "$deploy_config" ]]; then
+        deploy_config="vllm_omni/deploy/qwen3_tts.yaml"
+    fi
+
     log "Starting TTS:"
     log "  model:    $WITCH_TTS_MODEL"
     log "  port:     $WITCH_TTS_PORT"
     log "  max len:  $TTS_MAX_MODEL_LEN"
     log "  gpu util: $TTS_GPU_MEMORY_UTILIZATION"
+    log "  deploy:   $deploy_config"
 
-    "$TTS_DIR/bin/vllm" serve "$WITCH_TTS_MODEL" \
-        --deploy-config vllm_omni/deploy/qwen3_tts.yaml \
+    setsid "$TTS_DIR/bin/vllm" serve "$WITCH_TTS_MODEL" \
+        --deploy-config "$deploy_config" \
         --omni \
         --host 0.0.0.0 \
         --port "$WITCH_TTS_PORT" \

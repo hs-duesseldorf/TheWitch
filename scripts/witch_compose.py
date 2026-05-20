@@ -18,35 +18,37 @@ ROOT = Path(__file__).resolve().parents[1]
 ENV_FILE = ROOT / ".env"
 
 
-@dataclass(frozen=True)
+@dataclass
 class Service:
     name: str
-    module: str | None = None
+    command: tuple[str, ...]
     venv: Path | None = None
     requirements: Path | None = None
-    command: tuple[str, ...] | None = None
 
 
 SERVICES = {
     "ai": Service(
         name="ai",
-        module="ArtificialIntelligence.main",
+        command=("python", "-m", "ArtificialIntelligence.main"),
         venv=ROOT / "ArtificialIntelligence" / ".venv",
         requirements=ROOT / "ArtificialIntelligence" / "requirements.txt",
     ),
     "ip": Service(
         name="ip",
-        module="ImageProcessing.main",
+        command=("python", "-m", "ImageProcessing.main"),
         venv=ROOT / "ImageProcessing" / ".venv",
         requirements=ROOT / "ImageProcessing" / "requirements.txt",
     ),
-    "vllm": Service(
-        name="vllm",
-        command=("bash", str(ROOT / "scripts" / "run_server.sh")),
+    "llm": Service(
+        name="llm",
+        command=("bash", "scripts/run_server.sh", "llm"),
+    ),
+    "tts": Service(
+        name="tts",
+        command=("bash", "scripts/run_server.sh", "tts"),
     ),
 }
-
-DEFAULT_SERVICES = ("vllm", "ai", "ip")
+DEFAULT_SERVICES = ("llm", "ai", "ip", "tts")
 
 
 def log(message: str) -> None:
@@ -61,16 +63,12 @@ def load_env_file(path: Path) -> dict[str, str]:
     env: dict[str, str] = {}
     if not path.exists():
         return env
-
     for raw_line in path.read_text(encoding="utf-8").splitlines():
         line = raw_line.strip()
         if not line or line.startswith("#") or "=" not in line:
             continue
         key, value = line.split("=", 1)
-        key = key.strip()
-        value = value.strip().strip('"').strip("'")
-        if key:
-            env[key] = value
+        env[key.strip()] = value.strip().strip('"').strip("'")
     return env
 
 
@@ -82,52 +80,24 @@ def merged_env() -> dict[str, str]:
 
 
 def venv_python(venv: Path) -> Path:
-    if is_windows():
-        return venv / "Scripts" / "python.exe"
-    return venv / "bin" / "python"
-
-
-def create_venv(service: Service, python_bin: str) -> None:
-    assert service.venv is not None
-    if venv_python(service.venv).exists():
-        return
-
-    log(f"[{service.name}] creating venv: {service.venv}")
-    subprocess.check_call([python_bin, "-m", "venv", str(service.venv)], cwd=ROOT)
-
-
-def install_requirements(service: Service) -> None:
-    assert service.venv is not None
-    assert service.requirements is not None
-
-    python = venv_python(service.venv)
-    stamp = service.venv / ".requirements.stamp"
-    req_mtime = service.requirements.stat().st_mtime
-    if stamp.exists() and float(stamp.read_text(encoding="utf-8") or 0) >= req_mtime:
-        return
-
-    log(f"[{service.name}] installing requirements")
-    subprocess.check_call([str(python), "-m", "pip", "install", "-U", "pip"], cwd=ROOT)
-    subprocess.check_call(
-        [str(python), "-m", "pip", "install", "-r", str(service.requirements)],
-        cwd=ROOT,
-    )
-    stamp.write_text(str(time.time()), encoding="utf-8")
+    return venv / ("Scripts" if is_windows() else "bin") / ("python.exe" if is_windows() else "python")
 
 
 def ensure_service(service: Service, python_bin: str) -> None:
-    if service.command:
-        return
-    create_venv(service, python_bin)
-    install_requirements(service)
-
-
-def service_command(service: Service) -> list[str]:
-    if service.command:
-        return list(service.command)
     assert service.venv is not None
-    assert service.module is not None
-    return [str(venv_python(service.venv)), "-m", service.module]
+    assert service.requirements is not None
+    python = venv_python(service.venv)
+    stamp = service.venv / ".requirements.stamp"
+    if stamp.exists() and python.exists():
+        req_mtime = service.requirements.stat().st_mtime
+        if float(stamp.read_text(encoding="utf-8") or 0) >= req_mtime:
+            return
+    log(f"[{service.name}] creating venv")
+    subprocess.check_call([python_bin, "-m", "venv", str(service.venv)], cwd=ROOT)
+    log(f"[{service.name}] installing requirements")
+    subprocess.check_call([str(python), "-m", "pip", "install", "-U", "pip"], cwd=ROOT)
+    subprocess.check_call([str(python), "-m", "pip", "install", "-r", str(service.requirements)], cwd=ROOT)
+    stamp.write_text(str(time.time()), encoding="utf-8")
 
 
 def pump_output(name: str, process: subprocess.Popen[str]) -> None:
@@ -137,45 +107,91 @@ def pump_output(name: str, process: subprocess.Popen[str]) -> None:
 
 
 def terminate(processes: Iterable[subprocess.Popen[str]]) -> None:
-    live = [process for process in processes if process.poll() is None]
+    live = [p for p in processes if p.poll() is None]
     if not live:
         return
-
-    for process in live:
-        if is_windows():
-            process.terminate()
-        else:
-            process.send_signal(signal.SIGTERM)
-
+    for p in live:
+        (p.terminate() if is_windows() else p.send_signal(signal.SIGTERM))
     deadline = time.monotonic() + 8
-    for process in live:
-        remaining = max(0.0, deadline - time.monotonic())
+    for p in live:
         try:
-            process.wait(timeout=remaining)
+            p.wait(timeout=max(0.0, deadline - time.monotonic()))
         except subprocess.TimeoutExpired:
-            process.kill()
+            p.kill()
 
 
 def expand_services(names: list[str]) -> list[Service]:
     selected = names or list(DEFAULT_SERVICES)
-    unknown = [name for name in selected if name not in SERVICES]
+    unknown = [n for n in selected if n not in SERVICES]
     if unknown:
         raise SystemExit(f"Unknown service(s): {', '.join(unknown)}")
-    return [SERVICES[name] for name in selected]
+    return [SERVICES[n] for n in selected]
 
 
-def up(args: argparse.Namespace) -> int:
-    services = expand_services(args.services)
-    env = merged_env()
+def find_pids(name: str, command: tuple[str, ...]) -> list[int]:
+    pids: list[int] = []
+    pattern = command[0] if command[0] != "python" else f"-m {command[2]}"
+    if command[0] == "bash":
+        pattern = command[1]
+    try:
+        result = subprocess.run(["pgrep", "-f", pattern], capture_output=True, text=True)
+        for line in result.stdout.splitlines():
+            if line.strip():
+                pids.append(int(line.strip()))
+    except Exception:
+        pass
+    return pids
+
+
+def kill_services(services: list[Service]) -> int:
+    killed = 0
+    for service in services:
+        pids = find_pids(service.name, service.command)
+        if not pids:
+            log(f"[{service.name}] no running processes found")
+            continue
+        for pid in pids:
+            try:
+                os.kill(pid, signal.SIGTERM)
+                log(f"[{service.name}] killed pid {pid}")
+                killed += 1
+            except OSError as e:
+                log(f"[{service.name}] failed to kill pid {pid}: {e}")
+    if not killed:
+        log("no processes killed")
+    return 0
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description="Local venv-based runner for The Witch services.")
+    parser.add_argument("command", nargs="*", help="services: ai, ip, llm, tts (default: all)")
+    parser.add_argument("--build", action="store_true", help="create venvs and install requirements before starting")
+    args = parser.parse_args()
+
+    if args.command and args.command[0] == "kill":
+        names = args.command[1:] if len(args.command) > 1 else []
+        services = [SERVICES[n] for n in names] if names else []
+        return kill_services(services)
+
+    services = expand_services(args.command)
     python_bin = os.environ.get("PYTHON", sys.executable)
 
-    for service in services:
-        ensure_service(service, python_bin)
+    if args.build:
+        for service in services:
+            if service.venv is not None:
+                ensure_service(service, python_bin)
+    else:
+        for service in services:
+            if service.venv is not None and not (service.venv / ".requirements.stamp").exists():
+                ensure_service(service, python_bin)
 
+    env = merged_env()
     processes: list[subprocess.Popen[str]] = []
     try:
         for index, service in enumerate(services, start=1):
-            cmd = service_command(service)
+            cmd = list(service.command)
+            if cmd[0] == "python" and service.venv is not None:
+                cmd[0] = str(venv_python(service.venv))
             log(f"[+] starting {service.name}_{index}: {' '.join(cmd)}")
             process = subprocess.Popen(
                 cmd,
@@ -188,11 +204,7 @@ def up(args: argparse.Namespace) -> int:
                 bufsize=1,
             )
             processes.append(process)
-            threading.Thread(
-                target=pump_output,
-                args=(service.name, process),
-                daemon=True,
-            ).start()
+            threading.Thread(target=pump_output, args=(service.name, process), daemon=True).start()
 
         while processes:
             for process in processes:
@@ -208,36 +220,6 @@ def up(args: argparse.Namespace) -> int:
         terminate(processes)
 
     return 0
-
-
-def build(args: argparse.Namespace) -> int:
-    services = expand_services(args.services)
-    python_bin = os.environ.get("PYTHON", sys.executable)
-    for service in services:
-        ensure_service(service, python_bin)
-    return 0
-
-
-def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(
-        description="Local venv-based runner for The Witch services.",
-    )
-    subparsers = parser.add_subparsers(dest="command", required=True)
-
-    up_parser = subparsers.add_parser("up", help="start services")
-    up_parser.add_argument("services", nargs="*", help="services: ai, ip, vllm")
-    up_parser.set_defaults(func=up)
-
-    build_parser = subparsers.add_parser("build", help="create venvs and install requirements")
-    build_parser.add_argument("services", nargs="*", help="services: ai, ip, vllm")
-    build_parser.set_defaults(func=build)
-
-    return parser.parse_args()
-
-
-def main() -> int:
-    args = parse_args()
-    return args.func(args)
 
 
 if __name__ == "__main__":
