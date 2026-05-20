@@ -246,7 +246,11 @@ class WitchRuntime:
         await self._ai3d_channel.broadcast(event)
 
     async def _on_analysis_audio(self, audio: bytes) -> None:
-        logger.info(f"Audio broadcast: {len(audio)} bytes, clients: {self._ws_server.client_count('/ws/ai-3d-audio')}")
+        logger.debug(
+            "Audio broadcast: %d bytes, clients: %d",
+            len(audio),
+            self._ws_server.client_count("/ws/ai-3d-audio"),
+        )
         await self._ws_server.broadcast(audio, path="/ws/ai-3d-audio")
 
     @property

@@ -4,7 +4,7 @@ from typing import Awaitable, Callable
 from urllib.parse import urlsplit
 
 from websockets.asyncio.server import ServerConnection, serve
-from websockets.exceptions import ConnectionClosed
+from websockets.exceptions import ConnectionClosed, ConnectionClosedError, ConnectionClosedOK
 
 logger = logging.getLogger(__name__)
 
@@ -74,6 +74,10 @@ class WebSocketServer:
             async for message in websocket:
                 if callback:
                     await callback(self, websocket, message)
+        except ConnectionClosedOK:
+            logger.debug("WebSocket closed on %s", request_path)
+        except ConnectionClosedError as exc:
+            logger.debug("WebSocket closed abruptly on %s: %s", request_path, exc)
         except Exception as exc:
             logger.error("WebSocket error on %s: %s", request_path, exc)
         finally:

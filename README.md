@@ -35,16 +35,21 @@ flowchart LR
 
 ## Quick Start
 
-Prerequisites: Podman with Compose support for `ai` and `ip`, plus a local or remote vLLM/vLLM-Omni install for LLM and TTS.
+Prerequisites: Python with `venv` support, camera/sensor access on the host, and a local or remote vLLM/vLLM-Omni install for LLM and TTS.
 
 Run the full stack:
 
 ```bash
-scripts/run_vllm.sh
-podman-compose up --build ai ip
+scripts/witch-compose up
 ```
 
-`--build` belongs to the `up` command; `podman-compose --build` by itself is not a valid compose command.
+The runner creates missing venvs and updates requirements automatically.
+
+Run selected services by naming them:
+
+```bash
+scripts/witch-compose up ai ip
+```
 
 Open the debug UI:
 
@@ -55,33 +60,15 @@ http://localhost:10030/
 Run selected services:
 
 ```bash
-podman-compose up --build ai
-podman-compose up --build ip
-podman-compose up --build ai ip
+scripts/witch-compose up ai
+scripts/witch-compose up ip
+scripts/witch-compose up ai ip
 ```
 
-For a desktop NVIDIA GPU or Podman host with NVIDIA CDI, use the GPU override when you want GPU access for `ip`.
+For a split setup, run `ai` on the desktop and `ip` on the Jetson or camera machine. Set `WITCH_AI_HOST` in `.env` on the camera machine to the desktop address.
 
 ```bash
-podman-compose -f compose.yaml -f compose.gpu.yaml up --build
-```
-
-For Jetson / Jetson Nano:
-
-```bash
-podman-compose -f compose.yaml -f compose.jetson.yaml up --build ip
-```
-
-For a split setup, run `ai` and `ip` on the desktop:
-
-```bash
-podman-compose -f compose.yaml -f compose.gpu.yaml up --build ai ip
-```
-
-Then run `ip` on the Jetson or camera machine:
-
-```bash
-podman-compose -f compose.yaml -f compose.jetson.yaml up --build ip
+scripts/witch-compose up ip
 ```
 
 ## Services
@@ -92,7 +79,7 @@ podman-compose -f compose.yaml -f compose.jetson.yaml up --build ip
 
 ## Configure
 
-`.env` is the shared configuration file. Local Python loads it with `python-dotenv`; podman-compose injects it with `env_file`.
+`.env` is the shared configuration file. Local Python loads it with `python-dotenv`; `scripts/witch-compose` also injects it into child processes.
 
 For an all-local run on one machine:
 
@@ -100,14 +87,6 @@ For an all-local run on one machine:
 WITCH_LLM_HOST=localhost
 WITCH_TTS_HOST=localhost
 WITCH_AI_HOST=localhost
-```
-
-For Podman services that need to reach services on the Podman host:
-
-```dotenv
-WITCH_LLM_HOST=host.containers.internal
-WITCH_TTS_HOST=host.containers.internal
-WITCH_AI_HOST=host.containers.internal
 ```
 
 For mixed machines, Jetson, or LAN setups, use an address reachable from every service that needs it:
@@ -124,35 +103,13 @@ The app derives service URLs from those host and port values:
 LLM: http://${WITCH_LLM_HOST}:${WITCH_LLM_PORT}
 TTS: http://${WITCH_TTS_HOST}:${WITCH_TTS_PORT}
 AI: ws://${WITCH_AI_HOST}:${WITCH_AI_PORT}
-Audio bridge: http://${WITCH_AUDIO_PLAY_HOST}:${WITCH_AUDIO_BRIDGE_PORT}
 ```
 
-Do not use `localhost` for cross-machine connections. Inside a container it points back to that same container.
+Do not use `localhost` for cross-machine connections. Use the LAN address of the machine running that service.
 
-### Windows Camera
-
-Podman Desktop for Windows runs Linux containers inside WSL2 and cannot pass the Windows webcam into the `ip` container. Keep a host-side webcam bridge running on Windows.
-
-Create the venv and start the bridge:
-
-```powershell
-python -m venv ImageProcessing\.venv
-ImageProcessing\.venv\Scripts\pip install -r ImageProcessing\requirements.txt
-ImageProcessing\.venv\Scripts\python ImageProcessing\webcam_bridge.py
-```
-
-Optional camera selection:
-
-```powershell
-python ImageProcessing/webcam_bridge.py --list
-python ImageProcessing/webcam_bridge.py --camera 1
-```
-
-### Audio Bridge
+### Local Audio
 
 The AI plays TTS audio directly to VB-Cable (for Unreal) and default speakers.
-
-**Local Python (Linux/Mac/Windows):**
 
 For Windows/Mac: download https://vb-audio.com/Cable/ and restart device
 
@@ -161,20 +118,7 @@ For Linux:
 pactl load-module module-null-sink sink_name=WitchVirtualCable sink_properties=device.description=WitchVirtualCable
 ```
 
-Audio plays automatically via sounddevice - no bridge needed.
-
-**Container on Windows with Podman:**
-
-On Windows host, start audio bridge:
-```powershell
-python ArtificialIntelligence\audio_bridge.py
-```
-
-In `.env`, tell AI to use HTTP audio:
-```dotenv
-WITCH_AUDIO_PLAY_HOST=host.docker.internal
-WITCH_AUDIO_BRIDGE_PORT=10034
-```
+Audio plays automatically via sounddevice.
 
 
 ## Local Python
@@ -187,7 +131,13 @@ Prerequisites:
 
 Create the venvs once:
 
-Linux:
+All platforms:
+
+```bash
+scripts/witch-compose build ai ip
+```
+
+Manual Linux setup:
 
 ```bash
 python3.13 -m venv ArtificialIntelligence/.venv
@@ -207,14 +157,20 @@ py -3.13 -m venv ImageProcessing\.venv
 ImageProcessing\.venv\Scripts\pip install -r ImageProcessing\requirements.txt
 ```
 
-Start the services in separate terminals:
+Start the services together:
+
+```bash
+scripts/witch-compose up
+```
+
+Or start them in separate terminals:
 
 Linux:
 
 `vllm` (LLM + TTS):
 
 ```bash
-scripts/run_vllm.sh
+scripts/run_server.sh
 ```
 
 `ai`:
@@ -236,7 +192,7 @@ Windows PowerShell:
 `vllm` (LLM + TTS):
 
 ```powershell
-bash scripts/run_vllm.sh
+bash scripts/run_server.sh
 ```
 
 `ai`:
@@ -253,7 +209,7 @@ ImageProcessing\.venv\Scripts\Activate.ps1
 python -m ImageProcessing.main
 ```
 
-The `scripts/run_vllm.sh` script starts vLLM-Omni serving both LLM and TTS models, and stops both child processes when interrupted.
+The `scripts/run_server.sh` script starts the local LLM and TTS model servers, and stops both child processes when interrupted.
 
 ## Seat Sensor
 
@@ -286,8 +242,8 @@ ws://<AI-machine-LAN-IP>:10031/ws/ai-3d-roi
 ## Useful Commands
 
 ```bash
-podman-compose logs -f
-podman-compose logs -f ai
-podman-compose stop
-podman-compose down
+scripts/witch-compose up
+scripts/witch-compose up ai
+scripts/witch-compose up ip
+scripts/witch-compose build
 ```

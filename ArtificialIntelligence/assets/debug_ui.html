@@ -365,7 +365,6 @@
 
             async function playAudio(data) {
                 audioQueue.push(data);
-                console.log("Audio queued:", data.byteLength, "queue length:", audioQueue.length);
                 processAudioQueue();
             }
 
@@ -377,28 +376,35 @@
                     await audioContext.resume();
                 }
 
-                isAudioPlaying = true;
-                const data = audioQueue.shift();
+                try {
+                    isAudioPlaying = true;
+                    const data = audioQueue.shift();
+                    const pcm = new Int16Array(data);
+                    if (pcm.length === 0) throw new Error("empty audio frame");
 
-                const pcm = new Int16Array(data);
-                const buffer = audioContext.createBuffer(
-                    1,
-                    pcm.length,
-                    24000,
-                );
-                const channel = buffer.getChannelData(0);
-                for (let i = 0; i < pcm.length; i++) {
-                    channel[i] = pcm[i] / 32768;
-                }
+                    const buffer = audioContext.createBuffer(
+                        1,
+                        pcm.length,
+                        24000,
+                    );
+                    const channel = buffer.getChannelData(0);
+                    for (let i = 0; i < pcm.length; i++) {
+                        channel[i] = pcm[i] / 32768;
+                    }
 
-                const source = audioContext.createBufferSource();
-                source.buffer = buffer;
-                source.connect(audioContext.destination);
-                source.onended = () => {
+                    const source = audioContext.createBufferSource();
+                    source.buffer = buffer;
+                    source.connect(audioContext.destination);
+                    source.onended = () => {
+                        isAudioPlaying = false;
+                        processAudioQueue();
+                    };
+                    source.start(0);
+                } catch (error) {
+                    console.warn("Audio playback failed:", error);
                     isAudioPlaying = false;
                     processAudioQueue();
-                };
-                source.start(0);
+                }
             }
 
             let graphPending = false;

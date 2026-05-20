@@ -44,7 +44,6 @@ CAMERA_HEIGHT = 480
 VIDEO_STREAM_FPS = 15.0
 VIDEO_STREAM_WIDTH = 640
 VIDEO_STREAM_INTERVAL_S = 1.0 / VIDEO_STREAM_FPS
-WEBCAM_BRIDGE_URL = "http://host.containers.internal:8090/video"
 CAMERA_SOURCE = os.environ["WITCH_CAMERA_SOURCE"]
 FRAME_INTERVAL_MS = int(round(1000.0 / CAMERA_FPS))
 HISTORY_SIZE = 45
@@ -101,15 +100,11 @@ class HeadlessPalmClient:
         self.last_roi_frame_publish_at = 0.0
 
         self.cap = cv2.VideoCapture(self.camera_source)
-        if not self.cap.isOpened() and isinstance(self.camera_source, int):
-            logger.warning("Camera %s failed, trying MJPEG bridge at %s", self.camera_source, WEBCAM_BRIDGE_URL)
-            self.camera_source = WEBCAM_BRIDGE_URL
-            self.cap = cv2.VideoCapture(WEBCAM_BRIDGE_URL)
         if not self.cap.isOpened():
             logger.warning(
                 "Could not open camera source %r. Continuing without camera. "
-                "Video processing will be disabled. Start webcam bridge for camera access: %s",
-                CAMERA_SOURCE, WEBCAM_BRIDGE_URL
+                "Video processing will be disabled.",
+                CAMERA_SOURCE,
             )
             self.cap = None
         else:

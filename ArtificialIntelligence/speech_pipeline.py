@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import os
 import platform
 import queue
 import threading
@@ -25,37 +24,6 @@ from shared.events import AnalysisStartedEvent, ErrorEvent, Scene
 logger = logging.getLogger(__name__)
 
 SR = 48000
-
-_AUDIO_PLAY_HOST = os.getenv("WITCH_AUDIO_PLAY_HOST")
-_AUDIO_BRIDGE_PORT = os.environ["WITCH_AUDIO_BRIDGE_PORT"]
-
-
-async def _play_audio_http(audio: bytes, *, sample_rate: int, format: str) -> bool:
-    if not _AUDIO_PLAY_HOST:
-        return False
-    if format != "wav":
-        audio = _pcm_to_wav(audio, sample_rate)
-    url = f"http://{_AUDIO_PLAY_HOST}:{_AUDIO_BRIDGE_PORT}/play"
-    try:
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            await client.post(url, files={"file": ("tts.wav", audio, "audio/wav")})
-            return True
-    except Exception as e:
-        logger.warning(f"HTTP audio error: {e}")
-        return False
-
-
-def _pcm_to_wav(audio: bytes, sample_rate: int) -> bytes:
-    import wave
-
-    output = __import__("io").BytesIO()
-    with wave.open(output, "wb") as wav_file:
-        wav_file.setnchannels(1)
-        wav_file.setsampwidth(2)
-        wav_file.setframerate(sample_rate)
-        wav_file.writeframes(audio)
-    return output.getvalue()
-
 
 def find_audio_devices() -> tuple[int | None, int | None]:
     if not HAS_SOUNDDEVICE:
@@ -248,7 +216,7 @@ class SpeechPipeline:
                 use_direct = False
 
             if not use_direct:
-                logger.info("No audio device, using HTTP bridge")
+                logger.info("No local audio device; using websocket audio only")
 
             debug_text_parts: list[str] = []
 
@@ -260,18 +228,12 @@ class SpeechPipeline:
             frame_count = 0
             async for frame in self._tts.stream_synthesize(text_chunks()):
                 frame_count += 1
-                logger.info(f"TTS frame {frame_count}: {len(frame.audio)} bytes")
+                logger.debug("TTS frame %d: %d bytes", frame_count, len(frame.audio))
                 if self._audio_callback:
                     await self._audio_callback(frame.audio)
 
                 if use_direct:
                     player.put(frame.audio, format=frame.format)
-                else:
-                    await _play_audio_http(
-                        frame.audio,
-                        sample_rate=frame.sample_rate,
-                        format=frame.format,
-                    )
             logger.info(f"TTS complete: {frame_count} frames total")
 
             debug_text = " ".join(part.strip() for part in debug_text_parts if part.strip())
