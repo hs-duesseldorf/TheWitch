@@ -27,25 +27,41 @@ class Hand(str, Enum):
 
 
 class Scene(str, Enum):
+    # START / IDLE
     SCENE_0_IDLE = "scene_0_idle"
-    SCENE_1_ATTENTION = "scene_1_attention"
-    SCENE_2_INTRO = "scene_2_intro"
-    SCENE_2_REFOCUS = "scene_2_refocus"
-    SCENE_3_SCAN_READY = "scene_3_scan_ready"
-    SCENE_3_HAND_CORRECTION = "scene_3_hand_correction"
-    SCENE_3_SCANNING = "scene_3_scanning"
-    SCENE_3_SCAN_COMPLETE = "scene_3_scan_complete"
-    SCENE_4_TRANSFORMATION = "scene_4_transformation"
-    SCENE_5_INTRODUCTION = "scene_5_introduction"
-    SCENE_6_SHOT_1_VISUAL = "scene_6_shot_1_visual"
-    SCENE_6_SHOT_2_TASK = "scene_6_shot_2_task"
-    SCENE_6_SHOT_3_ELEMENT = "scene_6_shot_3_element"
-    SCENE_6_SHOT_4_POSITIVE_NEGATIVE = "scene_6_shot_4_positive_negative"
-    SCENE_6_SHOT_5_BALANCE = "scene_6_shot_5_balance"
-    SCENE_7_RETURN = "scene_7_return"
-    SCENE_7_SMOKE_END = "scene_7_smoke_end"
-    SCENE_7_VANISH_END = "scene_7_vanish_end"
-    END = "end"
+    # WELCOME
+    SCENE_1_AWAITING_HAND = "scene_1_awaiting_hand"
+    SCENE_1_SHOT_1_NO_HAND_FOUND = "scene_1_shot_1_no_hand_found"
+    SCENE_1_SHOT_2_YES_HAND_FOUND = "scene_1_shot_2_yes_hand_found"
+    # INTRO
+    SCENE_2_SHOT_1_HAND_STAYS_FOCUSED = "scene_2_shot_1_hand_stays_focused"
+    SCENE_2_SHOT_2_HAND_WITHDRAWN = "scene_2_shot_2_hand_withdrawn"
+    SCENE_2_SHOT_3_STILL_NO_HAND = "scene_2_shot_3_still_no_hand"
+    # SCAN
+    SCENE_3_SCANNING_HAND = "scanning_hand"
+    SCENE_3_SHOT_1_CORRECT_HAND = "scene_3_shot_1_correct_hand"
+    SCENE_3_SHOT_2_HAND_NOT_READABLE = "scene_3_shot_2_hand_not_readable"
+    SCENE_3_SHOT_3_HAND_FAST_MOVEMENTS = "scene_3_shot_3_hand_fast_movements"
+    SCENE_3_SHOT_4_SCAN_DONE = "scene_3_shot_4_scan_done"
+    # TRANSFORM
+    SCENE_4_TRANSFORM = "scene_4_transform"
+    # STORY
+    SCENE_5_WITCH_ORIGIN_STORY = "scene_5_witch_origin_story"
+    # READING
+    SCENE_6_VISUAL_IMAGE_HAND = "scene_6_visual_image_hand"
+    SCENE_6_SHOT_1_POINT_OUT_DETAILS = "scene_6_shot_1_point_out_details"
+    SCENE_6_SHOT_2_INTERACTIVE_TASK = "scene_6_shot_2_interactive_task"
+    SCENE_6_SHOT_2_1_TASK_DONE = "scene_6_shot_2_1_task_done"
+    SCENE_6_SHOT_2_2_TASK_IGNORED = "scene_6_shot_2_2_task_ignored"
+    SCENE_6_SHOT_3_ASSIGN_ELEMENTS = "scene_6_shot_3_assign_elements"
+    SCENE_6_SHOT_4_ELEMENT_ANALYSIS = "scene_6_shot_4_element_analysis"
+    SCENE_6_SHOT_5_INNER_BALANCE = "scene_6_shot_5_inner_balance"
+    # END
+    SCENE_7_LAST_WORDS = "scene_7_last_words"
+    SCENE_7_SHOT_1_RETURN_TO_IDLE = "scene_7_shot_1_return_to_idle"
+    SCENE_7_SHOT_2_DISAPPEAR = "scene_7_shot_2_disappear"
+    # RESTART
+    SCENE_RESTART = "scene_restart"
 
 
 # Events
