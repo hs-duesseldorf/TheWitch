@@ -8,6 +8,17 @@ import torch
 logger = logging.getLogger(__name__)
 
 
+def _metadata_int(value, default: int = 0) -> int:
+    if isinstance(value, list):
+        value = value[0] if value else default
+    if isinstance(value, torch.Tensor):
+        value = value.reshape(-1)[0].item() if value.numel() > 0 else default
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return default
+
+
 def _sequence_counts(input_ids: torch.Tensor, kwargs: dict[str, object]) -> list[int]:
     seq_token_counts = kwargs.get("seq_token_counts")
     if isinstance(seq_token_counts, (list, tuple)):
@@ -43,12 +54,14 @@ def _clamp_oversized_left_context(
             patched_information.append(info)
             continue
 
-        new_info = dict(info)
-        try:
-            left_context_size = int(new_info.get("left_context_size", 0) or 0)
-        except (TypeError, ValueError):
+        meta = info.get("meta", {})
+        if not isinstance(meta, dict):
             patched_information.append(info)
             continue
+
+        new_info = dict(info)
+        new_meta = dict(meta)
+        left_context_size = _metadata_int(new_meta.get("left_context_size", 0))
 
         decoded_frames = max(0, int(token_count) // max(1, num_quantizers))
         if left_context_size >= decoded_frames > 0:
@@ -57,7 +70,8 @@ def _clamp_oversized_left_context(
                 left_context_size,
                 decoded_frames,
             )
-            new_info["left_context_size"] = 0
+            new_meta["left_context_size"] = 0
+            new_info["meta"] = new_meta
             changed = True
 
         patched_information.append(new_info)
