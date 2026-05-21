@@ -63,6 +63,24 @@ def _configured_audio_device(devices: list[dict[str, Any]]) -> int | None:
     return None
 
 
+def _normalize_tts_text(text: str) -> str:
+    lines = []
+    for line in text.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        line = re.sub(r"^[-*\u2022]+\s*", "", line)
+        line = re.sub(r"^\d+[.)]\s*", "", line)
+        lines.append(line)
+
+    normalized = " ".join(lines) if lines else text
+    normalized = re.sub(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]", " ", normalized)
+    normalized = re.sub(r"\s+", " ", normalized).strip()
+    if normalized and normalized[-1] not in ".!?":
+        normalized = f"{normalized}."
+    return normalized
+
+
 def _linux_output_score(name: str) -> int:
     lowered = name.lower()
     if "monitor" in lowered or "null" in lowered:
@@ -459,7 +477,7 @@ class SpeechPipeline:
         logger.info("Cancel complete")
 
     def cancel_sync(self) -> None:
-        logger.info("cancel_sync() called")
+        logger.info("cancel_sync() called at stage=%s", self._stage)
         if self._current_task and not self._current_task.done():
             self._current_task.cancel()
         logger.info("Cancel sync complete")
@@ -496,22 +514,40 @@ class SpeechPipeline:
                     logger.info("Analysis LLM result: chars=%d", len(debug_text))
                     if not debug_text:
                         raise RuntimeError("LLM returned empty response")
+                    if self._done_callback:
+                        await self._done_callback(debug_text)
 
                     if len(debug_text) < 10:
                         logger.warning("Text too short for TTS (%d chars), skipping", len(debug_text))
                         self._stage = "done"
-                        if self._done_callback and debug_text:
-                            await self._done_callback(debug_text)
                         return
 
+                    tts_text = _normalize_tts_text(debug_text)
+                    if not tts_text:
+                        raise RuntimeError("TTS text became empty after normalization")
+                    if tts_text != debug_text:
+                        logger.info(
+                            "Normalized TTS text: llm_chars=%d tts_chars=%d",
+                            len(debug_text),
+                            len(tts_text),
+                        )
+
                     self._stage = "tts_stream"
-                    logger.info("TTS full: %s", debug_text[:80])
+                    logger.info("TTS full: %s", tts_text[:80])
                     frame_count = 0
-                    async for frame in self._tts.stream_synthesize(debug_text, seed=self._tts_seed):
+                    byte_count = 0
+                    async for frame in self._tts.stream_synthesize(tts_text, seed=self._tts_seed):
                         frame_count += 1
+                        frame_bytes = len(frame.audio)
+                        byte_count += frame_bytes
                         if use_direct:
                             player.put(frame.audio, format=frame.format, sample_rate=frame.sample_rate)
-                    logger.info("TTS complete: %d frames", frame_count)
+                    logger.info(
+                        "TTS complete: frames=%d bytes=%d input_chars=%d",
+                        frame_count,
+                        byte_count,
+                        len(tts_text),
+                    )
                     if use_direct:
                         player.finish()
                         await player.drain()
@@ -519,10 +555,11 @@ class SpeechPipeline:
                     self._stage = "done"
                     self._current_task = None
                     self._player = None
-                    if self._done_callback and debug_text:
-                        await self._done_callback(debug_text)
                     return
 
+                except asyncio.CancelledError:
+                    logger.info("Analysis task cancelled at stage=%s", self._stage)
+                    raise
                 except Exception as e:
                     logger.warning(f"Analysis failed, retrying in %ss: %s", delay, e)
                     await asyncio.sleep(delay)

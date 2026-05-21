@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 import wave
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
@@ -25,6 +26,13 @@ DEFAULT_INSTRUCTIONS = (
 
 REQUEST_ATTEMPTS = 5
 RETRY_DELAY_SECONDS = 1.0
+
+
+def _env_bool(name: str, default: bool) -> bool:
+    raw = os.getenv(name, "").strip().lower()
+    if not raw:
+        return default
+    return raw in {"1", "true", "yes", "on"}
 
 
 @dataclass(frozen=True)
@@ -65,6 +73,7 @@ class TTSClient:
             self.voice = (configured_voice or DEFAULT_VOICE).strip()
             self.instructions = (instructions or DEFAULT_INSTRUCTIONS).strip()
         self._session: aiohttp.ClientSession | None = None
+        self.stream = _env_bool("WITCH_TTS_STREAM", True)
 
     async def _ensure_session(self) -> aiohttp.ClientSession:
         if self._session is None or self._session.closed:
@@ -96,7 +105,12 @@ class TTSClient:
             return
 
         url = urljoin(self.base_url + "/", QWEN_SPEECH_PATH.lstrip("/"))
-        logger.info("Qwen HTTP TTS stream: url=%s text_chars=%d", url, len(text))
+        logger.info(
+            "Qwen HTTP TTS %s: url=%s text_chars=%d",
+            "stream" if self.stream else "full",
+            url,
+            len(text),
+        )
 
         attempt = 0
         while True:
@@ -113,13 +127,32 @@ class TTSClient:
                         raise RuntimeError(
                             f"TTS stream failed: HTTP {resp.status}: {body}"
                         )
-                    async for chunk in self._pcm_chunks(resp):
-                        yield AudioFrame(
-                            audio=chunk,
-                            sample_rate=DEFAULT_QWEN_SAMPLE_RATE,
-                            format="pcm",
-                            mime_type=resp.headers.get("content-type", "audio/pcm"),
-                        )
+                    if self.stream:
+                        async for chunk in self._pcm_chunks(resp):
+                            yield AudioFrame(
+                                audio=chunk,
+                                sample_rate=DEFAULT_QWEN_SAMPLE_RATE,
+                                format="pcm",
+                                mime_type=resp.headers.get("content-type", "audio/pcm"),
+                            )
+                    else:
+                        audio = await resp.read()
+                        content_type = resp.headers.get("content-type", "audio/pcm")
+                        if "wav" in content_type.lower():
+                            for chunk in self._decode_wav(audio):
+                                yield AudioFrame(
+                                    audio=chunk,
+                                    sample_rate=DEFAULT_QWEN_SAMPLE_RATE,
+                                    format="pcm",
+                                    mime_type=content_type,
+                                )
+                        elif audio:
+                            yield AudioFrame(
+                                audio=audio,
+                                sample_rate=DEFAULT_QWEN_SAMPLE_RATE,
+                                format="pcm",
+                                mime_type=content_type,
+                            )
                     return
             except Exception as e:
                 await self._reset_session()
@@ -140,7 +173,7 @@ class TTSClient:
             "language": self.language,
             "response_format": "pcm",
             "task_type": self.task_type,
-            "stream": True,
+            "stream": self.stream,
             "speed": 1.0,
             "temperature": 0.1,
             "repetition_penalty": 1.2,
