@@ -21,36 +21,19 @@ from .runtime import WitchRuntime
 from .state_machine.state_machine import WitchStateMachine
 from .websocket_server.websocket_server import WebSocketServer
 
+DEFAULT_OLLAMA_MODEL = "hf.co/unsloth/Qwen3-4B-GGUF:Qwen3-4B-Q4_K_M.gguf"
+
 
 def _llm_model_name() -> str:
-    llm_hf = os.environ["WITCH_LLM_HF"]
-    if ":" not in llm_hf:
-        raise RuntimeError(
-            "WITCH_LLM_HF must be repo:file, e.g. "
-            "unsloth/Qwen3-4B-GGUF:Qwen3-4B-Q4_K_M.gguf"
-        )
-    repo, model_file = llm_hf.split(":", 1)
-    if not repo or not model_file:
-        raise RuntimeError(f"Invalid WITCH_LLM_HF: {llm_hf}")
-    return model_file
-
-
-def _http_url(host_var: str, port_var: str) -> str:
-    return f"http://{os.environ[host_var]}:{os.environ[port_var]}"
+    return os.getenv("WITCH_OLLAMA_MODEL", "").strip() or os.getenv("OLLAMA_MODEL", "").strip() or DEFAULT_OLLAMA_MODEL
 
 
 def _get_llm_url() -> str:
-    host = os.getenv("WITCH_LLM_HOST", "")
-    if host in ("localhost", "127.0.0.1", "ai", ""):
-        return _http_url("WITCH_LLM_HOST", "WITCH_LLM_PORT")
-    return _http_url("WITCH_LLM_HOST", "WITCH_LLM_PORT_EXT")
+    return f"http://{os.environ['WITCH_LLM_HOST']}:{os.environ['WITCH_LLM_PORT']}"
 
 
 def _get_tts_url() -> str:
-    host = os.getenv("WITCH_TTS_HOST", "")
-    if host in ("localhost", "127.0.0.1", "ai", ""):
-        return _http_url("WITCH_TTS_HOST", "WITCH_TTS_PORT")
-    return _http_url("WITCH_TTS_HOST", "WITCH_TTS_PORT_EXT")
+    return f"http://{os.environ['WITCH_TTS_HOST']}:{os.environ['WITCH_TTS_PORT']}"
 
 
 class App:

@@ -1,14 +1,12 @@
 from __future__ import annotations
 
 import asyncio
-import json
 import logging
 import re
 import time
 from collections.abc import AsyncIterator
-from urllib.parse import urljoin
 
-import aiohttp
+from ollama import AsyncClient
 
 logger = logging.getLogger(__name__)
 
@@ -34,21 +32,30 @@ class LLMClient:
     ):
         self.base_url = base_url.strip().rstrip("/")
         self.model = model.strip()
-        self._session: aiohttp.ClientSession | None = None
+        self._client: AsyncClient | None = None
 
-    async def _ensure_session(self) -> aiohttp.ClientSession:
-        if self._session is None or self._session.closed:
-            if self._session:
-                try:
-                    await self._session.close()
-                except Exception:
-                    pass
-            self._session = aiohttp.ClientSession()
-        return self._session
+    @property
+    def ollama_host(self) -> str:
+        root = self.base_url
+        if root.endswith("/v1"):
+            root = root[:-3]
+        if root.endswith("/api"):
+            root = root[:-4]
+        return root
+
+    def _ensure_client(self) -> AsyncClient:
+        if self._client is None:
+            self._client = AsyncClient(host=self.ollama_host)
+        return self._client
 
     async def close(self) -> None:
-        if self._session and not self._session.closed:
-            await self._session.close()
+        if self._client is None:
+            return
+        http_client = getattr(self._client, "_client", None)
+        close = getattr(http_client, "aclose", None)
+        if close:
+            await close()
+        self._client = None
 
     async def generate(self, prompt: str) -> str:
         started_at = time.perf_counter()
@@ -57,26 +64,15 @@ class LLMClient:
         while True:
             attempt += 1
             try:
-                session = await self._ensure_session()
-                async with session.post(
-                    urljoin(self.base_url, "/v1/chat/completions"),
-                    json={
-                        "model": self.model,
-                        "messages": self._messages(prompt),
-                        "temperature": 0.7,
-                        "top_p": 0.9,
-                        "max_tokens": 1024,
-                        "think_disable": True,
-                    },
-                    timeout=aiohttp.ClientTimeout(total=60),
-                ) as resp:
-                    resp.raise_for_status()
-                    data = await resp.json()
+                data = await self._ensure_client().chat(**self._request_args(prompt, stream=False, temperature=0.7))
                 break
             except Exception:
+                if attempt >= REQUEST_ATTEMPTS:
+                    logger.error("LLM request failed after %d attempts", attempt)
+                    raise
                 logger.warning("LLM request failed on attempt %d; retrying", attempt)
                 await asyncio.sleep(RETRY_DELAY_SECONDS * min(attempt, 10))
-        message = data.get("choices", [{}])[0].get("message") or {}
+        message = data.get("message") or {}
         text = self._strip_thinking(message.get("content") or "")
         logger.info("LLM response: chars=%d elapsed=%.2fs", len(text), time.perf_counter() - started_at)
         return text
@@ -88,45 +84,37 @@ class LLMClient:
         while True:
             attempt += 1
             try:
-                session = await self._ensure_session()
-                async with session.post(
-                    urljoin(self.base_url, "/v1/chat/completions"),
-                    json={
-                        "model": self.model,
-                        "messages": self._messages(prompt),
-                        "temperature": 0.8,
-                        "top_p": 0.9,
-                        "max_tokens": 1024,
-                        "stream": True,
-                        "think_disable": True,
-                    },
-                    timeout=aiohttp.ClientTimeout(total=120),
-                ) as resp:
-                    resp.raise_for_status()
-                    async for line in resp.content:
-                        line = line.decode().strip()
-                        if not line or not line.startswith("data:"):
-                            continue
-                        if line == "data: [DONE]":
-                            return
-                        try:
-                            payload = line[5:].strip()
-                            if not payload:
-                                continue
-                            data = json.loads(payload)
-                            delta = data.get("choices", [{}])[0].get("delta") or {}
-                            chunk = delta.get("content") or ""
-                            if chunk:
-                                yield chunk
-                        except Exception:
-                            continue
-                    logger.info("LLM stream done: elapsed=%.2fs", time.perf_counter() - started_at)
-                    return
+                stream = await self._ensure_client().chat(**self._request_args(prompt, stream=True, temperature=0.8))
+                async for data in stream:
+                    message = data.get("message") or {}
+                    chunk = message.get("content") or ""
+                    if chunk:
+                        yield chunk
+                    if data.get("done"):
+                        logger.info("LLM stream done: elapsed=%.2fs", time.perf_counter() - started_at)
+                        return
+                logger.warning("LLM stream ended without done marker")
+                return
             except Exception:
                 if attempt >= REQUEST_ATTEMPTS:
                     logger.error("LLM stream failed after %d attempts", attempt)
                     raise
                 logger.warning("LLM stream failed on attempt %d; retrying", attempt)
+                await asyncio.sleep(RETRY_DELAY_SECONDS * min(attempt, 10))
+
+    async def warmup(self) -> None:
+        logger.info("LLM warmup: model=%s host=%s", self.model, self.ollama_host)
+        attempt = 0
+        while True:
+            attempt += 1
+            try:
+                await self._ensure_client().show(self.model)
+                return
+            except Exception:
+                if attempt >= REQUEST_ATTEMPTS:
+                    logger.error("LLM warmup failed after %d attempts", attempt)
+                    raise
+                logger.warning("LLM warmup failed on attempt %d; retrying", attempt)
                 await asyncio.sleep(RETRY_DELAY_SECONDS * min(attempt, 10))
 
     async def generate_fortune(self, prompt: str) -> str:
@@ -188,6 +176,19 @@ class LLMClient:
             {"role": "system", "content": NO_THINKING_SYSTEM_PROMPT},
             {"role": "user", "content": prompt},
         ]
+
+    def _request_args(self, prompt: str, *, stream: bool, temperature: float) -> dict[str, object]:
+        return {
+            "model": self.model,
+            "messages": self._messages(prompt),
+            "stream": stream,
+            "think": False,
+            "options": {
+                "temperature": temperature,
+                "top_p": 0.9,
+                "num_predict": 1024,
+            },
+        }
 
     def _strip_thinking(self, text: str) -> str:
         text = THINK_BLOCK_RE.sub("", text)

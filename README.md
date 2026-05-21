@@ -8,7 +8,7 @@ A digital installation featuring a virtual fortune teller that reads visitors' p
 flowchart LR
     ip[ImageProcessing<br/>Camera + Hand Tracking]
     ai[AI Service<br/>State Machine + Orchestration]
-    llm[LLM Server<br/>llama.cpp]
+    llm[LLM Server<br/>Ollama]
     tts[TTS Server<br/>vLLM-Omni]
     debug[Debug UI<br/>http://localhost:10030/]
     unreal[3D / Unreal]
@@ -27,7 +27,7 @@ flowchart LR
     unreal <-- "WebSocket /ws/ai-3d-video" --> ai
     unreal <-- "WebSocket /ws/ai-3d-roi" --> ai
 
-    ai -- "HTTP /v1/chat/completions" --> llm
+    ai -- "Ollama /api/chat" --> llm
     ai -- "HTTP /v1/audio/speech/stream" --> tts
     ai -- "audio" --> speakers
 
@@ -67,7 +67,7 @@ For a split setup, run `ai` on the desktop and `ip` on the Jetson or camera mach
 
 ## Services
 
-- `llm`: llama.cpp server for LLM inference
+- `llm`: Ollama server for LLM inference
 - `tts`: vLLM-Omni server for text-to-speech
 - `ai`: state machine, LLM/TTS orchestration, WebSocket API, debug UI
 - `ip`: camera, hand tracking, palm ROI, and seat sensor client

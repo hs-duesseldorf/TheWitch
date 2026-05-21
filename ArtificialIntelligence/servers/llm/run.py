@@ -6,7 +6,6 @@ import shutil
 import signal
 import subprocess
 import sys
-import tempfile
 import time
 import urllib.request
 from pathlib import Path
@@ -15,6 +14,7 @@ from dotenv import load_dotenv
 
 SERVER_DIR = Path(__file__).resolve().parent
 ROOT = SERVER_DIR.parents[2]
+DEFAULT_OLLAMA_MODEL = "hf.co/unsloth/Qwen3-4B-GGUF:Qwen3-4B-Q4_K_M.gguf"
 
 
 def log(message: str) -> None:
@@ -54,25 +54,6 @@ def run_ollama_command(args: list[str], env: dict[str, str]) -> None:
     subprocess.run(["ollama", *args], cwd=ROOT, env=env, check=True)
 
 
-def create_alias_if_needed(model: str, alias: str, env: dict[str, str]) -> None:
-    if not alias or alias == model:
-        return
-
-    # Preserve compatibility with the previous llama.cpp --alias value.
-    # Your old server used the GGUF filename as the model alias.
-    log(f"[run_llm] Creating Ollama alias: {alias} -> {model}")
-
-    with tempfile.TemporaryDirectory() as tmp:
-        modelfile = Path(tmp) / "Modelfile"
-        modelfile.write_text(f"FROM {model}\n", encoding="utf-8")
-        subprocess.run(
-            ["ollama", "create", alias, "-f", str(modelfile)],
-            cwd=ROOT,
-            env=env,
-            check=True,
-        )
-
-
 def terminate(process: subprocess.Popen[str]) -> None:
     if process.poll() is not None:
         return
@@ -93,23 +74,11 @@ def run() -> None:
     host = os.environ.get("OLLAMA_BIND_HOST", "0.0.0.0")
     ollama_host = f"{host}:{port}"
 
-    # Pick the Ollama model. Override this in .env if needed:
-    # WITCH_OLLAMA_MODEL=qwen3:4b
     model = (
-        os.environ.get("WITCH_OLLAMA_MODEL")
-        or os.environ.get("OLLAMA_MODEL")
-        or "qwen3:4b"
+        os.environ.get("WITCH_OLLAMA_MODEL", "").strip()
+        or os.environ.get("OLLAMA_MODEL", "").strip()
+        or DEFAULT_OLLAMA_MODEL
     )
-
-    # Preserve old llama.cpp model alias when WITCH_LLM_HF is still set.
-    # Example old alias: Qwen3-4B-Q4_K_M.gguf
-    alias = os.environ.get("WITCH_LLM_ALIAS", "")
-    if not alias and os.environ.get("WITCH_LLM_HF"):
-        try:
-            _, old_file = os.environ["WITCH_LLM_HF"].split(":", 1)
-            alias = old_file
-        except ValueError:
-            alias = ""
 
     env = os.environ.copy()
     env.update(
@@ -123,8 +92,6 @@ def run() -> None:
 
     log(f"[run_llm] Starting Ollama on {ollama_host}")
     log(f"[run_llm] Ollama model={model}")
-    if alias:
-        log(f"[run_llm] Compatibility alias={alias}")
 
     process = subprocess.Popen(
         [ollama, "serve"],
@@ -140,7 +107,6 @@ def run() -> None:
         wait_for_ollama(ollama_host)
 
         run_ollama_command(["pull", model], env)
-        create_alias_if_needed(model, alias, env)
 
         log(f"[run_llm] OpenAI-compatible API ready: http://{ollama_host}/v1")
         log(f"[run_llm] Native Ollama API ready: http://{ollama_host}")

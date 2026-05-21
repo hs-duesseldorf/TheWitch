@@ -3,6 +3,7 @@ fastapi
 httpx
 msgspec
 numpy
+ollama
 python-dotenv
 scipy
 sounddevice
