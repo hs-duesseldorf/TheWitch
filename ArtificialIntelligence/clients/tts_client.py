@@ -79,6 +79,10 @@ class TTSClient:
     async def close(self) -> None:
         if self._session and not self._session.closed:
             await self._session.close()
+        self._session = None
+
+    async def _reset_session(self) -> None:
+        await self.close()
 
     async def stream_synthesize(
         self, text: str, *, seed: int | None = None
@@ -118,6 +122,7 @@ class TTSClient:
                         )
                     return
             except Exception as e:
+                await self._reset_session()
                 if attempt >= REQUEST_ATTEMPTS:
                     logger.error("TTS stream failed after %d attempts: %s", attempt, e)
                     raise

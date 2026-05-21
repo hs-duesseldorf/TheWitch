@@ -19,6 +19,14 @@ def _metadata_int(value, default: int = 0) -> int:
         return default
 
 
+def _metadata_zero_like(value):
+    if isinstance(value, list):
+        return [0] if value else value
+    if isinstance(value, torch.Tensor):
+        return torch.zeros_like(value)
+    return 0
+
+
 def _sequence_counts(input_ids: torch.Tensor, kwargs: dict[str, object]) -> list[int]:
     seq_token_counts = kwargs.get("seq_token_counts")
     if isinstance(seq_token_counts, (list, tuple)):
@@ -54,25 +62,35 @@ def _clamp_oversized_left_context(
             patched_information.append(info)
             continue
 
+        candidates: list[tuple[dict[str, object], str]] = []
+        if "left_context_size" in info:
+            candidates.append((info, "left_context_size"))
         meta = info.get("meta", {})
-        if not isinstance(meta, dict):
+        if isinstance(meta, dict) and "left_context_size" in meta:
+            candidates.append((meta, "left_context_size"))
+
+        if not candidates:
             patched_information.append(info)
             continue
 
         new_info = dict(info)
-        new_meta = dict(meta)
-        left_context_size = _metadata_int(new_meta.get("left_context_size", 0))
+        new_meta = dict(meta) if isinstance(meta, dict) else None
 
         decoded_frames = max(0, int(token_count) // max(1, num_quantizers))
-        if left_context_size >= decoded_frames > 0:
-            logger.warning(
-                "Code2Wav left_context_size %d >= decoded frame count %d; clamping to 0.",
-                left_context_size,
-                decoded_frames,
-            )
-            new_meta["left_context_size"] = 0
-            new_info["meta"] = new_meta
-            changed = True
+        for source, key in candidates:
+            left_context_size = _metadata_int(source.get(key, 0))
+            if left_context_size >= decoded_frames > 0:
+                logger.warning(
+                    "Code2Wav left_context_size %d >= decoded frame count %d; clamping to 0.",
+                    left_context_size,
+                    decoded_frames,
+                )
+                if source is info:
+                    new_info[key] = _metadata_zero_like(source[key])
+                elif new_meta is not None:
+                    new_meta[key] = _metadata_zero_like(source[key])
+                    new_info["meta"] = new_meta
+                changed = True
 
         patched_information.append(new_info)
 
