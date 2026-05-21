@@ -1,6 +1,5 @@
 aiohttp
 fastapi
-httpx
 msgspec
 numpy
 ollama

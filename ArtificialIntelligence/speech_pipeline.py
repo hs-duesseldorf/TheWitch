@@ -9,7 +9,6 @@ import re
 import threading
 from typing import Any, Awaitable, Callable
 
-import httpx
 import numpy as np
 import soundfile as sf
 
