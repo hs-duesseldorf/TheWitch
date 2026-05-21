@@ -2,56 +2,207 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
+import re
 import time
 
-import ollama
+from ollama import AsyncClient, Client
 
 logger = logging.getLogger(__name__)
 
 REQUEST_ATTEMPTS = 5
 RETRY_DELAY_SECONDS = 1.0
+THINK_BLOCK_RE = re.compile(r"<think\b[^>]*>.*?</think>", re.IGNORECASE | re.DOTALL)
+DEFAULT_NUM_CTX = 2048
+NUM_PREDICT = 512
 
 
 class LLMClient:
-    def __init__(
-        self,
-        base_url: str,
-        model: str,
-    ):
+    def __init__(self, base_url: str, model: str):
         self.base_url = base_url.strip().rstrip("/")
         self.model = model.strip()
-        self._client = ollama.AsyncClient(host=self.base_url)
+        self._client = Client(host=self.ollama_host)
+        self._async_client = AsyncClient(host=self.ollama_host)
 
-    async def generate(self, prompt: str) -> str:
+    @property
+    def ollama_host(self) -> str:
+        root = self.base_url
+        if root.endswith("/v1"):
+            root = root[:-3]
+        if root.endswith("/api"):
+            root = root[:-4]
+        return root
+
+    def close(self) -> None:
+        # ollama.Client does not require explicit close in most versions
+        pass
+
+    def generate(self, prompt: str) -> str:
         started_at = time.perf_counter()
-        logger.info("LLM request: model=%s prompt_chars=%d", self.model, len(prompt))
-        for attempt in range(1, REQUEST_ATTEMPTS + 1):
+        logger.info(
+            "LLM request: model=%s url=%s prompt_chars=%d",
+            self.model,
+            self.base_url,
+            len(prompt),
+        )
+
+        attempt = 0
+        while True:
+            attempt += 1
             try:
-                response = await self._client.generate(
-                    model=self.model,
-                    prompt=prompt,
-                    options={
-                        "temperature": 0.8,
-                        "top_p": 0.9,
-                        "num_ctx": 1024,
-                    },
+                data = self._client.chat(
+                    **self._request_args(prompt, stream=False)
                 )
-                data = {"response": response["response"]}
                 break
             except Exception:
-                if attempt == REQUEST_ATTEMPTS:
+                if attempt >= REQUEST_ATTEMPTS:
+                    logger.error("LLM request failed after %d attempts", attempt)
                     raise
-                logger.warning("LLM request failed on attempt %d/%d; retrying", attempt, REQUEST_ATTEMPTS)
-                await asyncio.sleep(RETRY_DELAY_SECONDS * attempt)
-        text = (data.get("response") or "").strip()
-        logger.info("LLM response: chars=%d elapsed=%.2fs", len(text), time.perf_counter() - started_at)
+                logger.warning("LLM request failed on attempt %d; retrying", attempt)
+                time.sleep(RETRY_DELAY_SECONDS * min(attempt, 10))
+
+        message = data.get("message") or {}
+        text = self._strip_thinking(message.get("content") or "")
+
+        logger.info(
+            "LLM response: chars=%d elapsed=%.2fs",
+            len(text),
+            time.perf_counter() - started_at,
+        )
         return text
 
-    async def generate_fortune(self, hand_data: dict) -> str:
-        prompt = (
-            "Schreibe eine kurze mystische Handlese-Wahrsagung auf Deutsch.\n"
-            "Antwort nur mit 2 Saetzen, ohne Einleitung und ohne Aufzaehlung.\n"
-            "Ton: weise, leicht dunkel, konkret.\n"
-            f"Handdaten: {hand_data}"
+    def stream_generate(self, prompt: str):
+        started_at = time.perf_counter()
+        logger.info(
+            "LLM stream request: model=%s url=%s prompt_chars=%d",
+            self.model,
+            self.base_url,
+            len(prompt),
         )
-        return await self.generate(prompt)
+
+        attempt = 0
+        while True:
+            attempt += 1
+            try:
+                stream = self._client.chat(
+                    **self._request_args(prompt, stream=True)
+                )
+
+                for data in stream:
+                    message = data.get("message") or {}
+                    chunk = message.get("content") or ""
+
+                    if chunk:
+                        yield chunk
+
+                    if data.get("done"):
+                        logger.info(
+                            "LLM stream done: elapsed=%.2fs",
+                            time.perf_counter() - started_at,
+                        )
+                        return
+
+                logger.warning("LLM stream ended without done marker")
+                return
+
+            except Exception:
+                if attempt >= REQUEST_ATTEMPTS:
+                    logger.error("LLM stream failed after %d attempts", attempt)
+                    raise
+                logger.warning("LLM stream failed on attempt %d; retrying", attempt)
+                time.sleep(RETRY_DELAY_SECONDS * min(attempt, 10))
+
+    def warmup(self) -> None:
+        logger.info("LLM warmup: model=%s host=%s", self.model, self.ollama_host)
+
+        attempt = 0
+        while True:
+            attempt += 1
+            try:
+                self._client.show(self.model)
+                return
+            except Exception:
+                if attempt >= REQUEST_ATTEMPTS:
+                    logger.error("LLM warmup failed after %d attempts", attempt)
+                    raise
+                logger.warning("LLM warmup failed on attempt %d; retrying", attempt)
+                time.sleep(RETRY_DELAY_SECONDS * min(attempt, 10))
+
+    def generate_fortune(self, prompt: str) -> str:
+        return self.generate(prompt)
+
+    async def async_generate(self, prompt: str) -> str:
+        started_at = time.perf_counter()
+        logger.info(
+            "LLM async request: model=%s url=%s prompt_chars=%d",
+            self.model,
+            self.base_url,
+            len(prompt),
+        )
+
+        attempt = 0
+        while True:
+            attempt += 1
+            try:
+                data = await self._async_client.chat(
+                    **self._request_args(prompt, stream=False)
+                )
+                break
+            except Exception:
+                if attempt >= REQUEST_ATTEMPTS:
+                    logger.error("LLM async request failed after %d attempts", attempt)
+                    raise
+                logger.warning(
+                    "LLM async request failed on attempt %d; retrying",
+                    attempt,
+                )
+                await asyncio.sleep(RETRY_DELAY_SECONDS * min(attempt, 10))
+
+        message = data.get("message") or {}
+        text = self._strip_thinking(message.get("content") or "")
+
+        logger.info(
+            "LLM async response: chars=%d elapsed=%.2fs",
+            len(text),
+            time.perf_counter() - started_at,
+        )
+        return text
+
+    async def async_generate_fortune(self, prompt: str) -> str:
+        return await self.async_generate(prompt)
+
+    def _messages(self, prompt: str):
+        return [{"role": "user", "content": prompt}]
+
+    def _request_args(self, prompt: str, *, stream: bool) -> dict:
+        return {
+            "model": self.model,
+            "messages": self._messages(prompt),
+            "stream": stream,
+            "think": False,
+            "options": {
+                "temperature": 0.55,
+                "top_p": 0.8,
+                "num_ctx": self._num_ctx(),
+                "num_predict": NUM_PREDICT,
+            },
+        }
+
+    def _num_ctx(self) -> int:
+        raw = os.environ.get("WITCH_LLM_NUM_CTX", "").strip()
+        if not raw:
+            return DEFAULT_NUM_CTX
+        try:
+            return max(512, int(raw))
+        except ValueError:
+            logger.warning(
+                "Invalid WITCH_LLM_NUM_CTX=%r; using %d",
+                raw,
+                DEFAULT_NUM_CTX,
+            )
+            return DEFAULT_NUM_CTX
+
+    def _strip_thinking(self, text: str) -> str:
+        text = THINK_BLOCK_RE.sub("", text)
+        text = re.sub(r"</?think\b[^>]*>", "", text, flags=re.IGNORECASE)
+        return text.strip()

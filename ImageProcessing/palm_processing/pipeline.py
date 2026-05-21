@@ -44,8 +44,7 @@ CAMERA_HEIGHT = 480
 VIDEO_STREAM_FPS = 15.0
 VIDEO_STREAM_WIDTH = 640
 VIDEO_STREAM_INTERVAL_S = 1.0 / VIDEO_STREAM_FPS
-WEBCAM_BRIDGE_URL = "http://host.containers.internal:8090/video"
-CAMERA_SOURCE = os.getenv("WITCH_CAMERA_SOURCE", "0")
+CAMERA_SOURCE = os.environ["WITCH_CAMERA_SOURCE"]
 FRAME_INTERVAL_MS = int(round(1000.0 / CAMERA_FPS))
 HISTORY_SIZE = 45
 ROI_SIZE = 256
@@ -101,18 +100,17 @@ class HeadlessPalmClient:
         self.last_roi_frame_publish_at = 0.0
 
         self.cap = cv2.VideoCapture(self.camera_source)
-        if not self.cap.isOpened() and isinstance(self.camera_source, int):
-            logger.warning("Camera %s failed, trying MJPEG bridge at %s", self.camera_source, WEBCAM_BRIDGE_URL)
-            self.camera_source = WEBCAM_BRIDGE_URL
-            self.cap = cv2.VideoCapture(WEBCAM_BRIDGE_URL)
         if not self.cap.isOpened():
-            raise RuntimeError(
-                f"Could not open camera source {CAMERA_SOURCE!r}. "
-                f"Start the webcam bridge if running in Podman Desktop without device passthrough: {WEBCAM_BRIDGE_URL}"
+            logger.warning(
+                "Could not open camera source %r. Continuing without camera. "
+                "Video processing will be disabled.",
+                CAMERA_SOURCE,
             )
-        self._configure_capture_resolution()
-        with suppress(cv2.error):
-            self.cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
+            self.cap = None
+        else:
+            self._configure_capture_resolution()
+            with suppress(cv2.error):
+                self.cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
 
         self.landmarker = create_hand_landmarker(DEFAULT_HAND_MODEL_PATH)
         self.device = resolve_torch_device()
@@ -283,6 +281,9 @@ class HeadlessPalmClient:
         target_period = max(self.interval_ms / 1000.0, 0.0)
         while not self.stop_event.is_set():
             loop_started = time.monotonic()
+            if self.cap is None:
+                self.stop_event.wait(target_period)
+                continue
             try:
                 ok, raw_frame = self.cap.read()
                 if not ok:
@@ -308,8 +309,7 @@ class HeadlessPalmClient:
                     )
                 else:
                     hand = result.hand_landmarks[index]
-                    mediapipe_hand = Hand(result.handedness[index][0].category_name.strip().lower())
-                    display_hand = Hand.RIGHT if mediapipe_hand is Hand.LEFT else Hand.LEFT
+                    display_hand = Hand(result.handedness[index][0].category_name.strip().lower())
 
                     height, width = raw_frame.shape[:2]
                     should_publish_video = self._should_publish_video_frame()
@@ -339,11 +339,11 @@ class HeadlessPalmClient:
                     world = result.hand_world_landmarks[index]
                     world_pts = np.array([[lm.x, lm.y, lm.z] for lm in world], dtype=np.float32)
 
-                    if not is_palm_side_visible(world_pts, mediapipe_hand, min_confidence=0.3):
+                    if not is_palm_side_visible(world_pts, display_hand, min_confidence=0.3):
                         self._publish_palm_side_required(display_hand, overlay_hand_frame)
                         continue
 
-                    if not is_palm_frontal(world_pts, mediapipe_hand):
+                    if not is_palm_frontal(world_pts, display_hand):
                         self._publish_pose_quality(display_hand, overlay_hand_frame)
                         continue
 

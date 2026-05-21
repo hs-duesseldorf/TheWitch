@@ -95,9 +95,6 @@
                 margin-bottom: 6px;
                 font-size: 11px;
             }
-            audio {
-                width: 100%;
-            }
             .stream-wrap {
                 position: relative;
                 aspect-ratio: var(--video-ratio, 16 / 9);
@@ -188,8 +185,9 @@
                             state:
                             <span id="currentState" class="state">-</span>
                         </div>
-                        <div><button id="resetButton">Reset</button></div>
-                        <audio id="ttsAudio" controls></audio>
+                        <div>
+                            <button id="resetButton">Reset</button>
+                        </div>
                     </div>
                 </section>
             </section>
@@ -218,7 +216,6 @@
         <script>
             const API = location.origin;
             const $ = (id) => document.getElementById(id);
-            let currentAudio = "";
             let currentState = "";
             let graphRenderId = 0;
             mermaid.initialize({
@@ -243,11 +240,12 @@
                 socket(`${wsBase}/ws/ip-ai`, (ev) => {
                     show(ev.origin, ev);
                     updateState();
+                    loadGraph();
                 });
                 socket(`${wsBase}/ws/ai-3d`, (ev) => {
-                    if (ev.type === "fortune") updateAudio();
                     show(ev.origin, ev);
                     updateState();
+                    loadGraph();
                 });
             }
 
@@ -293,13 +291,6 @@
                     null,
                     2,
                 );
-            }
-
-            async function updateAudio() {
-                const event = await json("/api/tts-audio");
-                if (!event.audio || event.audio === currentAudio) return;
-                currentAudio = event.audio;
-                $("ttsAudio").src = `data:audio/wav;base64,${event.audio}`;
             }
 
             function stream(name, url) {
@@ -364,19 +355,25 @@
                 );
             }
 
+            let graphPending = false;
             async function loadGraph() {
-                const div = $("graphContent");
-                const renderId = ++graphRenderId;
-                const { graph } = await json("/api/state-machine-graph");
-                try {
-                    const rendered = await mermaid.render(
-                        `g${Date.now()}-${renderId}`,
-                        graph,
-                    );
-                    if (renderId === graphRenderId) div.innerHTML = rendered.svg;
-                } catch {
-                    if (renderId === graphRenderId) div.textContent = graph;
-                }
+                if (graphPending) return;
+                graphPending = true;
+                setTimeout(async () => {
+                    graphPending = false;
+                    const div = $("graphContent");
+                    const renderId = ++graphRenderId;
+                    const { graph } = await json("/api/state-machine-graph");
+                    try {
+                        const rendered = await mermaid.render(
+                            `g${Date.now()}-${renderId}`,
+                            graph,
+                        );
+                        if (renderId === graphRenderId) div.innerHTML = rendered.svg;
+                    } catch {
+                        if (renderId === graphRenderId) div.textContent = graph;
+                    }
+                }, 100);
             }
         </script>
     </body>

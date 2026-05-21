@@ -66,7 +66,7 @@ class SeatPresenceMonitor:
         self.worker = None
 
     def _run(self) -> None:
-        if os.getenv("WITCH_SEAT_SENSOR_OVERRIDE", "false") == "true":
+        if os.getenv("WITCH_SEAT_SENSOR_OVERRIDE") == "true":
             self._publish_person_seated()
             return
 
