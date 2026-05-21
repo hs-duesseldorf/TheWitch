@@ -7,6 +7,7 @@ import platform
 import queue
 import re
 import threading
+import time
 from typing import Any, Awaitable, Callable
 
 import numpy as np
@@ -26,6 +27,20 @@ logger = logging.getLogger(__name__)
 
 SR = 48000
 LINUX_VIRTUAL_CABLE_NAMES = ("witchvirtualcable",)
+DEFAULT_AUDIO_PREBUFFER_SECONDS = 0.6
+UNDERRUN_LOG_INTERVAL_SECONDS = 2.0
+
+
+def _env_float(name: str, default: float, *, minimum: float = 0.0) -> float:
+    raw = os.getenv(name, "").strip()
+    if not raw:
+        return default
+    try:
+        return max(minimum, float(raw))
+    except ValueError:
+        logger.warning("%s=%r is not a valid float; using %.2f", name, raw, default)
+        return default
+
 
 def _configured_audio_device(devices: list[dict[str, Any]]) -> int | None:
     configured = os.getenv("WITCH_AUDIO_DEVICE", "").strip()
@@ -137,6 +152,11 @@ AudioCallbacks = Callable[[bytes], Awaitable[None]]
 class StreamingAudioPlayer:
     def __init__(self, sample_rate: int = 24000):
         self._sample_rate = sample_rate
+        self._prebuffer_seconds = _env_float(
+            "WITCH_AUDIO_PREBUFFER_SECONDS",
+            DEFAULT_AUDIO_PREBUFFER_SECONDS,
+        )
+        self._prebuffer_frames = int(SR * self._prebuffer_seconds)
         self._pcm_remainder = b""
         self._outputs: list[dict[str, Any]] = []
         self._thread: threading.Thread | None = None
@@ -163,6 +183,12 @@ class StreamingAudioPlayer:
                     "device": device,
                     "queue": queue.Queue(maxsize=0),
                     "pending": np.empty((0, 2), dtype=np.float32),
+                    "buffered_frames": 0,
+                    "playback_started": self._prebuffer_frames <= 0,
+                    "producer_done": False,
+                    "underruns": 0,
+                    "last_underrun_log": 0.0,
+                    "lock": threading.Lock(),
                 }
                 stream = sd.OutputStream(
                     samplerate=SR,
@@ -181,9 +207,16 @@ class StreamingAudioPlayer:
                 stream.start()
                 self._outputs.append(output)
                 if device is None:
-                    logger.info("Started audio stream on OS default output device")
+                    logger.info(
+                        "Started audio stream on OS default output device; prebuffer=%.2fs",
+                        self._prebuffer_seconds,
+                    )
                 else:
-                    logger.info("Started audio stream on device %s", device)
+                    logger.info(
+                        "Started audio stream on device %s; prebuffer=%.2fs",
+                        device,
+                        self._prebuffer_seconds,
+                    )
             except Exception as e:
                 label = "OS default output device" if device is None else f"device {device}"
                 logger.warning("Failed to start audio stream on %s: %s", label, e)
@@ -208,10 +241,45 @@ class StreamingAudioPlayer:
         chunks: queue.Queue[np.ndarray | None] = output["queue"]
 
         while written < frames:
+            with output["lock"]:
+                playback_started = output["playback_started"]
+                buffered_frames = output["buffered_frames"]
+                if not playback_started and buffered_frames >= self._prebuffer_frames:
+                    output["playback_started"] = True
+                    playback_started = True
+
+            if not playback_started:
+                break
+
             if pending.shape[0] == 0:
                 try:
                     chunk = chunks.get_nowait()
                 except queue.Empty:
+                    with output["lock"]:
+                        producer_done = output["producer_done"]
+                    if producer_done:
+                        break
+
+                    with output["lock"]:
+                        output["playback_started"] = self._prebuffer_frames <= 0
+                        output["underruns"] += 1
+                        underruns = output["underruns"]
+                        now = time.perf_counter()
+                        should_log = (
+                            now - output["last_underrun_log"]
+                            >= UNDERRUN_LOG_INTERVAL_SECONDS
+                        )
+                        if should_log:
+                            output["last_underrun_log"] = now
+                    if should_log:
+                        device = output["device"]
+                        label = "OS default output device" if device is None else f"device {device}"
+                        logger.warning(
+                            "Audio underrun on %s; rebuffering %.2fs (count=%d)",
+                            label,
+                            self._prebuffer_seconds,
+                            underruns,
+                        )
                     break
 
                 if chunk is None:
@@ -222,6 +290,8 @@ class StreamingAudioPlayer:
             available = min(frames - written, pending.shape[0])
             outdata[written : written + available] = pending[:available]
             written += available
+            with output["lock"]:
+                output["buffered_frames"] = max(0, output["buffered_frames"] - available)
 
             if available < pending.shape[0]:
                 pending = pending[available:]
@@ -233,6 +303,8 @@ class StreamingAudioPlayer:
     def _enqueue(self, output: dict[str, Any], data: np.ndarray) -> None:
         chunks: queue.Queue[np.ndarray | None] = output["queue"]
         try:
+            with output["lock"]:
+                output["buffered_frames"] += int(data.shape[0])
             chunks.put_nowait(data.copy())
         except Exception:
             chunks.put(data.copy(), block=True)
@@ -276,6 +348,12 @@ class StreamingAudioPlayer:
                 self._enqueue(output, data)
         except Exception as e:
             logger.warning("Audio playback chunk failed: %s", e)
+
+    def finish(self) -> None:
+        for output in self._outputs:
+            with output["lock"]:
+                output["producer_done"] = True
+                output["playback_started"] = True
 
     async def drain(self, timeout: float = 30.0) -> None:
         if not self._outputs:
@@ -435,6 +513,7 @@ class SpeechPipeline:
                             player.put(frame.audio, format=frame.format, sample_rate=frame.sample_rate)
                     logger.info("TTS complete: %d frames", frame_count)
                     if use_direct:
+                        player.finish()
                         await player.drain()
 
                     self._stage = "done"
