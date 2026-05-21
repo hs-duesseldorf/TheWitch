@@ -87,6 +87,7 @@ def run() -> None:
             "OLLAMA_KEEP_ALIVE": os.environ.get("OLLAMA_KEEP_ALIVE", "24h"),
             "OLLAMA_NUM_PARALLEL": os.environ.get("OLLAMA_NUM_PARALLEL", "1"),
             "OLLAMA_FLASH_ATTENTION": os.environ.get("OLLAMA_FLASH_ATTENTION", "1"),
+            "OLLAMA_CONTEXT_LENGTH": os.environ.get("WITCH_LLM_NUM_CTX", "2048"),
         }
     )
 

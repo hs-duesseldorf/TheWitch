@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 import re
 import time
 from collections.abc import AsyncIterator
@@ -16,12 +17,8 @@ BOUNDARY_RE = re.compile(r"([.!?,;:]+)\s+")
 MAX_CHUNK_LATENCY_SECONDS = 0.2
 FIRST_CHUNK_WORDS = 200
 LATER_CHUNK_WORDS = 200
-NO_THINKING_SYSTEM_PROMPT = (
-    "Antworte ausschliesslich auf Deutsch. "
-    "Zeige niemals <think>, interne Ueberlegungen oder Analyse. "
-    "Gib nur die finale gesprochene Antwort aus."
-)
 THINK_BLOCK_RE = re.compile(r"<think\b[^>]*>.*?</think>", re.IGNORECASE | re.DOTALL)
+DEFAULT_NUM_CTX = 2048
 
 
 class LLMClient:
@@ -64,7 +61,7 @@ class LLMClient:
         while True:
             attempt += 1
             try:
-                data = await self._ensure_client().chat(**self._request_args(prompt, stream=False, temperature=0.7))
+                data = await self._ensure_client().chat(**self._request_args(prompt, stream=False, temperature=0.55))
                 break
             except Exception:
                 if attempt >= REQUEST_ATTEMPTS:
@@ -84,7 +81,7 @@ class LLMClient:
         while True:
             attempt += 1
             try:
-                stream = await self._ensure_client().chat(**self._request_args(prompt, stream=True, temperature=0.8))
+                stream = await self._ensure_client().chat(**self._request_args(prompt, stream=True, temperature=0.55))
                 async for data in stream:
                     message = data.get("message") or {}
                     chunk = message.get("content") or ""
@@ -173,7 +170,6 @@ class LLMClient:
 
     def _messages(self, prompt: str) -> list[dict[str, str]]:
         return [
-            {"role": "system", "content": NO_THINKING_SYSTEM_PROMPT},
             {"role": "user", "content": prompt},
         ]
 
@@ -185,10 +181,21 @@ class LLMClient:
             "think": False,
             "options": {
                 "temperature": temperature,
-                "top_p": 0.9,
-                "num_predict": 1024,
+                "top_p": 0.8,
+                "num_ctx": self._num_ctx(),
+                "num_predict": 180,
             },
         }
+
+    def _num_ctx(self) -> int:
+        raw = os.environ.get("WITCH_LLM_NUM_CTX", "").strip()
+        if not raw:
+            return DEFAULT_NUM_CTX
+        try:
+            return max(512, int(raw))
+        except ValueError:
+            logger.warning("Invalid WITCH_LLM_NUM_CTX=%r; using %d", raw, DEFAULT_NUM_CTX)
+            return DEFAULT_NUM_CTX
 
     def _strip_thinking(self, text: str) -> str:
         text = THINK_BLOCK_RE.sub("", text)

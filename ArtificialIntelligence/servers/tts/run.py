@@ -16,6 +16,10 @@ def run() -> None:
     model = os.environ["WITCH_TTS_MODEL"]
     port = os.environ["WITCH_TTS_PORT"]
     os.environ.setdefault("VLLM_USE_FLASHINFER_SAMPLER", "0")
+    os.environ.setdefault("OMP_NUM_THREADS", "2")
+    os.environ.setdefault("OPENBLAS_NUM_THREADS", "2")
+    os.environ.setdefault("MKL_NUM_THREADS", "2")
+    os.environ.setdefault("NUMEXPR_NUM_THREADS", "2")
     existing_pythonpath = os.environ.get("PYTHONPATH")
     os.environ["PYTHONPATH"] = (
         str(PATCH_DIR)
