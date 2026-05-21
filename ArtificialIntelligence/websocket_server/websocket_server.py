@@ -3,8 +3,11 @@ import logging
 from typing import Awaitable, Callable
 from urllib.parse import urlsplit
 
-from websockets.asyncio.server import ServerConnection, serve
-from websockets.exceptions import ConnectionClosed
+from websockets.exceptions import ConnectionClosed, ConnectionClosedError, ConnectionClosedOK
+try:
+    from websockets.asyncio.server import ServerConnection, serve
+except ModuleNotFoundError:
+    from websockets.server import WebSocketServerProtocol as ServerConnection, serve
 
 logger = logging.getLogger(__name__)
 
@@ -59,8 +62,9 @@ class WebSocketServer:
         for clients, _ in self._routes.values():
             clients.discard(connection)
 
-    async def _handler(self, websocket: ServerConnection) -> None:
-        raw_path = getattr(websocket.request, "path", "/")
+    async def _handler(self, websocket: ServerConnection, path: str | None = None) -> None:
+        request = getattr(websocket, "request", None)
+        raw_path = path or getattr(request, "path", None) or getattr(websocket, "path", "/")
         request_path = urlsplit(raw_path).path
         route = self._routes.get(request_path)
         if route is None:
@@ -69,11 +73,15 @@ class WebSocketServer:
             return
         clients, callback = route
         clients.add(websocket)
-        logger.debug("Client connected on %s. Total: %s", request_path, len(clients))
+        logger.info("Client connected on %s. Total: %s", request_path, len(clients))
         try:
             async for message in websocket:
-                if callback:
+                if callback is not None:
                     await callback(self, websocket, message)
+        except ConnectionClosedOK:
+            logger.debug("WebSocket closed on %s", request_path)
+        except ConnectionClosedError as exc:
+            logger.debug("WebSocket closed abruptly on %s: %s", request_path, exc)
         except Exception as exc:
             logger.error("WebSocket error on %s: %s", request_path, exc)
         finally:

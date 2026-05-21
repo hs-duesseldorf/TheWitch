@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any, Awaitable, Callable
 
 from transitions.extensions import GraphMachine
 
@@ -40,45 +41,45 @@ class StateChange:
     dest: str
 
 
-def transition(trigger: str, source: str | list[str], dest: str) -> dict[str, object]:
+def _transition(trigger: str, source: str | list[str], dest: str) -> dict[str, object]:
     return {"trigger": trigger, "source": source, "dest": dest}
 
 
 TRANSITIONS = [
-    # Camera / hand input.
-    transition("ip_person_seated", IDLE, ATTENTION),
-    transition("ip_hand_absent", IDLE, ATTENTION),
-    transition("ip_hand_present", IDLE, INTRO),
-    transition("attention_done", ATTENTION, IDLE),
-    transition("intro_done", INTRO, SCAN_READY),
-    transition("ip_hand_removed", INTRO, REFOCUS),
-    transition("refocus_done", REFOCUS, INTRO),
-    transition("ip_hand_removed", SCAN_READY, REFOCUS),
-    transition("ip_hand_wrong", SCAN_READY, HAND_CORRECTION),
-    transition("ip_hand_right", SCAN_READY, SCANNING),
-    transition("correction_done", HAND_CORRECTION, SCAN_READY),
-    transition("ip_scan_incomplete", SCANNING, SCAN_READY),
-    transition("ip_hand_wrong", SCANNING, HAND_CORRECTION),
-    transition("ip_scan_complete", SCANNING, SCAN_COMPLETE),
-
-    # Generic completion ACKs from Unreal.
-    transition("scan_complete_output_done", SCAN_COMPLETE, TRANSFORMATION),
-    transition("transformation_done", TRANSFORMATION, INTRODUCTION),
-    transition("introduction_done", INTRODUCTION, SHOT_1_VISUAL),
-    transition("shot_1_done", SHOT_1_VISUAL, SHOT_2_TASK),
-    transition("shot_2_done", SHOT_2_TASK, SHOT_3_ELEMENT),
-    transition("shot_3_done", SHOT_3_ELEMENT, SHOT_4_POSITIVE_NEGATIVE),
-    transition("shot_4_done", SHOT_4_POSITIVE_NEGATIVE, SHOT_5_BALANCE),
-    transition("shot_5_done", SHOT_5_BALANCE, RETURN),
-    transition("return_done", RETURN, SMOKE_END),
-    transition("end_done", [SMOKE_END, VANISH_END], END),
-
-    transition("reset", ANY_SOURCE, IDLE),
+    _transition("ip_person_seated", IDLE, ATTENTION),
+    _transition("ip_hand_absent", IDLE, ATTENTION),
+    _transition("ip_hand_present", IDLE, INTRO),
+    _transition("attention_done", ATTENTION, IDLE),
+    _transition("intro_done", INTRO, SCAN_READY),
+    _transition("ip_hand_removed", INTRO, REFOCUS),
+    _transition("refocus_done", REFOCUS, INTRO),
+    _transition("ip_hand_removed", SCAN_READY, REFOCUS),
+    _transition("ip_hand_wrong", SCAN_READY, HAND_CORRECTION),
+    _transition("ip_hand_right", SCAN_READY, SCANNING),
+    _transition("correction_done", HAND_CORRECTION, SCAN_READY),
+    _transition("ip_scan_incomplete", SCANNING, SCAN_READY),
+    _transition("ip_hand_wrong", SCANNING, HAND_CORRECTION),
+    _transition("ip_scan_complete", SCANNING, SCAN_COMPLETE),
+    _transition("scan_complete_output_done", SCAN_COMPLETE, TRANSFORMATION),
+    _transition("transformation_done", TRANSFORMATION, INTRODUCTION),
+    _transition("introduction_done", INTRODUCTION, SHOT_1_VISUAL),
+    _transition("shot_1_done", SHOT_1_VISUAL, SHOT_2_TASK),
+    _transition("shot_2_done", SHOT_2_TASK, SHOT_3_ELEMENT),
+    _transition("shot_3_done", SHOT_3_ELEMENT, SHOT_4_POSITIVE_NEGATIVE),
+    _transition("shot_4_done", SHOT_4_POSITIVE_NEGATIVE, SHOT_5_BALANCE),
+    _transition("shot_5_done", SHOT_5_BALANCE, RETURN),
+    _transition("return_done", RETURN, SMOKE_END),
+    _transition("end_done", [SMOKE_END, VANISH_END], END),
+    _transition("reset", ANY_SOURCE, IDLE),
+    _transition("reset", SCAN_COMPLETE, IDLE),
+    _transition("reset", SCANNING, IDLE),
+    _transition("reset", HAND_CORRECTION, IDLE),
 ]
 
 TRANSITION_IDS = list(dict.fromkeys(item["trigger"] for item in TRANSITIONS))
 
-ANIMATION_TRIGGER_BY_STATE = {
+
+ANIMATION_TRIGGER_BY_STATE: dict[str, str] = {
     ATTENTION: "attention_done",
     INTRO: "intro_done",
     REFOCUS: "refocus_done",
@@ -95,7 +96,8 @@ ANIMATION_TRIGGER_BY_STATE = {
     VANISH_END: "end_done",
 }
 
-HAND_TRIGGER_BY_STATE = {
+
+HAND_TRIGGER_BY_STATE: dict[str, dict[str, str]] = {
     IDLE: {
         "absent": "ip_hand_absent",
         "present": "ip_hand_present",
@@ -136,10 +138,12 @@ HAND_TRIGGER_BY_STATE = {
     },
 }
 
-SCENES_THAT_START_ANALYSIS = frozenset({SCAN_COMPLETE, SHOT_1_VISUAL})
+
+SCENES_THAT_START_ANALYSIS = frozenset({SHOT_1_VISUAL})
 SCENES_THAT_DELIVER_FORTUNE = frozenset({SHOT_1_VISUAL})
 
-STATE_DESCRIPTIONS = {
+
+STATE_DESCRIPTIONS: dict[str, str] = {
     IDLE: "Szene 0 - Idle: Wahrsagerin beschaeftigt sich selbst.",
     ATTENTION: "Szene 1 - Begruessung: Wahrsagerin macht Besucher auf den Stein aufmerksam.",
     INTRO: "Szene 2 - Einleitung: Wahrsagerin reagiert.",
@@ -164,7 +168,9 @@ STATE_DESCRIPTIONS = {
 
 class WitchStateMachine:
     def __init__(self) -> None:
-        self.machine = GraphMachine(
+        self._transition_handlers: dict[str, list[Callable[[StateChange], Awaitable[None]]]] = {}
+        self._state: str = INITIAL
+        self._machine = GraphMachine(
             model=self,
             states=STATES,
             transitions=TRANSITIONS,
@@ -174,6 +180,26 @@ class WitchStateMachine:
             graph_engine="mermaid",
             title="The Witch State Machine",
         )
+
+    @property
+    def state(self) -> str:
+        return self._state
+
+    @state.setter
+    def state(self, value: str) -> None:
+        self._state = value
+
+    def register_transition_handler(self, trigger: str, handler: Callable[[StateChange], Awaitable[None]]) -> None:
+        if trigger not in self._transition_handlers:
+            self._transition_handlers[trigger] = []
+        self._transition_handlers[trigger].append(handler)
+
+    def get_transition_handlers(self, trigger: str) -> list[Callable[[StateChange], Awaitable[None]]]:
+        return self._transition_handlers.get(trigger, [])
+
+    @property
+    def machine(self):
+        return self._machine
 
     def hand_event(self, event: HandEvent) -> list[StateChange]:
         condition = hand_condition(event)
@@ -220,7 +246,7 @@ class WitchStateMachine:
 
     def force_state(self, state: str) -> str:
         if state in STATES:
-            self.machine.set_state(state, model=self)
+            self._machine.set_state(state, model=self)
         return self.state
 
     def description(self) -> str:
@@ -228,7 +254,7 @@ class WitchStateMachine:
 
     def save_markdown(self, path: Path | None = None) -> Path:
         path = path or Path(__file__).with_name("StateMachine.md")
-        mermaid = self.machine.get_graph().source.replace("direction LR", "direction TB")
+        mermaid = self._machine.get_graph().source.replace("direction LR", "direction TB")
         path.write_text(f"```mermaid\n{mermaid.strip()}\n```\n", encoding="utf-8")
         return path
 
