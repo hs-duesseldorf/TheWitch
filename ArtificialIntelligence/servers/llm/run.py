@@ -3,8 +3,11 @@ from __future__ import annotations
 
 import os
 import shutil
+import signal
 import subprocess
 import sys
+import tempfile
+import time
 import urllib.request
 from pathlib import Path
 
@@ -14,90 +17,144 @@ SERVER_DIR = Path(__file__).resolve().parent
 ROOT = SERVER_DIR.parents[2]
 
 
-def remote_size(url: str) -> int | None:
-    request = urllib.request.Request(url, method="HEAD")
-    try:
-        with urllib.request.urlopen(request) as response:
-            length = response.headers.get("Content-Length") or response.headers.get("X-Linked-Size")
-    except Exception:
-        return None
-    return int(length) if length and length.isdigit() else None
+def log(message: str) -> None:
+    print(message, flush=True)
 
 
-def download_file(url: str, destination: Path, label: str) -> None:
-    destination.parent.mkdir(parents=True, exist_ok=True)
-    expected_size = remote_size(url)
-    if destination.exists() and expected_size is not None:
-        actual_size = destination.stat().st_size
-        if actual_size == expected_size:
-            return
-        print(
-            f"[run_llm] Existing {label} has size {actual_size}, expected {expected_size}; re-downloading...",
-            flush=True,
-        )
-    elif destination.exists():
+def ollama_bin() -> str:
+    path = shutil.which("ollama")
+    if path:
+        return path
+
+    raise SystemExit(
+        "ollama is required. Install it with:\n"
+        "curl -fsSL https://ollama.com/install.sh | sh"
+    )
+
+
+def wait_for_ollama(host: str, timeout: float = 60.0) -> None:
+    deadline = time.monotonic() + timeout
+    url = f"http://{host}/api/tags"
+
+    last_error: Exception | None = None
+    while time.monotonic() < deadline:
+        try:
+            with urllib.request.urlopen(url, timeout=2) as response:
+                if response.status == 200:
+                    return
+        except Exception as exc:
+            last_error = exc
+            time.sleep(0.5)
+
+    raise RuntimeError(f"Ollama did not become ready at {url}: {last_error}")
+
+
+def run_ollama_command(args: list[str], env: dict[str, str]) -> None:
+    log(f"[run_llm] Running: ollama {' '.join(args)}")
+    subprocess.run(["ollama", *args], cwd=ROOT, env=env, check=True)
+
+
+def create_alias_if_needed(model: str, alias: str, env: dict[str, str]) -> None:
+    if not alias or alias == model:
         return
 
-    part = destination.with_suffix(destination.suffix + ".part")
-    if part.exists():
-        part.unlink()
-    print(f"[run_llm] Downloading {label}...", flush=True)
-    with urllib.request.urlopen(url) as response, part.open("wb") as output:
-        shutil.copyfileobj(response, output)
+    # Preserve compatibility with the previous llama.cpp --alias value.
+    # Your old server used the GGUF filename as the model alias.
+    log(f"[run_llm] Creating Ollama alias: {alias} -> {model}")
 
-    if expected_size is not None:
-        actual_size = part.stat().st_size
-        if actual_size != expected_size:
-            part.unlink(missing_ok=True)
-            raise RuntimeError(f"{label} download incomplete: got {actual_size} bytes, expected {expected_size}")
+    with tempfile.TemporaryDirectory() as tmp:
+        modelfile = Path(tmp) / "Modelfile"
+        modelfile.write_text(f"FROM {model}\n", encoding="utf-8")
+        subprocess.run(
+            ["ollama", "create", alias, "-f", str(modelfile)],
+            cwd=ROOT,
+            env=env,
+            check=True,
+        )
 
-    part.replace(destination)
+
+def terminate(process: subprocess.Popen[str]) -> None:
+    if process.poll() is not None:
+        return
+
+    process.send_signal(signal.SIGTERM)
+    try:
+        process.wait(timeout=10)
+    except subprocess.TimeoutExpired:
+        process.kill()
 
 
 def run() -> None:
     load_dotenv(ROOT / ".env")
 
-    data_dir = SERVER_DIR / ".venv"
-    llama_dir = data_dir / "llama-cpp"
-    llama_server = llama_dir / "llama-server"
-    models_dir = data_dir / "models"
+    ollama = ollama_bin()
 
-    os.environ.update({
-        "OPENBLAS_NUM_THREADS": "1",
-        "MKL_NUM_THREADS": "1",
-        "NUMEXPR_NUM_THREADS": "1",
-        "OMP_NUM_THREADS": "8",
-        "TORCH_NUM_THREADS": "8",
-        "TOKENIZERS_PARALLELISM": "false",
-        "HF_HUB_DISABLE_SYMLINKS_WARNING": "1",
-    })
+    port = os.environ.get("WITCH_LLM_PORT", "10032")
+    host = os.environ.get("OLLAMA_BIND_HOST", "0.0.0.0")
+    ollama_host = f"{host}:{port}"
 
-    if not llama_server.exists():
-        tag = "b9222"
-        llama_dir.mkdir(parents=True, exist_ok=True)
-        archive = llama_dir / f"llama-{tag}-bin-ubuntu-vulkan-x64.tar.gz"
-        url = f"https://github.com/ggml-org/llama.cpp/releases/download/{tag}/{archive.name}"
-        download_file(url, archive, f"llama.cpp {tag}")
-        subprocess.run(["tar", "-xzf", str(archive), "-C", str(llama_dir), "--strip-components=1"], check=True)
-        subprocess.check_call(["chmod", "+x", str(llama_server)])
+    # Pick the Ollama model. Override this in .env if needed:
+    # WITCH_OLLAMA_MODEL=qwen3:4b
+    model = (
+        os.environ.get("WITCH_OLLAMA_MODEL")
+        or os.environ.get("OLLAMA_MODEL")
+        or "qwen3:4b"
+    )
 
-    repo, file = os.environ["WITCH_LLM_HF"].split(":", 1)
-    model = models_dir / file
-    download_file(f"https://huggingface.co/{repo}/resolve/main/{file}", model, "LLM model")
+    # Preserve old llama.cpp model alias when WITCH_LLM_HF is still set.
+    # Example old alias: Qwen3-4B-Q4_K_M.gguf
+    alias = os.environ.get("WITCH_LLM_ALIAS", "")
+    if not alias and os.environ.get("WITCH_LLM_HF"):
+        try:
+            _, old_file = os.environ["WITCH_LLM_HF"].split(":", 1)
+            alias = old_file
+        except ValueError:
+            alias = ""
 
-    print(f"[run_llm] Starting LLM: model={model} port={os.environ['WITCH_LLM_PORT']}", flush=True)
-    threads = os.environ.get("LLM_THREADS", "8")
-    os.execv(str(llama_server), [
-        str(llama_server),
-        "--model", str(model),
-        "--host", "0.0.0.0",
-        "--port", os.environ["WITCH_LLM_PORT"],
-        "--alias", file,
-        "--ctx-size", os.environ["LLM_MAX_MODEL_LEN"],
-        "--n-gpu-layers", os.environ["LLM_N_GPU_LAYERS"],
-        "--threads", threads,
-        "--parallel", "1",
-    ])
+    env = os.environ.copy()
+    env.update(
+        {
+            "OLLAMA_HOST": ollama_host,
+            "OLLAMA_KEEP_ALIVE": os.environ.get("OLLAMA_KEEP_ALIVE", "24h"),
+            "OLLAMA_NUM_PARALLEL": os.environ.get("OLLAMA_NUM_PARALLEL", "1"),
+            "OLLAMA_FLASH_ATTENTION": os.environ.get("OLLAMA_FLASH_ATTENTION", "1"),
+        }
+    )
+
+    log(f"[run_llm] Starting Ollama on {ollama_host}")
+    log(f"[run_llm] Ollama model={model}")
+    if alias:
+        log(f"[run_llm] Compatibility alias={alias}")
+
+    process = subprocess.Popen(
+        [ollama, "serve"],
+        cwd=ROOT,
+        env=env,
+        stdin=subprocess.DEVNULL,
+        stdout=sys.stdout,
+        stderr=sys.stderr,
+        text=True,
+    )
+
+    try:
+        wait_for_ollama(ollama_host)
+
+        run_ollama_command(["pull", model], env)
+        create_alias_if_needed(model, alias, env)
+
+        log(f"[run_llm] OpenAI-compatible API ready: http://{ollama_host}/v1")
+        log(f"[run_llm] Native Ollama API ready: http://{ollama_host}")
+
+        raise SystemExit(process.wait())
+
+    except KeyboardInterrupt:
+        log("[run_llm] Stopping Ollama")
+        terminate(process)
+        raise SystemExit(130)
+
+    except Exception:
+        terminate(process)
+        raise
 
 
 if __name__ == "__main__":
