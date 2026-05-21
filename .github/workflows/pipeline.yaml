@@ -6,46 +6,50 @@ on:
       - main
 
 jobs:
-  linux-smoke-test:
-    name: Podman Compose smoke test on Linux
+  witch-compose-smoke-test:
+    name: Witch Compose smoke test on Linux
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Install Podman and Podman Compose
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v3
+
+      - name: Build virtual environments
         run: |
-          sudo apt-get update
-          sudo apt-get install -y podman podman-compose
+          ./witch-compose --build
 
-      - name: Show versions
+      - name: Start services
         run: |
-          podman --version
-          podman-compose --version
+          ./witch-compose up &
+          COMPOSE_PID=$!
+          sleep 30
+          
+          # Check if services are still running
+          if ! kill -0 $COMPOSE_PID 2>/dev/null; then
+            echo "Services failed to start"
+            exit 1
+          fi
 
-      - name: Build and start containers
-        run: podman-compose up --build -d
-
-      - name: Let containers run for 60 seconds
-        run: sleep 60
-
-      - name: Verify containers are still running
+      - name: Verify services health
         run: |
-          podman-compose ps
-
-          EXITED=$(podman ps -a --filter status=exited --format "{{.Names}}" | wc -l)
-
-          if [ "$EXITED" -gt 0 ]; then
-            echo "One or more containers exited during the smoke test."
-            podman-compose logs
+          # Give services time to initialize
+          sleep 30
+          
+          # Check if AI service is responding on expected port
+          if ! nc -z localhost 10031; then
+            echo "AI service not responding on port 10031"
             exit 1
           fi
 
       - name: Show logs
         if: always()
-        run: podman-compose logs
+        run: |
+          ./witch-compose kill || true
 
-      - name: Stop containers
+      - name: Stop services
         if: always()
-        run: podman-compose down
+        run: |
+          pkill -f witch_compose || true
