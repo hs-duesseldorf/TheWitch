@@ -414,16 +414,7 @@ class SpeechPipeline:
                     if not use_direct:
                         logger.info("No local audio device; using websocket audio only")
 
-                    text_buffer = ""
-                    tts_started = False
-
-                    async for text_chunk in self._llm.stream_fortune_chunks(prompt):
-                        text_buffer += text_chunk
-
-                        if self._audio_callback:
-                            await self._audio_callback(text_chunk.encode())
-
-                    debug_text = text_buffer.strip()
+                    debug_text = (await self._llm.generate_fortune(prompt)).strip()
                     logger.info("Analysis LLM result: chars=%d", len(debug_text))
                     if not debug_text:
                         raise RuntimeError("LLM returned empty response")

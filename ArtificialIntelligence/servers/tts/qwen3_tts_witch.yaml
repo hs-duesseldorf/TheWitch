@@ -1,6 +1,5 @@
-# Qwen3-TTS deploy tuned for one-request speech generation.
-# The upstream WebSocket endpoint splits input per sentence; the AI client uses
-# /v1/audio/speech with stream=true, so the full answer stays one TTS request.
+# Qwen3-TTS deploy tuned for streaming speech generation.
+# Code2Wav is patched from scripts/tts_python_patches to tolerate malformed async tail chunks.
 async_chunk: true
 
 connectors:

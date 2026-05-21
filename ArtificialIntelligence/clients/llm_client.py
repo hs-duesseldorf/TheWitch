@@ -13,10 +13,6 @@ logger = logging.getLogger(__name__)
 
 REQUEST_ATTEMPTS = 5
 RETRY_DELAY_SECONDS = 1.0
-BOUNDARY_RE = re.compile(r"([.!?,;:]+)\s+")
-MAX_CHUNK_LATENCY_SECONDS = 0.2
-FIRST_CHUNK_WORDS = 200
-LATER_CHUNK_WORDS = 200
 THINK_BLOCK_RE = re.compile(r"<think\b[^>]*>.*?</think>", re.IGNORECASE | re.DOTALL)
 DEFAULT_NUM_CTX = 2048
 
@@ -116,57 +112,6 @@ class LLMClient:
 
     async def generate_fortune(self, prompt: str) -> str:
         return await self.generate(prompt)
-
-    async def stream_fortune_chunks(self, prompt: str) -> AsyncIterator[str]:
-        async for chunk in self.stream_spoken_chunks(prompt):
-            yield chunk
-
-    async def stream_spoken_chunks(self, prompt: str) -> AsyncIterator[str]:
-        buffer = ""
-        emitted = False
-        in_think_block = False
-        last_flush_check = time.perf_counter()
-
-        async for token in self.stream_generate(prompt):
-            token, in_think_block = self._filter_thinking_chunk(token, in_think_block)
-            if not token:
-                continue
-            buffer += token
-            now = time.perf_counter()
-            chunk, buffer = self._pop_spoken_chunk(
-                buffer,
-                first=not emitted,
-                force=(now - last_flush_check) >= MAX_CHUNK_LATENCY_SECONDS,
-            )
-            if chunk:
-                emitted = True
-                last_flush_check = now
-                yield chunk
-
-        final = re.sub(r"\s+", " ", buffer).strip()
-        if final:
-            yield final
-
-    def _pop_spoken_chunk(self, buffer: str, *, first: bool, force: bool) -> tuple[str | None, str]:
-        cleaned = re.sub(r"\s+", " ", buffer).strip()
-        if not cleaned:
-            return None, ""
-
-        target_words = FIRST_CHUNK_WORDS if first else LATER_CHUNK_WORDS
-        words = cleaned.split()
-
-        boundary = BOUNDARY_RE.search(cleaned)
-        if boundary and len(words) >= max(4, target_words // 2):
-            end = boundary.end()
-            return cleaned[:end].strip(), cleaned[end:].strip()
-
-        if len(words) >= target_words:
-            return cleaned, ""
-
-        if force and len(words) >= max(5, target_words // 2):
-            return cleaned, ""
-
-        return None, buffer
 
     def _messages(self, prompt: str) -> list[dict[str, str]]:
         return [

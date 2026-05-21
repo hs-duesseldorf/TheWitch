@@ -2,17 +2,37 @@
 from __future__ import annotations
 
 import os
+import subprocess
+import sys
 from pathlib import Path
 
 from dotenv import load_dotenv
 
 SERVER_DIR = Path(__file__).resolve().parent
 ROOT = SERVER_DIR.parents[2]
-PATCH_DIR = SERVER_DIR / "python_patches"
+PATCH_DIR = ROOT / "scripts" / "tts_python_patches"
+PATCH_INSTALLER = ROOT / "scripts" / "patch_tts_server_venv.py"
+VENV_DIR = SERVER_DIR / ".venv"
+
+
+def _install_patches() -> None:
+    python = VENV_DIR / "bin" / "python"
+    if not python.exists():
+        raise RuntimeError(f"TTS venv Python not found: {python}")
+    subprocess.check_call(
+        [
+            sys.executable,
+            str(PATCH_INSTALLER),
+            "--python",
+            str(python),
+        ],
+        cwd=ROOT,
+    )
 
 
 def run() -> None:
     load_dotenv(ROOT / ".env")
+    _install_patches()
     model = os.environ["WITCH_TTS_MODEL"]
     port = os.environ["WITCH_TTS_PORT"]
     os.environ.setdefault("VLLM_USE_FLASHINFER_SAMPLER", "0")
@@ -27,7 +47,7 @@ def run() -> None:
         else os.pathsep.join((str(PATCH_DIR), existing_pythonpath))
     )
     print(f"[run_tts] Starting TTS: model={model} port={port}", flush=True)
-    python = SERVER_DIR / ".venv" / "bin" / "vllm-omni"
+    python = VENV_DIR / "bin" / "vllm-omni"
     deploy_config = SERVER_DIR / "qwen3_tts_witch.yaml"
     os.execv(str(python), [str(python), "serve", model,
         "--deploy-config", str(deploy_config),

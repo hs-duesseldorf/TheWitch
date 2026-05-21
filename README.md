@@ -182,6 +182,14 @@ source ArtificialIntelligence/servers/tts/.venv/bin/activate
 python ArtificialIntelligence/servers/tts/run.py
 ```
 
+The TTS launcher automatically installs the tracked Qwen3-TTS compatibility
+patches into that machine's TTS venv before starting `vllm-omni`. To install
+or inspect the hook manually:
+
+```bash
+python scripts/patch_tts_server_venv.py
+```
+
 `ai`:
 
 ```bash
