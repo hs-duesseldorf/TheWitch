@@ -5,10 +5,10 @@ client = ollama.Client()
 
 #define function
 def paraphrase_sentence(sentence: str):
-    ourModel = "llama2"
+    ourModel = "llama3.2"
     
     #add user sentence into prompt
-    ourPrompt = (f"Give me 3 differently paraphrased versions of the following sentence: {sentence}") #f for formatted
+    ourPrompt = (f"다음 사주를 가지고 있는 사람은 어떤 사람이고 어떤 미래를 가지고 있을지 이야기해줘: {sentence}") #f for formatted
     
     #send query
     ourResponse = client.generate(

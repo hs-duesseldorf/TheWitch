@@ -24,18 +24,20 @@ def compute_raw_scores(features: Dict[str, Any]) -> Dict[str, float]:
     ring_fp = finger_profile["ring"]
     little_fp = finger_profile["little"]
 
+    #std_dev_fin = np.std([index_fp, middle_fp, ring_fp, little_fp])
+
     # Roh-Scores nach eurem konzeptionellen Mapping
     holz = (
             1.5 * finger_length_ratio
             + 1.0 * middle_fp
             + 0.5 * index_fp
-            - 0.5 * palm_aspect_ratio
+            + 0.5 * palm_aspect_ratio
     )
 
     feuer = (
             1.2 * abs(index_to_ring_ratio - 0.5) * 2.0
             + 0.8 * finger_length_ratio
-            - 0.5 * palm_aspect_ratio
+            + 0.5 * palm_aspect_ratio
     )
 
     erde = (
@@ -53,6 +55,36 @@ def compute_raw_scores(features: Dict[str, Any]) -> Dict[str, float]:
             + 1.0 * palm_aspect_ratio
             - 0.5 * finger_length_ratio
     )
+    # holz = (
+    #         (palm_aspect_ratio) * 25  # Longer palm
+    #         #+ (1.0 - clamp(std_dev_fin * 10, 0, 1)) * 30  # Higher score as std approaches 0
+    #         + (finger_length_ratio) * 25  # Longer fingers
+    #         + (index_to_ring_ratio) * 20  # Index finger dominance (higher i_to_r)
+    # )
+    # feuer = (
+    #         (palm_aspect_ratio) * 25  # Longer palm (vertically longer)
+    #         #+ (std_dev_fin * 5) * 25  # Higher score for larger std
+    #         + (finger_length_ratio) * 25  # Longer fingers
+    #         + (0.5 - index_to_ring_ratio) * 25  # Ring finger dominance
+    # )
+    # erde = (
+    #         (0.5 - palm_aspect_ratio) * 30  # Shorter palm (horizontally wider)
+    #         + (1.0 - clamp(std_dev_fin * 5, 0, 1)) * 25  # Smaller std
+    #         + (0.85 - finger_length_ratio) * 25  # Shorter fingers
+    #         + (index_to_ring_ratio) * 20  # Index finger dominance
+    # )
+    # metall = (
+    #         (0.5 - abs(0.5 - palm_aspect_ratio)) * 30  # Palm ratio 1:1 weight
+    #         #+ (1.0 - clamp(std_dev_fin * 5, 0, 1)) * 30  # Higher score for smaller std
+    #         + (1.0 - abs(0.75 - finger_length_ratio)) * 20  # Average finger length (0.75)
+    #         + (0.5 - abs(0.5 - index_to_ring_ratio)) * 20  # Similar index/ring length (1.0)
+    # )
+    # wasser = (
+    #         (0.5 - abs(0.45 - palm_aspect_ratio)) * 25  # Palm ratio near 1:1
+    #         #+ (1.0 - abs(0.10 - std_dev_fin)) * 25  # Average std (0.10)
+    #         + (finger_length_ratio) * 25  # Higher score for longer fingers
+    #         + (0.5 - index_to_ring_ratio) * 25  # Ring finger dominance (lower i_to_r)
+    # )
 
     return {
         "holz": holz,
@@ -84,45 +116,19 @@ def normalize_scores(raw_scores: Dict[str, float]) -> Dict[str, float]:
 def determine_base_states(scores: Dict[str, float]) -> Dict[str, str]:
     states = {}
     for element, score in scores.items():
-        if score > 1.0:
+        if score > 35:
             states[element] = "zu_stark"
-        elif score < -1.0:
+        elif score < 8:
             states[element] = "zu_schwach"
-        elif -0.5 <= score <= 0.5:
-            states[element] = "in_balance"
         else:
-            states[element] = "neutral"
+            states[element] = "in_balance"
     return states
-
-
-def apply_blockages(
-        scores: Dict[str, float],
-        states: Dict[str, str]
-) -> Dict[str, str]:
-    result = states.copy()
-
-    # Gegensätzliche Elemente gleichzeitig stark -> Blockade
-    if scores["holz"] > 1.0 and scores["metall"] > 1.0:
-        if abs(scores["holz"] - scores["metall"]) < 0.75:
-            result["holz"] = "blockiert"
-            result["metall"] = "blockiert"
-
-    if scores["wasser"] > 1.0 and scores["feuer"] > 1.0:
-        if abs(scores["wasser"] - scores["feuer"]) < 0.75:
-            result["wasser"] = "blockiert"
-            result["feuer"] = "blockiert"
-
-    # Optional: Erde kann Holz "festhalten", wenn beide stark sind
-    if scores["erde"] > 1.0 and scores["holz"] > 1.0:
-        if abs(scores["erde"] - scores["holz"]) < 0.5 and result["holz"] != "blockiert":
-            result["holz"] = "blockiert"
-
-    return result
-
 
 def determine_dominant_element(scores: Dict[str, float]) -> str:
     return max(scores.items(), key=lambda item: item[1])[0]
 
+def element_ratio(raw_scores: Dict[str, Any]) -> Dict[str, Any]:
+    return {k: round((v / sum(raw_scores.values())) * 100, 2) for k, v in raw_scores.items()}
 
 def build_result(input_payload: Dict[str, Any]) -> Dict[str, Any]:
     features = {
@@ -134,14 +140,9 @@ def build_result(input_payload: Dict[str, Any]) -> Dict[str, Any]:
 
     raw_scores = compute_raw_scores(features)
     normalized_scores = normalize_scores(raw_scores)
-    base_states = determine_base_states(normalized_scores)
-    final_states = apply_blockages(normalized_scores, base_states)
-    dominant_element = determine_dominant_element(normalized_scores)
+    final_states= determine_base_states(element_ratio(raw_scores))
 
-    blocked_elements = [
-        element for element, state in final_states.items()
-        if state == "blockiert"
-    ]
+    dominant_element = determine_dominant_element(normalized_scores)
 
     return {
         "request_id": input_payload.get("request_id"),
@@ -154,9 +155,10 @@ def build_result(input_payload: Dict[str, Any]) -> Dict[str, Any]:
         "element_scores_normalized": {
             k: round2(v) for k, v in normalized_scores.items()
         },
+        "element_ratio" : element_ratio(raw_scores),
         "element_states": final_states,
         "dominant_element": dominant_element,
-        "blocked_elements": blocked_elements
+        "core_element" : find_core_element(input_average, sample_input)
     }
 
 def GetLines(result: Dict[str, Any]) -> list[str]:
@@ -168,16 +170,52 @@ def GetLines(result: Dict[str, Any]) -> list[str]:
     except:
         print("the json file is not valid")
         return lines_list
+    lines_list.append(lines.get("core_element").get(result["core_element"]))
 
     for key, values in result["element_states"].items():
         one_line = lines.get("elemente").get(key).get(values)
         if not one_line==None :
             lines_list.append(one_line[random.randint(0,2)])
-            #print(one_line[0])
         else :
             print("the line is not available")
 
     return lines_list
+
+def find_core_element(average : Dict[str, Any], input: Dict[str, Any]) :
+    features = {
+        "palm_aspect_ratio": abs(average["palm_aspect_ratio"] - input["palm_aspect_ratio"]),
+        "finger_length_ratio": abs(average["finger_length_ratio"] - input["finger_length_ratio"]),
+        "index_to_ring_ratio": abs(average["index_to_ring_ratio"] - input["index_to_ring_ratio"]),
+        "index": abs(average["finger_profile"]["index"] - input["finger_profile"]["index"]),
+        "middle": abs(average["finger_profile"]["middle"] - input["finger_profile"]["middle"]),
+        "ring": abs(average["finger_profile"]["ring"] - input["finger_profile"]["ring"]),
+        "little": abs(average["finger_profile"]["little"] - input["finger_profile"]["little"])
+    }
+
+    best_feature = max(features, key=features.get)
+
+    # print(features)
+    # print(best_feature)
+
+    match best_feature:
+        case "palm_aspect_ratio":
+            return "earth"
+
+        case "finger_length_ratio":
+            return "water"
+
+        case "index_to_ring_ratio":
+            return "fire"
+
+        case "index" | "middle":
+            return "wood"
+
+        case "ring" | "little":
+            return "metal"
+
+        case _:
+            print("best feature is not valid")
+            return "NaN"
 
 
 if __name__ == "__main__":
@@ -194,6 +232,34 @@ if __name__ == "__main__":
             "middle": 0.90,
             "ring": 0.75,
             "little": 0.50
+        }
+    }
+
+    # sample_input = {
+    #     "request_id": "example-001",
+    #     "session_id": "session-42",
+    #     "handedness": "right",
+    #     "tracking_quality": 0.93,
+    #     "palm_aspect_ratio": 0.51,
+    #     "finger_length_ratio": 0.77,
+    #     "index_to_ring_ratio": 0.51,
+    #     "finger_profile": {
+    #         "index": 0.67,
+    #         "middle": 0.77,
+    #         "ring": 0.68,
+    #         "little": 0.53
+    #     }
+    # }
+
+    input_average = {
+        "palm_aspect_ratio": 0.48,
+        "finger_length_ratio": 0.77,
+        "index_to_ring_ratio": 0.49,
+        "finger_profile": {
+            "index": 0.67,
+            "middle": 0.77,
+            "ring": 0.68,
+            "little": 0.53
         }
     }
 

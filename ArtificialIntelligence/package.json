@@ -16,6 +16,13 @@
 "Du stehst näher an einer Veränderung, als du glaubst.",
 "Dein Weg ist nicht blockiert, nur verzögert."
 ],
+"core_element" : {
+  "wood": "your element is holz",
+  "fire" : "your element is feuer",
+  "earth" : "your element is erde",
+  "metal" : "your element is metall",
+  "water" : "your element is wasser"
+},
 "elemente": {
 "holz": {
 "zu_stark": [
