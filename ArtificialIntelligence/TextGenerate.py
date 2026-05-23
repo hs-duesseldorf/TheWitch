@@ -22,16 +22,9 @@ def GenerateText(sentence: str):
     # add user sentence into prompt
     ourPrompt = (f""" 
         [System Instruction]
-        {PT.prompt_Memory}
+        {PT.prompt_Whip}
         {PT.prompt_Persona}
         {PT.prompt_RespondFormat}
-        {PT.prompt_HowToMakeSentence}
-        
-        [Base Knowledge]
-        {PT.BaseKnowledge}
-        
-        [Palm information]
-        {sentence}
     """)
 
     # [Current Palm Data]

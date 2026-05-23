@@ -26,65 +26,44 @@ def compute_raw_scores(features: Dict[str, Any]) -> Dict[str, float]:
 
     #std_dev_fin = np.std([index_fp, middle_fp, ring_fp, little_fp])
 
+    #we have to make sure that every element is not symmetric easily. and every hand should be have various ratio....
+
     # Roh-Scores nach eurem konzeptionellen Mapping
+    # 1. Holz (Wood): Long palm, long fingers, index finger dominance (Elongated and elegant shape)
     holz = (
-            1.5 * finger_length_ratio
-            + 1.0 * middle_fp
-            + 0.5 * index_fp
-            + 0.5 * palm_aspect_ratio
+            1.5 * finger_length_ratio  # Weight for long fingers
+            + 1.0 * palm_aspect_ratio  # Weight for long palm
+            + 0.5 * (index_to_ring_ratio ** 2)  # Higher score if the index finger is longer
     )
 
+    # 2. Feuer (Fire): Long palm, long fingers, ring finger dominance (Expressive and dynamic)
     feuer = (
-            1.2 * abs(index_to_ring_ratio - 0.5) * 2.0
-            + 0.8 * finger_length_ratio
-            + 0.5 * palm_aspect_ratio
+            1.5 * finger_length_ratio  # Weight for long fingers
+            + 1.0 * palm_aspect_ratio  # Weight for long palm
+            - 0.5 * (index_to_ring_ratio ** 2)  # Higher score if the ring finger is longer (lower index ratio)
     )
 
+    # 3. Erde (Earth): Wide/short palm, short fingers, index finger dominance (Thick and solid shape)
     erde = (
-            1.5 * (1.0 - palm_aspect_ratio)
-            + 0.5 * (1.0 - finger_length_ratio)
+            1.5 * (1.0 - palm_aspect_ratio)  # Higher score for a wider/shorter palm
+            + 1.0 * (1.0 - finger_length_ratio)  # Higher score for shorter fingers
+            + 0.5 * (index_to_ring_ratio ** 2)  # Higher score if the index finger is longer
     )
 
+    # 4. Metall (Metal): Square palm (1:1), balanced finger lengths (Symmetry and order)
+    # * Designed to score higher as values approach the balanced 1:1 ratio.
     metall = (
-            1.2 * (1.0 - abs(index_to_ring_ratio - 0.5) * 2.0)
-            + 0.8 * palm_aspect_ratio
+            1.5 * (1.0 - abs(palm_aspect_ratio - 0.5) * 2.0)  # Highest score when palm ratio is near 0.5 (1:1)
+            + 1.0 * ((1.0 - abs(index_to_ring_ratio - 0.5) * 2.0) ** 2) # Highest score when index and ring fingers are similar in length
     )
 
+    # 5. Wasser (Water): long palm, long fingers, ring finger dominance (Fluid and adaptable)
     wasser = (
-            1.0 * little_fp
-            + 1.0 * palm_aspect_ratio
-            - 0.5 * finger_length_ratio
+            1.5 * finger_length_ratio  # Weight for long fingers
+            + 1.0 * palm_aspect_ratio # weight for long palm
+            + 1.0 * middle_fp  # Factor in middle finger characteristics/length
+            - 0.5 * (index_to_ring_ratio ** 2)  # Higher score if the ring finger is longer
     )
-    # holz = (
-    #         (palm_aspect_ratio) * 25  # Longer palm
-    #         #+ (1.0 - clamp(std_dev_fin * 10, 0, 1)) * 30  # Higher score as std approaches 0
-    #         + (finger_length_ratio) * 25  # Longer fingers
-    #         + (index_to_ring_ratio) * 20  # Index finger dominance (higher i_to_r)
-    # )
-    # feuer = (
-    #         (palm_aspect_ratio) * 25  # Longer palm (vertically longer)
-    #         #+ (std_dev_fin * 5) * 25  # Higher score for larger std
-    #         + (finger_length_ratio) * 25  # Longer fingers
-    #         + (0.5 - index_to_ring_ratio) * 25  # Ring finger dominance
-    # )
-    # erde = (
-    #         (0.5 - palm_aspect_ratio) * 30  # Shorter palm (horizontally wider)
-    #         + (1.0 - clamp(std_dev_fin * 5, 0, 1)) * 25  # Smaller std
-    #         + (0.85 - finger_length_ratio) * 25  # Shorter fingers
-    #         + (index_to_ring_ratio) * 20  # Index finger dominance
-    # )
-    # metall = (
-    #         (0.5 - abs(0.5 - palm_aspect_ratio)) * 30  # Palm ratio 1:1 weight
-    #         #+ (1.0 - clamp(std_dev_fin * 5, 0, 1)) * 30  # Higher score for smaller std
-    #         + (1.0 - abs(0.75 - finger_length_ratio)) * 20  # Average finger length (0.75)
-    #         + (0.5 - abs(0.5 - index_to_ring_ratio)) * 20  # Similar index/ring length (1.0)
-    # )
-    # wasser = (
-    #         (0.5 - abs(0.45 - palm_aspect_ratio)) * 25  # Palm ratio near 1:1
-    #         #+ (1.0 - abs(0.10 - std_dev_fin)) * 25  # Average std (0.10)
-    #         + (finger_length_ratio) * 25  # Higher score for longer fingers
-    #         + (0.5 - index_to_ring_ratio) * 25  # Ring finger dominance (lower i_to_r)
-    # )
 
     return {
         "holz": holz,
@@ -197,6 +176,7 @@ def find_core_element(average : Dict[str, Any], input: Dict[str, Any]) :
     # print(features)
     # print(best_feature)
 
+    #this is not that good too... It must be some reason that why the core element is some element, but this one makes no sense...
     match best_feature:
         case "palm_aspect_ratio":
             return "earth"
@@ -219,37 +199,37 @@ def find_core_element(average : Dict[str, Any], input: Dict[str, Any]) :
 
 
 if __name__ == "__main__":
-    sample_input = {
-        "request_id": "example-001",
-        "session_id": "session-42",
-        "handedness": "right",
-        "tracking_quality": 0.93,
-        "palm_aspect_ratio": 0.30,
-        "finger_length_ratio": 0.80,
-        "index_to_ring_ratio": 0.40,
-        "finger_profile": {
-            "index": 0.70,
-            "middle": 0.90,
-            "ring": 0.75,
-            "little": 0.50
-        }
-    }
-
     # sample_input = {
     #     "request_id": "example-001",
     #     "session_id": "session-42",
     #     "handedness": "right",
     #     "tracking_quality": 0.93,
-    #     "palm_aspect_ratio": 0.51,
-    #     "finger_length_ratio": 0.77,
-    #     "index_to_ring_ratio": 0.51,
+    #     "palm_aspect_ratio": 0.30,
+    #     "finger_length_ratio": 0.80,
+    #     "index_to_ring_ratio": 0.40,
     #     "finger_profile": {
-    #         "index": 0.67,
-    #         "middle": 0.77,
-    #         "ring": 0.68,
-    #         "little": 0.53
+    #         "index": 0.70,
+    #         "middle": 0.90,
+    #         "ring": 0.75,
+    #         "little": 0.50
     #     }
     # }
+
+    sample_input = {
+        "request_id": "example-001",
+        "session_id": "session-42",
+        "handedness": "right",
+        "tracking_quality": 0.93,
+        "palm_aspect_ratio": 0.48,
+        "finger_length_ratio": 0.77,
+        "index_to_ring_ratio": 0.49,
+        "finger_profile": {
+            "index": 0.67,
+            "middle": 0.77,
+            "ring": 0.68,
+            "little": 0.53
+      }
+    }
 
     input_average = {
         "palm_aspect_ratio": 0.48,
