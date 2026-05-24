@@ -88,15 +88,8 @@ def _linux_output_score(name: str) -> int:
 
 
 def _is_virtual_cable(system: str, name: str) -> bool:
-    lowered = name.lower()
-    if system == "Windows":
-        return "cable input" in lowered and "vb-audio" in lowered
-    if system == "Darwin":
-        return "blackhole" in lowered
-    if system == "Linux":
-        cable_name = os.environ["WITCH_LINUX_VIRTUAL_CABLE_NAME"].strip()
-        return bool(cable_name) and cable_name.lower() in lowered
-    return False
+    needle = os.environ.get("WITCH_VIRTUAL_CABLE_NAME", "").strip()
+    return bool(needle) and needle.lower() in name.lower()
 
 
 def find_audio_devices() -> list[int | None]:

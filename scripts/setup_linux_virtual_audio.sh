@@ -23,7 +23,7 @@ pulse.cmd = [
     },
     {
         cmd = "load-module"
-        args = "module-remap-source master=$sink_name.monitor source_name=$source_name source_properties=device.description=$source_description channels=2 rate=48000 remix=no"
+        args = "module-remap-source master=$sink_name.monitor source_name=${source_name}-input source_properties=device.description=$source_description channels=2 rate=48000 remix=no"
         flags = [ ]
     }
 ]
@@ -40,20 +40,21 @@ else
     echo "Loaded virtual audio sink: $sink_name"
 fi
 
-if pactl list short sources | awk '{print $2}' | grep -Fxq "$source_name"; then
-    echo "Virtual audio source already active: $source_name"
+source_full_name="${source_name}-input"
+if pactl list short sources | awk '{print $2}' | grep -Fxq "$source_full_name"; then
+    echo "Virtual audio source already active: $source_full_name"
 else
     pactl load-module module-remap-source \
         master="$sink_name.monitor" \
-        source_name="$source_name" \
-        source_properties=device.description="$source_description" \
+        source_name="$source_full_name" \
+        source_properties="device.description=$source_description" \
         channels=2 \
         rate=48000 \
         remix=no >/dev/null
-    echo "Loaded virtual audio source: $source_name"
+    echo "Loaded virtual audio source: $source_full_name"
 fi
 
 echo "Persistent PipeWire config: $config_file"
 pactl list short sinks | grep -E "(^|[[:space:]])${sink_name}([[:space:]]|$)" || true
 pactl list short sources | grep -E "(^|[[:space:]])${sink_name}\\.monitor([[:space:]]|$)" || true
-pactl list short sources | grep -E "(^|[[:space:]])${source_name}([[:space:]]|$)" || true
+pactl list short sources | grep -E "(^|[[:space:]])${source_full_name}([[:space:]]|$)" || true

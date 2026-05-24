@@ -1,0 +1,335 @@
+﻿{
+	"liveLinkHub": 1,
+	"sources": [
+		{
+			"guid": "0704DCDF3B0E462195A026F712C3934A",
+			"settings":
+			{
+				"_ClassName": "/Script/MetaHumanLocalLiveLinkSource.MetaHumanAudioLiveLinkSourceSettings",
+				"bIsPreset": true,
+				"mode": "EngineTime",
+				"bufferSettings":
+				{
+					"bValidEngineTimeEnabled": false,
+					"validEngineTime": 1,
+					"engineTimeOffset": 0,
+					"engineTimeClockOffset": 0.0087044349838834023,
+					"smoothEngineTimeOffset": 0.031998839886941986,
+					"bGenerateSubFrame": false,
+					"detectedFrameRate":
+					{
+						"numerator": 24,
+						"denominator": 1
+					},
+					"bUseTimecodeSmoothLatest": false,
+					"sourceTimecodeFrameRate":
+					{
+						"numerator": 24,
+						"denominator": 1
+					},
+					"bValidTimecodeFrameEnabled": false,
+					"validTimecodeFrame": 30,
+					"timecodeFrameOffset": 0,
+					"timecodeClockOffset": -22.853300002854667,
+					"latestOffset": 0,
+					"maxNumberOfFrameToBuffered": 1,
+					"bKeepAtLeastOneFrame": true
+				},
+				"bTransmitEvaluatedData": false,
+				"connectionString": "",
+				"factory": "/Script/CoreUObject.Class'/Script/MetaHumanLocalLiveLinkSource.MetaHumanAudioLiveLinkSourceFactory'",
+				"parentSubject":
+				{
+					"name": "None"
+				}
+			},
+			"sourceType": "MetaHuman (Audio)"
+		}
+	],
+	"subjects": [
+		{
+			"key":
+			{
+				"source": "0704DCDF3B0E462195A026F712C3934A",
+				"subjectName":
+				{
+					"name": "PulseAudio"
+				}
+			},
+			"role": "/Script/CoreUObject.Class'/Script/LiveLinkInterface.LiveLinkBasicRole'",
+			"settings":
+			{
+				"_ClassName": "/Script/MetaHumanLocalLiveLinkSource.MetaHumanAudioLiveLinkSubjectSettings",
+				"mediaSourceCreateParams":
+				{
+					"videoName": "",
+					"videoURL": "",
+					"videoTrack": -1,
+					"videoTrackFormat": -1,
+					"videoTrackFormatName": "",
+					"audioName": "PulseAudio",
+					"audioURL": "audiocapture://0",
+					"audioTrack": 0,
+					"audioTrackFormat": 0,
+					"audioTrackFormatName": "0: FLOATING_POINT_32 1 channel @ 48000 Hz",
+					"startTimeout": 5,
+					"formatWaitTime": 0.10000000000000001,
+					"sampleTimeout": 5
+				},
+				"mood": "Neutral",
+				"moodIntensity": 1,
+				"lookahead": 80,
+				"captureNeutralsProperty": 0,
+				"properties": [
+					"CTRL_expressions_browDownL",
+					"CTRL_expressions_browDownR",
+					"CTRL_expressions_browLateralL",
+					"CTRL_expressions_browLateralR",
+					"CTRL_expressions_browRaiseInL",
+					"CTRL_expressions_browRaiseInR",
+					"CTRL_expressions_browRaiseOuterL",
+					"CTRL_expressions_browRaiseOuterR",
+					"CTRL_expressions_eyeBlinkL",
+					"CTRL_expressions_eyeBlinkR",
+					"CTRL_expressions_eyeWidenL",
+					"CTRL_expressions_eyeWidenR",
+					"CTRL_expressions_eyeSquintInnerL",
+					"CTRL_expressions_eyeSquintInnerR",
+					"CTRL_expressions_eyeCheekRaiseL",
+					"CTRL_expressions_eyeCheekRaiseR",
+					"CTRL_expressions_eyeFaceScrunchL",
+					"CTRL_expressions_eyeFaceScrunchR",
+					"CTRL_expressions_noseWrinkleL",
+					"CTRL_expressions_noseWrinkleR",
+					"CTRL_expressions_noseNostrilDepressL",
+					"CTRL_expressions_noseNostrilDepressR",
+					"CTRL_expressions_noseNostrilDilateL",
+					"CTRL_expressions_noseNostrilDilateR",
+					"CTRL_expressions_noseNostrilCompressL",
+					"CTRL_expressions_noseNostrilCompressR",
+					"CTRL_expressions_noseNasolabialDeepenL",
+					"CTRL_expressions_noseNasolabialDeepenR",
+					"CTRL_expressions_mouthCheekSuckL",
+					"CTRL_expressions_mouthCheekSuckR",
+					"CTRL_expressions_mouthCheekBlowL",
+					"CTRL_expressions_mouthCheekBlowR",
+					"CTRL_expressions_mouthLeft",
+					"CTRL_expressions_mouthRight",
+					"CTRL_expressions_mouthUpperLipRaiseL",
+					"CTRL_expressions_mouthUpperLipRaiseR",
+					"CTRL_expressions_mouthLowerLipDepressL",
+					"CTRL_expressions_mouthLowerLipDepressR",
+					"CTRL_expressions_mouthCornerPullL",
+					"CTRL_expressions_mouthCornerPullR",
+					"CTRL_expressions_mouthStretchL",
+					"CTRL_expressions_mouthStretchR",
+					"CTRL_expressions_mouthDimpleL",
+					"CTRL_expressions_mouthDimpleR",
+					"CTRL_expressions_mouthCornerDepressL",
+					"CTRL_expressions_mouthCornerDepressR",
+					"CTRL_expressions_mouthLipsPurseUL",
+					"CTRL_expressions_mouthLipsPurseUR",
+					"CTRL_expressions_mouthLipsPurseDL",
+					"CTRL_expressions_mouthLipsPurseDR",
+					"CTRL_expressions_mouthLipsTowardsUL",
+					"CTRL_expressions_mouthLipsTowardsUR",
+					"CTRL_expressions_mouthLipsTowardsDL",
+					"CTRL_expressions_mouthLipsTowardsDR",
+					"CTRL_expressions_mouthFunnelUL",
+					"CTRL_expressions_mouthFunnelUR",
+					"CTRL_expressions_mouthFunnelDL",
+					"CTRL_expressions_mouthFunnelDR",
+					"CTRL_expressions_mouthLipsTogetherUL",
+					"CTRL_expressions_mouthLipsTogetherUR",
+					"CTRL_expressions_mouthLipsTogetherDL",
+					"CTRL_expressions_mouthLipsTogetherDR",
+					"CTRL_expressions_mouthUpperLipBiteL",
+					"CTRL_expressions_mouthUpperLipBiteR",
+					"CTRL_expressions_mouthLowerLipBiteL",
+					"CTRL_expressions_mouthLowerLipBiteR",
+					"CTRL_expressions_mouthLipsTightenUL",
+					"CTRL_expressions_mouthLipsTightenUR",
+					"CTRL_expressions_mouthLipsTightenDL",
+					"CTRL_expressions_mouthLipsTightenDR",
+					"CTRL_expressions_mouthLipsPressL",
+					"CTRL_expressions_mouthLipsPressR",
+					"CTRL_expressions_mouthSharpCornerPullL",
+					"CTRL_expressions_mouthSharpCornerPullR",
+					"CTRL_expressions_mouthStickyUC",
+					"CTRL_expressions_mouthStickyUINL",
+					"CTRL_expressions_mouthStickyUINR",
+					"CTRL_expressions_mouthStickyUOUTL",
+					"CTRL_expressions_mouthStickyUOUTR",
+					"CTRL_expressions_mouthStickyDC",
+					"CTRL_expressions_mouthStickyDINL",
+					"CTRL_expressions_mouthStickyDINR",
+					"CTRL_expressions_mouthStickyDOUTL",
+					"CTRL_expressions_mouthStickyDOUTR",
+					"CTRL_expressions_mouthLipsPushUL",
+					"CTRL_expressions_mouthLipsPushUR",
+					"CTRL_expressions_mouthLipsPushDL",
+					"CTRL_expressions_mouthLipsPushDR",
+					"CTRL_expressions_mouthLipsPullUL",
+					"CTRL_expressions_mouthLipsPullUR",
+					"CTRL_expressions_mouthLipsPullDL",
+					"CTRL_expressions_mouthLipsPullDR",
+					"CTRL_expressions_mouthLipsThinUL",
+					"CTRL_expressions_mouthLipsThinUR",
+					"CTRL_expressions_mouthLipsThinDL",
+					"CTRL_expressions_mouthLipsThinDR",
+					"CTRL_expressions_mouthLipsThickUL",
+					"CTRL_expressions_mouthLipsThickUR",
+					"CTRL_expressions_mouthLipsThickDL",
+					"CTRL_expressions_mouthLipsThickDR",
+					"CTRL_expressions_mouthCornerSharpenUL",
+					"CTRL_expressions_mouthCornerSharpenUR",
+					"CTRL_expressions_mouthCornerSharpenDL",
+					"CTRL_expressions_mouthCornerSharpenDR",
+					"CTRL_expressions_mouthCornerRounderUL",
+					"CTRL_expressions_mouthCornerRounderUR",
+					"CTRL_expressions_mouthCornerRounderDL",
+					"CTRL_expressions_mouthCornerRounderDR",
+					"CTRL_expressions_mouthUpperLipShiftLeft",
+					"CTRL_expressions_mouthUpperLipShiftRight",
+					"CTRL_expressions_mouthLowerLipShiftLeft",
+					"CTRL_expressions_mouthLowerLipShiftRight",
+					"CTRL_expressions_mouthUpperLipRollInL",
+					"CTRL_expressions_mouthUpperLipRollInR",
+					"CTRL_expressions_mouthUpperLipRollOutL",
+					"CTRL_expressions_mouthUpperLipRollOutR",
+					"CTRL_expressions_mouthLowerLipRollInL",
+					"CTRL_expressions_mouthLowerLipRollInR",
+					"CTRL_expressions_mouthLowerLipRollOutL",
+					"CTRL_expressions_mouthLowerLipRollOutR",
+					"CTRL_expressions_mouthCornerUpL",
+					"CTRL_expressions_mouthCornerUpR",
+					"CTRL_expressions_mouthCornerDownL",
+					"CTRL_expressions_mouthCornerDownR",
+					"CTRL_expressions_jawOpen",
+					"CTRL_expressions_jawLeft",
+					"CTRL_expressions_jawRight",
+					"CTRL_expressions_jawFwd",
+					"CTRL_expressions_jawBack",
+					"CTRL_expressions_jawChinRaiseDL",
+					"CTRL_expressions_jawChinRaiseDR",
+					"CTRL_expressions_jawOpenExtreme"
+				],
+				"alpha": 1,
+				"neutralFrame": [],
+				"captureNeutralFrameCountdown": -1,
+				"parameters": "None",
+				"neutralHeadTranslation":
+				{
+					"x": 0,
+					"y": 0,
+					"z": 0
+				},
+				"neutralHeadOrientation":
+				{
+					"pitch": 0,
+					"yaw": 0,
+					"roll": 0
+				},
+				"neutralHeadPoseInverse":
+				{
+					"rotation":
+					{
+						"x": 0,
+						"y": 0,
+						"z": 0,
+						"w": 1
+					},
+					"translation":
+					{
+						"x": 0,
+						"y": 0,
+						"z": 0
+					},
+					"scale3D":
+					{
+						"x": 1,
+						"y": 1,
+						"z": 1
+					}
+				},
+				"captureNeutralHeadPoseCountdown": -1,
+				"captureNeutralHeadTranslationCountdown": -1,
+				"subjectName": "PulseAudio",
+				"outboundName": "PulseAudio",
+				"source": "MetaHuman (Audio)",
+				"translatorsProxy": "None",
+				"preProcessors": [],
+				"interpolationProcessor":
+				{
+					"_ClassName": "/Script/LiveLink.LiveLinkBasicFrameInterpolationProcessor",
+					"bInterpolatePropertyValues": true
+				},
+				"translators": [],
+				"remapper": "None",
+				"role": "/Script/CoreUObject.Class'/Script/LiveLinkInterface.LiveLinkBasicRole'",
+				"frameRate":
+				{
+					"numerator": 1,
+					"denominator": -1
+				},
+				"bRebroadcastSubject": true,
+				"originalSourceName": "None",
+				"key":
+				{
+					"source": "0704DCDF3B0E462195A026F712C3934A",
+					"subjectName":
+					{
+						"name": "PulseAudio"
+					}
+				}
+			},
+			"virtualSubject": "None",
+			"bEnabled": true
+		}
+	],
+	"clients": [
+		{
+			"id":
+			{
+				"guid": "0064650F01FF4184ADDD57455EE5D7F4"
+			},
+			"longName": "UE - 5.7.4 marcel-laptop",
+			"iPAddress": "127.0.0.1",
+			"hostname": "marcel-laptop",
+			"projectName": "TheWitch",
+			"currentLevel": "empty",
+			"liveLinkInstanceName": "",
+			"topologyMode": "UnrealClient",
+			"disabledSubjects": [],
+			"bEnabled": true
+		},
+		{
+			"id":
+			{
+				"guid": "0064650F01FF4184ADDD57455EE5D7F4"
+			},
+			"longName": "UE - 5.7.4 marcel-laptop",
+			"iPAddress": "127.0.0.1",
+			"hostname": "marcel-laptop",
+			"projectName": "TheWitch",
+			"currentLevel": "Main",
+			"liveLinkInstanceName": "",
+			"topologyMode": "UnrealClient",
+			"disabledSubjects": [],
+			"bEnabled": true
+		}
+	],
+	"recordingSessionName": "DefaultSession",
+	"recordingSlateName": "DefaultSlate",
+	"recordingTakeNumber": 1,
+	"topologyMode": "Hub",
+	"extraDatas":
+	{
+		"/Script/CoreUObject.Class'/Script/LiveLinkDevice.LiveLinkHubSessionExtraData_Device'":
+		{
+			"_ClassName": "/Script/LiveLinkDevice.LiveLinkHubSessionExtraData_Device",
+			"devices": []
+		}
+	},
+	"processId": 145000
+}
