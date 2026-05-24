@@ -9,6 +9,8 @@ jobs:
   witch-compose-smoke-test:
     name: Witch Compose smoke test on Linux
     runs-on: ubuntu-latest
+    env:
+      MPLCONFIGDIR: ${{ runner.temp }}/matplotlib
 
     steps:
       - name: Checkout code
@@ -19,37 +21,43 @@ jobs:
 
       - name: Build virtual environments
         run: |
-          ./witch-compose --build
+          ./witch-compose --build ai ip
 
       - name: Start services
         run: |
-          ./witch-compose up &
+          ./witch-compose ai ip > witch-compose.log 2>&1 &
           COMPOSE_PID=$!
-          sleep 30
+          echo "$COMPOSE_PID" > witch-compose.pid
+          sleep 20
           
           # Check if services are still running
           if ! kill -0 $COMPOSE_PID 2>/dev/null; then
             echo "Services failed to start"
+            cat witch-compose.log || true
             exit 1
           fi
 
       - name: Verify services health
         run: |
           # Give services time to initialize
-          sleep 30
+          sleep 20
           
           # Check if AI service is responding on expected port
           if ! nc -z localhost 10031; then
             echo "AI service not responding on port 10031"
+            cat witch-compose.log || true
             exit 1
           fi
 
       - name: Show logs
         if: always()
         run: |
-          ./witch-compose kill || true
+          cat witch-compose.log || true
 
       - name: Stop services
         if: always()
         run: |
-          pkill -f witch_compose || true
+          ./witch-compose kill ai ip || true
+          if [ -f witch-compose.pid ]; then
+            kill "$(cat witch-compose.pid)" 2>/dev/null || true
+          fi
