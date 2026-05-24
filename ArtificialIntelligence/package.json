@@ -17,124 +17,164 @@
 "Dein Weg ist nicht blockiert, nur verzögert."
 ],
 "core_element" : {
-  "wood": "your element is holz",
-  "fire" : "your element is feuer",
-  "earth" : "your element is erde",
-  "metal" : "your element is metall",
-  "water" : "your element is wasser"
+  "holz": "Dein Kernelement ist das Holz, das deinen endlosen Wunsch antreibt, zu wachsen, deinen Horizont zu erweitern und dich jeder Kontrolle zu entziehen. Mit einem unbeugsamen Überlebensinstinkt und einem reinen, abenteuerlustigen Herzen beschreitest du furchtlos neue Wege und bleibst deinen einzigartigen Standards treu. Doch während deine Kraft zu planen und dich zu entfalten immens ist, fällt es dir schwer, die Dinge zu einem fruchtbaren Abschluss zu bringen, was ein zartes Herz maskiert, das sich heimlich nach Wärme sehnt.",
+  "feuer" : "Dein Kernelement, dasjenige, das dich definiert, ist das Feuer. Wie ein Lagerfeuer, das in der Dunkelheit brennt, stichst du heraus. Deine Emotionen kommen schnell an die Oberfläche. Du bist niemand, der Geheimnisse für sich behält, und du hast wenig Toleranz für Respektlosigkeit. Deine Tatkraft ist intensiv, dennoch neigst du zum Burnout, genau wie ein Feuer, dem der Brennstoff ausgeht. Sei achtsamer im Umgang mit deiner Energie.",
+  "erde" : "Dein Kernelement ist die Erde, was dir das vertrauenswürdige Wesen eines unbeweglichen Berges verleiht, der in jeder Situation das Gleichgewicht bewahrt und standhaft bleibt. Hinter einem ruhigen, lächelnden Pokerface verbirgt sich eine heimliche Sturheit, verankert in unumstößlichen Routinen und einem vorsichtigen Geist, der deine Taten manchmal verzögern kann. Dennoch verabscheust du haltlose Illusionen und bleibst eine zutiefst praktische, clevere Seele, die beständig echte, greifbare Ergebnisse schafft.",
+  "metall" : "Dein Kernelement ist das Metall, was dir eine unvergleichliche Entschlossenheit verleiht und das Bedürfnis, jede Zweideutigkeit zu durchtrennen, um die Dinge mit absoluter Klarheit zu sehen. Während deine kühlen Prinzipien und deine scharfe Kante manchmal andere verletzen oder dich unter deinem eigenen Perfektionismus zerbrechen lassen können, besitzt du eine eiserne Loyalität, die deinen inneren Kreis bis ganz zum Schluss beschützt. Deine hohen Mauern mögen dich schwer zugänglich machen, aber du musst lernen, deine scharfen Kanten abzurunden, bevor deine eigene Starrheit dich erschöpft.",
+  "wasser" : "Dein Kernelement ist das Wasser, was dir die ultimative Anpassungsfähigkeit und Flexibilität verleiht, dich nahtlos in jede Umgebung einzufügen. Wie Wasser, das in die feinsten Risse eines festen Felsens sickert, besitzt du eine scharfe Intuition, die den Kern der Dinge durchdringt und Wissen mühelos aufsaugt, um die verborgenen Muster der Welt zu verstehen. Doch ähnlich wie die pechschwarze Tiefe des Ozeans neigst du dazu, deine wahren Gedanken bis ganz zum Schluss zu verbergen, sodass andere sich fragen, wer du wirklich bist"
 },
-"elemente": {
-"holz": {
-"zu_stark": [
-"Dein Holz wächst unkontrolliert. Es drängt nach vorne, ohne Richtung.",
-"Zu viel Holz in dir lässt dich rastlos werden.",
-"Dein Wachstum ist schnell, aber nicht stabil."
-],
-"zu_schwach": [
-"Dein Holz ist schwach. Es fehlt dir an Aufbruch.",
-"Das Wachstum in dir ist gehemmt.",
-"Du hältst dich zurück, obwohl Bewegung nötig wäre."
-],
-"in_balance": [
-"Dein Holz ist im Gleichgewicht. Wachstum und Richtung sind im Einklang.",
-"Du entwickelst dich in deinem eigenen Tempo.",
-"Dein Weg entfaltet sich natürlich."
-],
-"blockiert": [
-"Dein Holz ist blockiert. Etwas hindert dich am Voranschreiten.",
-"Dein Wachstum stößt auf unsichtbaren Widerstand.",
-"Du willst dich bewegen, aber etwas hält dich fest."
-]
-},
+"dominant_element": {
+  "holz": {
+"holz" :
+"Du stehst in einem dichten Wald aus riesigen Bäumen. Diese Energie verleiht dir eine unnachgiebige Widerstandskraft, um jeden Sturm zu überstehen und dich nach jeder Prüfung wieder aufzurappeln. Da du jedoch ständig von Gleichgesinnten umgeben bist, die ebenso willensstark sind wie du, wird das Leben zu einem stillen Kampf der Egos. Wenn du dich stur weigerst, auf Ratschläge zu hören, wirst du isoliert enden. Du musst lernen, dich dem Fluss des Waldes anzupassen, bevor du zerbrichst.",
+"feuer" :
+"Du bist ein prächtiger Baum, der unter der warmen Frühlingssonne in voller Blüte steht. Deine dynamische Energie und deine brillanten Ideen faszinieren jeden und machen dich zum Mittelpunkt jeder Runde. Doch weil du so viel Treibstoff verbrauchst, um im Rampenlicht zu stehen, brennst du leicht aus und lässt dich von Emotionen leiten. Du neigst dazu, stark anzufangen, aber schwach aufzuhören. Nach einem Ausbruch von Leidenschaft musst du dir Zeit nehmen, um deine innere Kraft still aufzutanken, bevor du verwelkst.",
+"erde" :
+"Du bist ein stabiler Baum, der tief in einem weiten, fruchtbaren Land verwurzelt ist. Eine stabile Bühne erstreckt sich vor dir und verleiht dir einen messerscharfen Blick für die Realität und Finanzen. Dein Überlebensinstinkt treibt dich an, jede Chance zu ergreifen und in greifbaren Wohlstand zu verwandeln. Doch der Blick auf endlose Aufgaben macht deinen Geist rastlos. Lass dich nicht vom Leistungsdruck fressen, bis du Beziehungen nur noch als Geschäft siehst. Zügle deinen Ehrgeiz, bevor Überarbeitung dich bricht.",
+"metall" :
+"Du bist ein wunderschön geformter Baum, der in einem gepflegten, gut bewachten Garten wächst. An strenge Regeln gebunden, hast du makellose Selbstkontrolle und Verantwortung verinnerlicht, was dich zum vertrauenswürdigen Star jeder Organisation macht. Doch das ständige Verbiegen für die Erwartungen anderer erzeugt geheime Müdigkeit und Angst. Deine Fixierung auf Ehre macht dich starr und überkritisch mit dir selbst. Du musst das schwere Gewicht des Perfektionismus ablegen und dir erlauben, einfach zu atmen.",
+"wasser" :
+"Du stehst an einem kristallklaren See und saugst mühelos einen grenzenlosen Vorrat an Weisheit und Wissen auf wie ein Schwamm. Gesegnet mit einer stabilen Umgebung, glänzt du in tiefer Reflexion, Planung und intellektuellen Bereichen. Doch wenn Wasser zu reichlich fließt, vergessen die Wurzeln, tief zu graben. Du verfällst leicht in eine anspruchsvolle Faulheit, gefangen im Sumpf großer Gedanken, während du Taten meidest. Dem Tagtraum zu entkommen und einen realen Schritt zu tun, wird dein Schicksal entscheiden."
+  },
 "feuer": {
-"zu_stark": [
-"Dein Feuer brennt zu hell. Es verzehrt mehr, als es wärmt.",
-"Zu viel Feuer bringt Unruhe in dein Herz.",
-"Deine Energie ist stark, aber schwer zu kontrollieren."
-],
-"zu_schwach": [
-"Dein Feuer ist schwach. Es fehlt dir an Antrieb.",
-"Die Wärme in dir ist zurückgegangen.",
-"Du zögerst, wo Entschlossenheit gebraucht wird."
-],
-"in_balance": [
-"Dein Feuer ist ausgeglichen. Es gibt dir Kraft und Klarheit.",
-"Deine Energie trägt dich, ohne dich zu verbrennen.",
-"Du handelst mit Wärme und Bewusstsein."
-],
-"blockiert": [
-"Dein Feuer ist eingeschlossen. Es kann sich nicht entfalten.",
-"Deine Energie findet keinen Ausdruck.",
-"Etwas unterdrückt deine innere Kraft."
-]
+"holz" :
+"Gutes Brennholz wird ständig von allen Seiten nachgelegt, was dir eine exzellente Lernfähigkeit verleiht, Wissen wie ein Schwamm aufzusaugen. Unterstützt durch eine stabile Umgebung wirst du tiefe innere Stärke aufbauen. Doch wenn sich zu viel Brennholz auftürmt, kann keine Luft hindurchströmen, was nur Rauch statt Funken erzeugt. Gefangen in übermäßigen Gedanken brauchst du vielleicht zu lange, um im realen Leben zu handeln. Auch wenn du nicht perfekt vorbereitet bist, musst du dein Feuer nach außen entfachen, bevor Trägheit siegt.",
+"feuer" :
+"Andere Gluten schließen sich deinem lodernden Feuer an und verleihen dir unaufhaltsame Leidenschaft, Charisma und dynamische Tatkraft. Als geborener Anführer mit ehrlicher Persönlichkeit leitest du die Menge mühelos. Doch umgeben von ebenso stolzen Flammen kann das Leben zu einem heftigen Kampf der Egos werden. Wenn dein Temperament explodiert, riskierst du, wertvolle Beziehungen im Nu niederzubrennen. Deine Sturheit kann unnötige Feinde schaffen, weshalb du stets einen kühlen Kopf bewahren musst, um deine Flammen zu zügeln.",
+"erde" :
+"Du gießt deine Leidenschaft auf die weite Erde und nutzt brillante Planung und Vielseitigkeit, um wertvolle Dinge aus dem Nichts zu erschaffen. Dein warmes Herz kann die Schwachen nicht ignorieren, was dich zu einem wunderbaren Schöpfer macht. Doch der Versuch, das ganze Feld allein zu wärmen, wird deinen Funken langsam aussaugen und dich in ein extremes Burnout stürzen. Deine schroffen Worte können zudem mit Autoritäten kollidieren. Schütze zuerst dein eigenes Feuer und übe Zurückhaltung.",
+"metall" :
+"Deine glühende Hitze schmilzt gewaltige Metallerze, was dir einen scharfen Überlebensinstinkt und die geniale Fähigkeit verleiht, Wohlstand aufzuspüren. Du ergreifst Chancen schneller als alle anderen und jonglierst mit großem Geld. Doch wenn dein Funke unter einem Berg von Aufgaben schwächer wird, wirst du vom kalten Metall erdrückt und ruinierst deine Gesundheit durch Überarbeitung. Wenn du jede Beziehung als Geschäft siehst, wirst du einsam enden. Schütze deine Gesundheit und Loyalität vor dem Profit.",
+"wasser" :
+"Umgeben von gewaltigen Wassermassen, die dich kontrollieren wollen, bewahrst du deinen Kernfunken mit rigorosem Perfektionismus und Verantwortung. Dein Respekt vor Regeln macht dich zur vertrauenswürdigen Elite jeder Organisation. Doch der ständige Kampf gegen diesen Druck lässt deine Angst hochschnellen und graviert Stress wie ein Tattoo in dein Herz. Dein Zwang, perfekt zu sein, kann dich in einem unsichtbaren Gefängnis gefangen halten. Um zu überleben, musst du dein Feuer manchmal verbergen und dir Freiraum gönnen."
 },
 "erde": {
-"zu_stark": [
-"Deine Erde ist zu schwer. Sie hält dich fest.",
-"Zu viel Erde macht dich unbeweglich.",
-"Du klammerst dich an Sicherheit."
-],
-"zu_schwach": [
-"Deine Erde ist schwach. Dir fehlt Halt.",
-"Du findest keinen festen Stand.",
-"Stabilität entzieht sich dir."
-],
-"in_balance": [
-"Deine Erde ist im Gleichgewicht. Sie trägt dich sicher.",
-"Du bist geerdet und stabil.",
-"Du findest Ruhe in dir selbst."
-],
-"blockiert": [
-"Deine Erde ist blockiert. Stabilität ist gestört.",
-"Du suchst Halt, aber findest ihn nicht.",
-"Etwas verhindert, dass du zur Ruhe kommst."
-]
+"holz" :
+"Riesige Bäume schlagen tiefe Wurzeln in deinem Boden, was dir makellose Moral und ein schweres Pflichtbewusstsein verleiht. Geleitet von strengen Prinzipien und Vertrauen wirst du zum angesehenen Anführer in großen Organisationen. Doch wenn Bäume zu dicht wachsen, kann die Erde nicht atmen und erstickt. Gefangen von Gesetzen, Regeln und dem ständigen Druck, perfekt zu wirken, könntest du zutiefst isoliert enden. Du musst deine starren Maßstäbe senken und deinem inneren Boden etwas Freiheit schenken.",
+"feuer" :
+"Eine flammende Hitze wärmt deine weite Erde, sodass du Wissen und Weisheit endlos in deinem Kern aufsaugen kannst. Gesegnet mit unvergleichlicher Expertise und Lernfähigkeit stehst du als unerschütterliche mentale Stütze für deine Mitmenschen. Doch wenn die Sonne zu heftig brennt, reißt der Boden auf und wird zur Wüste. Du verfällst leicht in einen Sumpf aus endlosen Gedanken, unfähig, dein Wissen in die Realität umzusetzen. Lockere deine Sturheit und lerne, flexibel zu handeln.",
+"erde" :
+"Gewaltige Schichten aus Erde und Stein türmen sich auf und bilden ein unbewegliches Gebirge, das jedem Sturm trotzt. Deine Vertrauenswürdigkeit ist absolut, und deine Loyalität dient als eiserner Schild für jene, die du beschützt. Doch wenn ein Berg zu steil ist, wird er zu einer Mauer, die andere ausschließt und dich in Isolation stürzt. Deine extreme Sturheit wehrt jede Veränderung ab. Senke deine hohen Mauern und lerne, ein wenig sanfter zu sein.",
+"metall" :
+"Dein solider Boden birgt kostbares Gold, was Ströme von Talent, brillanten Ideen und scharfer Ausdruckskraft hervorbringt. Du bist ein Schöpfer, dessen Fähigkeiten viele bereichern können. Doch wenn du deinen Boden zu aggressiv nach Schätzen durchwühlst, wirst du unter chronischer Müdigkeit zusammenbrechen. Deine ungefilterten, messerscharfen Worte können zudem wichtige Beziehungen zu Autoritäten zertrümmern. Bevor du deine Brillanz zur Schau stellst, lerne, deine Worte mit schwerer Zurückhaltung zu wählen.",
+"wasser" :
+"Dein stabiler Damm hält einen gewaltigen Fluss des Wohlstands zurück, was dir einen scharfen Überlebensinstinkt für Finanzen verleiht. Inmitten großen Kapitals besitzt du das Talent eines Tycoons. Doch wenn die Wassermassen deine Grenzen überschreiten, bricht die Barriere und deine Identität wird weggeschwemmt. Blinde Gier oder emotionales Chaos können dich ziellos durchs Leben treiben lassen. Lass dich nicht von der Strömung mitreißen; bewahre dir dein stabiles Zentrum."
 },
 "metall": {
-"zu_stark": [
-"Dein Metall ist zu scharf. Es trennt mehr, als es klärt.",
-"Zu viel Metall macht dich hart.",
-"Du urteilst zu schnell und zu streng."
-],
-"zu_schwach": [
-"Dein Metall ist schwach. Dir fehlt Klarheit.",
-"Grenzen verschwimmen für dich.",
-"Du lässt zu viel durch, was dich schwächt."
-],
-"in_balance": [
-"Dein Metall ist im Gleichgewicht. Klarheit begleitet dich.",
-"Du erkennst, was bleiben darf und was gehen muss.",
-"Deine Entscheidungen sind präzise."
-],
-"blockiert": [
-"Dein Metall ist blockiert. Klarheit bleibt verborgen.",
-"Du siehst, aber erkennst nicht.",
-"Etwas verhindert deine Unterscheidungskraft."
-]
+"holz" :
+"Ein weiter Wald aus reichlich Holz erstreckt sich vor dir und verleiht dir eine klare Vision und kühne Entschlossenheit, realistische Ziele zu erreichen. Mit scharfem Pioniergeist schaffst du mühelos Wohlstand in wettbewerbsintensiven Bereichen. Doch wenn du dir zu viele Aufgaben aufhalst, wird deine Axtklinge stumpf und bricht. Getrieben von extremem Perfektionismus und Gier riskierst du, deine Gesundheit durch Überarbeitung zu ruinieren. Zieh deine scharfe Kante zurück und lerne zu ruhen.",
+"feuer" :
+"Eine lodernde Flamme umhüllt dein rohes Erz und schmiedet dich mit rigoroser Moral und schwerem Pflichtbewusstsein. Da du Ehre über das Leben stellst, wirst du zur vertrauenswürdigen Elite in großen Organisationen. Doch wenn das Feuer des äußeren Drucks zu heftig brennt, wird das Metall nicht geformt, sondern schmilzt einfach dahin. Extremer Stress kann dich in mentaler Erschöpfung gefangen halten. Tritt einen Schritt zurück aus den Flammen und gönne dir Freiraum zum Abkühlen.",
+"erde" :
+"Tiefer, fruchtbarer Boden umhüllt dich und segnet dich mit außergewöhnlichem Intellekt, tiefer Weisheit und stabiler Absicherung. Deine Gedanken besitzen immense Tiefe, sodass du komplexe Fähigkeiten leicht meisterst. Doch wenn gewaltige Erdschichten dich wie ein Grab begraben, wird dein brillantes Licht niemals die Welt erreichen. Gefangen im Sumpf großer Gedanken wirst du passiv und fliehst aus Angst vor der Realität. Brich durch den schweren Boden und zeige aktiv deine Brillanz.",
+"metall" :
+"Umgeben von scharfen Schwertern besitzt du absolutes Charisma, unerschütterliche Entschlossenheit und eine furchterregende Tatkraft. Du agierst als mächtiger Beschützer, der seinen inneren Kreis um jeden Preis verteidigt. Doch wenn unbeugsame Metalle frontal aufeinanderprallen, zerbrechen unweigerlich beide Klingen. Deine extreme Sturheit kann ständig Reibungen mit Rivalen erzeugen und zu bitterem Verrat führen. Lerne die Tugend der Flexibilität und verbirg deine scharfe Kante sanft in einer Scheide.",
+"wasser" :
+"Ein kristallklarer Fluss wäscht deine Klinge, was dir einen außergewöhnlich schnellen Verstand und brillante Beredsamkeit verleiht. Deine kreativen Worte fesseln sofort die Öffentlichkeit. Doch wenn die Strömung zu tief und heftig wird, sinkt das Juwel auf den Grund und verliert sein Licht. Deine Brillanz zu sehr zur Schau zu stellen, kann schwere Skandale auslösen. Deine ungefilterten, messerscharfen Worte können Herzen wie ein Bumerang durchbohren; wähle sie mit schwerer Bescheidenheit."
 },
-"wasser": {
-"zu_stark": [
-"Dein Wasser ist zu tief. Du verlierst dich darin.",
-"Zu viel Wasser bringt Unsicherheit.",
-"Du ziehst dich zu weit zurück."
-],
-"zu_schwach": [
-"Dein Wasser ist schwach. Dir fehlt Tiefe.",
-"Du meidest, was unter der Oberfläche liegt.",
-"Deine Intuition ist leise geworden."
-],
-"in_balance": [
-"Dein Wasser ist ruhig und klar.",
-"Du vertraust deiner inneren Tiefe.",
-"Deine Intuition führt dich sicher."
-],
-"blockiert": [
-"Dein Wasser ist gestaut. Es kann nicht fließen.",
-"Gefühle bleiben eingeschlossen.",
-"Etwas hindert dich daran, loszulassen."
-]
-}
+  "wasser": {
+"holz" :
+"Du gießt dein reines Wasser aus, um einen weiten Wald zu nähren, was dir brillante Kreativität und außergewöhnliches Talent beim Lehren oder Erschaffen verleiht. Angetrieben von Mitgefühl unterstützt du selbstlos deine Mitmenschen. Doch wenn es zu viele Bäume zu nähren gibt, wird dein Fluss völlig austrocknen und dich in ein extremes Burnout stürzen. Aus purem Mitleid niemals Nein zu sagen, führt nur dazu, dass man dich ausnutzt. Bevor du dich um andere kümmerst, fülle klug deine eigene Quelle auf.",
+"feuer" :
+"Eine brennende Sonne wärmt deinen weiten Ozean und füttert dich mit massivem Ehrgeiz, scharfem Überlebensinstinkt und einem genialen Blick für Finanzen. Mit dem kühnen Geist eines Spielers ergreifst du meisterhaft greifbaren Wohlstand im Geschäft. Doch wenn die umgebenden Feuer dein Wasser überwältigen, verdampft deine Identität spurlos. Jagd nach Profiten jenseits deiner Kapazität führt zu plötzlichem Ruin oder Betrug. Beruhige deine endlose Angst und kalkuliere kalt deine realistischen Grenzen.",
+"erde" :
+"Gewaltige Dämme begrenzen deinen wilden Fluss und verankern dich mit unglaublicher Ausdauer und schwerem Pflichtbewusstsein. Da du dein Ego zurückstellst, um Systemstrukturen zu wahren, steigst du erfolgreich zur vertrauenswürdigen Führungskraft in mächtigen Organisationen auf. Doch wenn Wasser zu fest eingesperrt und blockiert wird, stagniert es und erstickt. Überwältigt von äußerem Druck verfällst du leicht in tiefe Hilflosigkeit. Du musst dir deinen eigenen Freiraum schaffen, um diesem schweren Käfig zu entkommen.",
+"metall" :
+"Riesige Felsen beschützen deine Quelle und segnen dich mit stabiler Unterstützung, außergewöhnlicher Weisheit und einer beängstigend scharfen Intuition. Angetrieben von tiefer Reflexion meisterst du komplexe Bereiche als absoluter Experte. Doch wenn das Wasser aus den Felsen gefroren und unbeweglich bleibt, wirst du zum isolierten Träumer, gefangen in anspruchsvoller Faulheit. Taten aufzuschieben, bis alles perfekt ist, lässt deine Weisheit stagnieren. Brich aus deiner sicheren Höhle aus und fließe in die Realität.",
+"wasser" :
+"Unzählige Flüsse verschmelzen mit deiner Essenz und bilden einen unaufhaltsamen Ozean aus absolutem Charisma, tiefer Emotion und heftiger Tatkraft. Du besitzt eine unglaubliche Anziehungskraft, die Menschen mühelos in deine Strömung zieht. Doch wenn deine Grenzen überlaufen, können deine emotionalen Stürme eine blinde Sturheit auslösen, die alles ruiniert. Dein unlesbares, stilles Wesen kann andere tief verunsichern und dich isolieren. Du musst eine innere Schleuse bauen, um deine Strömung zu kontrollieren."
+}},
+"balanced_element": {
+    "holz": {
+      "holz": "Du bist Teil eines wunderschönen, üppigen Waldes, in dem Bäume im perfekten Abstand stehen und sich gegenseitig vor heftigen Taifunen schützen. Statt dem Sturm allein zu trotzen, genießt du ein gesundes Selbstwertgefühl und Unabhängigkeit, während du harmonisch mit anderen koexistierst. Deine zwischenmenschlichen Fähigkeiten sind unübertroffen. Gesegnet mit großem Glück im Umgang mit Menschen, wirst du dein Leben lang von treuen Verbündeten umgeben sein, die dich aufrichtig unterstützen und schützen.",
+      "feuer": "Im angenehmen Sonnenlicht eines warmen Frühlingstages bist du ein prächtiger Baum, der in voller Pracht erblüht. Du strahlst einen lebendigen Charme aus und zeigst der Welt mühelos deine frische Energie. Du besitzt eine brillante Ausdruckskraft und das geborene Startalent eines wahren Schöpfers. Deine Fähigkeit, kreative Gedanken, tiefes Wissen und scharfe Ideen in faszinierende Worte, Schriften oder künstlerische Meisterwerke zu verwandeln, ist absolut unübertroffen.",
+      "erde": "Tief und fest in einem fruchtbaren Land verwurzelt, bist du ein wohlhabender Baum, der das ganze Jahr über reichlich Früchte trägt. Unbeeindruckt von jedem Sturm bewahrst du ein perfektes Zentrum und erntest in jeder Jahreszeit goldene Erträge. Du bist gesegnet mit einem außergewöhnlichen Realitätssinn und einem Talent für Wohlstand. Deine präzise Planung und dein meisterhaftes Finanzmanagement erlauben es dir, ein stabiles und wohlhabendes Fundament aufzubauen.",
+      "metall": "Wunderschön geformt von den Scheren eines Meistergärtners, bist du ein seltener Premium-Bonsai, der absolute Bewunderung hervorruft. frei von wildem Gestrüpp bewahrst du ein elegantes Aussehen, da unnötige Zweige zur perfekten Zeit verfeinert werden. Du besitzt ein vertrauenswürdiges Auftreten, feine Manieren und makellose Selbstkontrolle. Da du Regeln mit schwerem Verantwortungsbewusstsein achtest, steigst du in jeder Organisation natürlicherweise in angesehene Elite-Positionen auf.",
+      "wasser": "Du stehst an einem kristallklaren Bach ohne Sorge vor Dürre und nimmst kontinuierlich reines, lebensspendendes Wasser auf. Deine Wurzeln bleiben hydratisiert, was dich mit immergrüner Vitalität und tiefer Weisheit nährt. Du besitzt eine beängstigend scharfe Intuition und die Fähigkeit, neues Wissen meisterhaft aufzusaugen, wodurch du zum absoluten Experten aufsteigst. In Krisenzeiten wird die tiefe Zuneigung von Mentoren und Eltern stets schützend hinter deinem Rücken stehen."
+    },
+    "feuer": {
+      "holz": "In einem gemütlichen Kamin versorgen perfekt trockene, solide Holzscheite deine Flamme kontinuierlich und bewahren die ganze Nacht hindurch ein elegantes Glühen. Gesegnet mit reichlich verlässlichem inneren Treibstoff besitzt du mentale Stärke, tiefe Reflexion und Geduld. Ein Leben voller akademischer Erfolge und intellektueller Leistungen begleitet dich. In Krisenzeiten wird die bedingungslose Liebe deiner Eltern und Mentoren stets schützend hinter deinem Rücken stehen, um deine funken zu bewahren.",
+      "feuer": "Stolz im Zentrum eines dunklen Platzes stehend, vereinen gewaltige Fackeln ihre Kräfte, um sich gegenseitig zu verstärken, unbesiegt von jedem Nachtwind. Statt als einsame Kerze zu erlöschen, bist du von verlässlichen Gefährten umgeben, die deine Dynamik teilen. Du besitzt ein gesundes Selbstwertgefühl und ein unbeugsames Rückgrat der Unabhängigkeit. Mit deiner charismatischen Führungsqualität trittst du natürlicherweise ins Rampenlicht und leitest die Menge als starker Anführer.",
+      "erde": "Perfektioniert in einem soliden Tonofen wird deine brillante Flamme meisterhaft kontrolliert, um Meisterwerke aus Porzellan zu brennen. frei von zerstörerischen Waldbränden wird deine Hitze durch eine sichere Erdstruktur gelenkt, um wertvolle Schätze zu erschaffen. Du besitzt eine außergewöhnliche Ausdruckskraft und ein Genie für Improvisation. Deine fähigkeit, brillante Ideen durch faszinierende Worte oder meisterhafte Arbeit in erfolgreiche Resultate zu verwandeln, ist wahrlich herausragend.",
+      "metall": "Als lodernder Schmelzofen schmilzt deine Hitze gewaltige Goldschätze und formt sie zu legendären Schwertern und unbezahlbaren Juwelen. Da du auf greifbares Metall triffst, das du beanspruchen kannst, garantiert deine harte Arbeit immense Belohnungen. Du bist mit einem großartigen Realitätssinn und einem Talent für Wohlstand geboren. Deine präzisen Kalkulationen erlauben es dir, deine Projekte reibungslos in solides Bargeld und wohlhabende Besitztümer zu verwandeln.",
+      "wasser": "Unter dem tiefen Nachthimmel spiegelt sich deine schöne flamme perfekt auf der ruhigen Oberfläche eines Sees und bietet einen atemberaubenden Anblick. Geschützt vor gefährlichen Explosionen werden deine Grenzen von einem klaren Fluss geformt, was dich hoch angesehen macht. Du besitzt ein rationales Urteilsvermögen und makellose Selbstkontrolle. Da du Regeln, Manieren und ein schweres Pflichtbewusstsein streng achtest, sicherst du dir natürlicherweise hohe Ehren und prominente Positionen."
+    },
+    "erde": {
+      "holz": "Auf deiner endlosen Ebene sind schöne Zäune gebaut, und riesige Bäume wachsen in perfekter Harmonie, was ein prächtiges Gebirge formt. Tief verwurzelte Bäume schützen deinen Boden vor Erdrutschen und heben deinen Wert in pure Eleganz. Du besitzt vertrauenswürdige Manieren, feine Etikette und makellose Selbstkontrolle. Da du Regeln mit schwerem Pflichtbewusstsein streng achtest, steigst du natürlicherweise zur Elite-Führungskraft auf, die großen Respekt genießt und Organisationen leitet.",
+      "feuer": "Im warmen Sonnenlicht des Himmels badend, ist deine weite Erde perfekt erwärmt, um unendliches Leben sprießen zu lassen. Gesegnet mit konstanter nährender Energie, birgst du unglaubliche Vitalität und reiche Nährstoffe tief in deinem Kern. Dein innerer Puffer for tiefe Reflexion und geistiges Wachstum ist herausragend. Ein Leben voller strategischer Erfolge begleitet dich, und in Krisenzeiten wird die bedingungslose Liebe von Eltern und Mentoren deinen Boden stets schützen.",
+      "erde": "Gewaltige Steinmauern und aufragende Berge türmen sich in Schichten auf und bilden einen majestätischen Schild, der jedem heftigen Sturm trotzt. Statt allein einzustürzen, bist du von verlässlichen Gefährten und starken Erd-Verbündeten umgeben, die deine Kraft teilen. Du besitzt ein rundum gesundes Selbstwertgefühl und ein festes Rückgrat der Unabhängigkeit. Gewappnet mit berggleicher Loyalität und schwerem Charisma leitest du andere natürlicherweise als unerschütterlicher Anführer.",
+      "metall": "Du birgst unschätzbare Juwelen und rohes Golderz tief in deinem Kern und bist eine prächtige Mine, die ihren brillanten Wert der Welt beweist. frei von Stagnation besitzt du einen soliden Kanal, um deine unendlichen Talente und kreativen Energien ans Licht zu bringen. Du zeigst eine außergewöhnliche Ausdruckskraft und ein Genie für Improvisation. Deine Fähigkeit, die Welt zu faszinieren, indem du deine Pläne durch meisterhafte Arbeit umsetzt, ist herausragend.",
+      "wasser": "Ein kristallklarer, endloser Fluss fließt dynamisch durch dein majestätisches Land und hydratisiert deinen Boden zu einem wohlhabenden feld. frei von Dürren kontrollierst du die idealen Wasserressourcen, was immense Belohnungen für deine harte Arbeit garantiert. Du bist mit einem spektakulären Realitätssinn und einem Talent für Wohlstand geboren. Deine präzise Planung und deine Abschlussstärke erlauben es dir, alle Projekte reibungslos in solide Besitztümer zu verwandeln."
+    },
+    "metall": {
+      "holz": "Mit soliden, scharfen Äxten stehst du vor einem prächtigen Wald aus reifem Holz und erschaffst meisterhaft wertvolle Kunstwerke. statt ins Leere zu schlagen, triffst du auf konkrete Erträge, die du voll beanspruchen kannst. Du bist mit einem spektakulären Realitätssinn und einem Talent für Wohlstand geboren. Ist ein Ziel gesetzt, erlaubt es dir deine entschlossene fähigkeit, Dinge zu beenden, all deine harte Arbeit reibungslos in solides Bargeld und Besitztümer zu verwandeln.",
+      "feuer": "Durch zehntausendfaches Härten in einem stabilen, lodernden Ofen wird dein Roherz schließlich zu einem angesehenen Schwert und unbezahlbaren Juwel geformt. frei von wilder Schärfe wirst du von einer eleganten flamme geformt, die klare Disziplin schafft, was dir überall Respekt einbringt. Du besitzt vertrauenswürdige Manieren und makellose Selbstkontrolle. Angetrieben von Verantwortungsbewusstsein und Gerechtigkeit steigst du natürlicherweise zur Elite-Führungskraft auf und sicherst dir ehrenvolle, hohe Positionen.",
+      "erde": "Tief im soliden Boden eines majestätischen Felsenberges erhalten unzählige Erze und Juwelen eine konstante Zufuhr reicher, nährender Energie. Statt als zerbrechliche Klinge allein zu stehen, wirst du von einem stabilen Fundament gestützt, das deinen inneren Kern mit unerschütterlicher Weisheit füllt. Deine fähigkeit zu tiefer Reflexion und geistigem Wachstum ist herausragend. Ein Leben voller solider Erfolge begleitet dich, und vertrauenswürdige Mentoren werden dir stets schützend den Rücken stärken.",
+      "metall": "Statt allein in einer eisigen Ödnis zu stehen, bildest du eine mächtige Festung an der Seite majestätischer Steinmauern und vertrauenswürdiger Verbündeter. frei davon, unter schwerer Last allein zu zerbrechen, bist du von verlässlichen Gefährten umgeben, die deine Kraft teilen und dein Zentrum unerschütterlich halten. Du besitzt ein rundum gesundes Selbstwertgefühl und ein festes Rückgrat der Unabhängigkeit. Gewappnet mit felsenfeister Loyalität führt dein schweres Charisma andere natürlicherweise an.",
+      "wasser": "Wunderschön in einem kristallklaren Bach gewaschen, strahlen dein legendäres Schwert und dein unbezahlbares Juwel ihr brillantes Licht in die Welt. frei von kalter Starrheit besitzt du einen flexiblen Kanal, um deine verborgenen Talente und Emotionen fließen zu lassen. Du hast einen schnellen Verstand und eine geschliffe Ausdruckskraft. Deine Fähigkeit, scharfe Ideen in meisterhafte Worte, Schriften oder kreative Kunst zu verwandeln, wird die Öffentlichkeit sofort fesseln."
+    },
+    "wasser": {
+      "holz": "Ein endlos tiefer, klarer Fluss fließt dynamisch über fruchtbares Land und nährt üppige Wälder und schöne Blumen. frei von Stagnation wird deine Energie in einen idealen, produktiven Lebensweg gelenkt. Du besitzt eine außergewöhnliche Ausdruckskraft und scharfe Reflexe. Deine fähigkeit, die Welt zu faszinieren, indem du brillante Ideen und Wissen durch meisterhafte Worte, Schriften oder künstlerisches Gespür in Resultate verwandelst, ist herausragend.",
+      "feuer": "Unter dem Nachthimmel scheinen Sonne und Vollmond über deinem majestätischen Ozean und verwandeln dunkle Wellen in ein atemberaubendes Goldlicht. frei von ziellosem Treiben triffst du auf konkrete Erträge, die du durch Weisheit und Taktgefühl für dich nutzen kannst. Du bist mit einem spektakulären Realitätssinn und einem Talent für Wohlstand geboren. Deine präzisen Kalkulationen erlauben es dir, alle Projekte reibungslos in solide Besitztümer zu verwandeln.",
+      "erde": "Geschützt vor zerstörerischen fluten wird dein Fluss von einem soliden Erddamm umrahmt und fließt als majestätischer Strom, der die Welt ernährt. frei von chaotischem Wandern besitzt du eine elegante Grenze und einen verlässlichen Schutz, was dir überall tiefes Vertrauen einbringt. Du hältst ein rationales Urteilsvermögen und makellose Selbstkontrolle. Da du Regeln, Manieren und Pflichtbewusstsein streng achtest, sicherst du dir natürlicherweise hohe Ehren im System.",
+      "metall": "Tief in den Höhlen eines majestätischen Felsenberges entspringt eine kristallklare Quelle, die als ewiger Ursprung deines tiefen Flusses dient. frei von der Sorge des Austrocknens wirst du von einem reinen Fundament gestützt, das deinen inneren Kern mit unendlicher Weisheit und messerscharfer Einsicht füllt. Ein Leben voller solider intellektueller Erfolge begleitet dich, und vertrauenswürdige Mentoren werden dir stets schützend den Rücken stärken.",
+      "wasser": "Unzählige klare Bäche verschmelzen mit deiner Strömung und bilden einen majestätischen, unaufhaltsamen Ozean, der stolz voranschreitet. frei davon, die Last des Lebens allein zu tragen, bist du von verlässlichen Gefährten umgeben, die deine tiefe teilen und dein zentrum unerschütterlich halten. Du besitzt ein rundum gesundes Selbstwertgefühl. Während du Empathie wie ein Schwamm aufsaugst, bewahrst du dennoch eine kraftvolle Führung."
+    }
+  },
+    "weak_element": {
+    "holz": {
+      "holz": "Du stehst als einsamer, riesiger Baum auf einer weiten Ebene und trotzt den heftigen Winden ganz allein. Da dir schützende Gefährten fehlen, um den Sturm zu teilen, verlässt du dich auf unnachgiebige Unabhängigkeit und sturen Ehrgeiz. Doch nirgends anlehnen zu können, macht dich extrem misstrauisch und hinterlässt eine geheime Einsamkeit. Versuche nicht, einen ganzen Berg allein zu tragen. Lerne die Flexibilität, deine verletzliche Seite zu zeigen und um Hilfe zu bitten.",
+      "feuer": "Du bist ein eisiger Winterbaum, umgeben von reichlich Brennholz, aber ohne einen Funken, der sie entzündet. Während deine Gedanken so tief wie ein Berg sind, lässt deine schroffe Ausdruckskraft andere glauben, du seist undurchschaubar. Da der Kanal nach außen blockiert ist, staust du extremen Stress und Frustration im Inneren an. Lass deine Gedanken nicht nur endlos im Kopf wandern. Entfache deinen inneren Funken bewusst nach außen und handle.",
+      "erde": "Du besitzt den stolzen Geist eines Baumes, der hoch hinausragt, doch der Boden unter dir ist gefährlich flach. Da du spirituelle Werte und Ehre über kalkulierten Profit stellst, hast du eine edle, großzügige Seele. Doch ohne stabilen Boden driftet dein Geist ab, sodass du ziellos wanderst. Damit deine harte Arbeit sich nicht wie ein fass ohne Boden anfühlt, musst du dem reinen Idealismus entkommen. Schaue der Realität ins Auge und stehe fest auf der Erde.",
+      "metall": "Du bist ein wilder Baum, der frei auf freiem Feld wächst, völlig unberührt von Zäunen oder den Scheren eines Gärtners. Ungehemmt von Kontrolle lebst du als freier Geist und ignorierst erstickende Regeln. Doch ohne Bremse neigst du dazu, Dinge impulsiv zu beginnen, ohne sie zu beenden. Dein Widerstand gegen Systeme macht langfristige Stabilität anstrengend. Du musst dir selbst eine Bremse auferlegen und deine eigenen täglichen Regeln und deine Zurückhaltung strikt einhalten.",
+      "wasser": "Du stehst als trockenes Brennholz unter einer sengenden Sonne; deine Wurzeln finden nur ausgetrockneten Boden. Ohne inneren Puffer oder tiefe Reflexion ist dein Wesen extrem ungeduldig, was dich antreibt, zu handeln, bevor du denkst. Doch deine flache Geduld kann plötzliche Ausbrüche auslösen, die alles ruinieren. Vermeide es, in falsche Fallen zu tappen. Wenn du wichtige Entscheidungen triffst, verlangsame dein Tempo, nimm ein Buch zur Hand und nähre deinen Geist."
+    },
+    "feuer": {
+      "holz": "Deine innere Flamme brennt heiß, aber es fehlt dir an robustem Brennholz, um ihre Funken lange zu nähren. Da dir bedingungslose Unterstützung fehlt, verlässt du dich auf einen starken Machergeist, um deine eigene Bühne ganz allein zu bauen. Doch ohne den inneren Treibstoff für tiefe Reflexion schwindet deine Geduld, ein Feld ganz zu meistern. Angetrieben von Impulsen drohen Fehlurteile. Bevor du deine Flammen entfesselst, nimm ein Buch zur Hand und nimm die Weisheit anderer an.",
+      "feuer": "Du brennst allein auf einem dunklen Platz und erschöpfst deine Flamme für andere, während dein Funken zu erlöschen droht. Ohne Gefährten, die deine Hitze teilen, verbirgst du Einsamkeit und Erschöpfung hinter einer hellen fassade. Dein Überlebensinstinkt ist stark entwickelt. Doch weil dein inneres Ich-Rückgrat schwach ist, schwankt deine Flamme leicht unter äußeren Anforderungen. Verschwende dein Feuer nicht völlig an andere. Halte stattdessen fest an deiner eigenen Souveränität.",
+      "erde": "Dein Herz quillt über vor brennender Leidenschaft, doch es fehlt ein solider Kessel, um diese Hitze in ein wertvolles Gefäß zu lenken. Da dein Kanal für Ausdrücke schwach ist, bewahrst du ein stilles Wesen und hältst deine Worte bewacht. Doch diese Energie einzuschließen, graviert Frustration und Wut wie ein Tattoo in dein Herz. Da es dir an Improvisation fehlt, erzeugst du Missverständnisse. Wälze die Leidenschaft nicht nur im Kopf; baue sie durch Sport oder Hobbys ab.",
+      "metall": "Du besitzt ein gewaltiges Feuer, das den Tag erhellt, doch kein kostbares Erz erscheint, das deine Hitze schmelzen und beanspruchen könnte. Da du Ehre über Profit stellst, begegnest du Menschen mit reiner Leidenschaft und Integrität. Doch dein kühler Realismus für Finanzen und Abschlüsse ist schwach. Du neigst dazu, Aufgaben überall zu verstreuen, während dein Ertrag verpufft. Entfliehe dem Idealismus. Prüfe kalt deine Zahlen und überimm die Verantwortung für den Abschluss.",
+      "wasser": "Du loderst unkontrolliert gen Himmel und agierst wie ein Waldbrand ohne kühles Wasser, das deine Flammen zügeln könnte. frei von äußeren Grenzen lebst du als freier Geist und stürmst mit reiner Intuition voran, während du Regeln verabscheust. Doch ohne innere Bremse kann eine einzige emotionale Explosion deine Siege im Nu in Asche verwandeln. Dein Widerstand macht Ausdauer anstrengend. Lege dir selbst eine Bremse auf, um deine täglichen Grenzen und andere zu respektieren."
+    },
+    "erde": {
+      "holz": "Du bist eine weite, endlose Ebene, aber es fehlt an Bäumen oder Zäunen, um Grenzen zu setzen und deinen Boden zu beanspruchen. Frei von Zwängen lebst du als unabhängige Seele und ignorierst erstickende Strukturen, um deinen Weg im eigenen Tempo zu gehen. Doch ohne innere Bremse neigst du dazu, Chaos zu stiften, ohne es zu beenden. Dein Widerstand macht Stabilität anstrengend. Du musst dir selbst eine Bremse auferlegen und deine eigenen täglichen Grenzen strikt einhalten.",
+      "feuer": "Du besitzt ein weites Land, das Leben nähren soll, doch es fehlt an warmem Sonnenlicht, um deinen gefrorenen Boden zu wärmen. Du verlässt dich auf reinen Ehrgeiz, um ohne Hilfe aufzusteigen, verabscheust Heuchelei und handelst mit ehrlichkeit. Doch ohne Treibstoff für tiefe Reflexion neigst du zu Impulsen statt zu kluger Vorsicht. Getrieben von Sehnsucht nach Zuneigung trägst du alle Lasten allein. Verlangsame dein Tempo, nimm ein Buch zur Hand und lerne von anderen.",
+      "erde": "Du stehst völlig allein inmitten eines heftigen Sturms; es fehlt an schützenden Mauern oder solidem Boden, um dich zu verankern. Jede Prüfung allein zu meistern, erzeugt eine tiefe Einsamkeit, doch dein Überlebensinstinkt ist stark entwickelt. Da dein inneres Ich-Rückgrat jedoch schwach ist, verlierst du leicht den Halt und wirst von anderen beeinflusst oder ausgenutzt. Höre auf, deine Ressourcen an andere zu verschwenden. Festige zuerst deinen eigenen Boden und bewahre dein Zentrum.",
+      "metall": "Du trägst die Würde eines gewaltigen Berges, doch es fehlt der Kanal, um das tief vergrabene Gold ans Licht zu bringen. Da du deine Gedanken im Inneren verschließt, zeigst du eine vertrauenswürdige Schwere und schützt deinen Boden mit Schweigen. Doch diese Energie einzuschließen, staut Frustration in deinem Herzen an. Da es dir an Improvisation fehlt, lässt du zu, dass andere deinen Erfolg stehlen. Entfliehe dem Grübeln und baue Energie durch Sport oder kreative Worte ab.",
+      "wasser": "Du besitzt einen stabilen Damm, doch der klare Fluss, den du kontrollieren solltest, ist unter einer schweren Dürre ausgetrocknet. Da du Ehre und Vertrauen über Profit stellst, trägst du das edle Auftreten einer Führungspersönlichkeit. Doch dein kühler Realismus für Finanzen und greifbare Erträge ist schwach. Du arbeitest hart, doch dein realer Gewinn verpufft im Nichts. Entfliehe dem starren Idealismus, prüfe kalt deine Zahlen und fordere deinen realen Wert ein."
+    },
+    "metall": {
+      "holz": "Du hältst ein makelloses, rasiermesserscharfes Schwert in den Händen, doch kein Baum erscheint, den deine Klinge fällen und beanspruchen könnte. Da du Ehre und Prinzipien über Profit stellst, besitzt du eine edle Integrität, die keine Kompromisse für Geld eingeht. Doch dein kühler Realismus für Finanzen und Abschlüsse ist schwach. Du schwingst dein Schwert hart, aber dein realer Gewinn verpufft. Entfliehe dem starren Idealismus, prüfe kalt deine Zahlen und fordere deinen realen Wert ein.",
+      "feuer": "Du besitzt ein prächtiges Roherz mit immensem Potenzial, doch es fehlt das lodernde feuer, um dich zu schmelzen und zu einer legendären Klinge zu formen. frei von äußeren Zwängen lebst du als freier Geist und ignorierst erstickende Strukturen, um deinen Weg im eigenen Tempo zu gehen. Doch ohne innere Bremse werden deine Emotionen gefährlich scharf und verletzen andere. Dein Widerstand macht Stabilität anstrengend. Lege dir selbst eine Bremse auf und halte deine eigenen Regeln strikt ein.",
+      "erde": "Du trägst eine messerscharfe Klinge, doch es fehlt der solide Boden, um dich zu verankern und konstant mit Energie zu versorgen. Du verlässt dich auf reinen Ehrgeiz, um ohne Hilfe aufzusteigen, verabscheust Heuchelei und handelst mit ehrlichkeit. Doch ohne Treibstoff für tiefe Reflexion neigst du zu sofortigen, scharfen Impulsen statt zu kluger Vorsicht. Getrieben von Sehnsucht nach Zuneigung trägst du alle Lasten allein. Verlangsame dein Tempo, nimm ein Buch zur Hand und lerne von anderen.",
+      "metall": "Du stehst völlig allein in einer windgepeitschten Ödnis; es fehlt an schützenden Steinmauern oder einem Verbündeten, um das Gewicht deiner Klinge zu teilen. Jede Prüfung allein zu meistern, erzeugt eine tiefe Einsamkeit, doch dein unabhängiger Geist ist stark entwickelt. Da dein inneres Ich-Rückgrat jedoch schwach ist, zerbricht dein Stolz trotz harter Fassade leicht unter äußeren Anforderungen. Höre auf, dich für andere zu beweisen. Festige zuerst deinen eigenen inneren Kern.",
+      "wasser": "Du verbirgst eine messerscharfe Klinge und ein brillantes Juwel, doch es fehlt das klare Wasser, um Verunreinigungen fortzuspülen. Da du deine Gedanken im Inneren verschließt, zeigst du eine vertrauenswürdige Schwere und schützt deinen Boden mit Schweigen. Doch diese Energie einzuschließen, richtet deine Schärfe nach innen und staut Obsessionen in deinem Herzen an. Da es dir an Flexibilität fehlt, wirkst du kalt. Entfliehe starren Grenzen durch Sport oder warme Gespräche."
+    },
+    "wasser": {
+      "holz": "Du besitzt die Energie eines endlos tiefen Ozeans, doch es fehlen die Bäume, die deine Strömung aufsaugen und in grüne Wälder verwandeln. Da du deine klugen Gedanken im Inneren verschließt, bewahrst du ein stilles Wesen und hütest Geheimnisse mit tiefer Vertrauenswürdigkeit. Doch das Blockieren deines Kanals lässt das Wasser stagnieren und staut Hilflosigkeit in deinem Herzen an. Da es dir an Flexibilität fehlt, drohen Missverständnisse. Entfliehe dem Grübeln durch Sport oder warme Gespräche.",
+      "feuer": "Du fließt majestätisch wie ein gewaltiger nächtlicher Ozean, doch keine warme Sonne erscheint, die deine Wellen in goldenem Licht tanzen lässt. Da du Ehre und spirituelle Weisheit über Profit stellst, besitzt du eine edle Integrität, die keine Kompromisse für Geld eingeht. Doch dein kühler Realismus für Finanzen und Abschlüsse ist schwach. Du strengst deinen Verstand an, aber dein realer Gewinn verpufft. Entfliehe dem starren Idealismus, prüfe kalt deine Zahlen und fordere deinen realen Wert ein.",
+      "erde": "Du fließt unkontrolliert wie eine reißende Flut durch das Land; es fehlt ein solider Erddamm, um deine wilde Strömung zu lenken. Frei von äußeren Zwängen lebst du als freier Geist und ignorierst erstickende Strukturen, um deinen Weg im eigenen Tempo zu gehen. Doch ohne innere Bremse neigst du dazu, Regeln zu missachten und mit Systemen zu kollidieren, was Stabilität anstrengend macht. Dein sprunghaftes Wesen kann egoistisch wirken. Lege dir eine brense auf und halte deine Regeln ein.",
+      "metall": "Du besitzt den stolzen Geist eines Flusses, der die Erde kühlt, doch es fehlen die riesigen Felsen, die dich kontinuierlich mit einer frischen Quelle versorgen. Du verlässt dich auf reinen Ehrgeiz, um ohne Hilfe aufzusteigen, verabscheust Heuchelei und handelst mit ehrlichkeit. Doch ohne Treibstoff für tiefe Reflexion neigst du zu emotionalen Impulsen statt zu kluger Vorsicht. Getrieben von Sehnsucht nach Zuneigung trägst du alle Lasten allein. Verlangsame dein Tempo, nimm ein Buch zur Hand und lerne von anderen.",
+      "wasser": "Du stehst als zerbrechliche Quelle völlig allein in einer ausgetrockneten Wüste; es fehlt an Gefährten, um deine Strömung zu teilen. Jede Prüfung allein zu meistern, erzeugt eine tiefe Einsamkeit, doch dein unabhängiger Geist ist stark entwickelt. Da dein inneres Ich-Rückgrat jedoch schwach ist, zerbricht dein Geist trotz flexibler fassade leicht unter äußeren Anforderungen. Höre auf, deine Ressourcen zu verschwenden, um es anderen recht zu machen. Festige zuerst deinen eigenen Kern."
+    }
+  },
+  "advise_weak" : {
+  "holz": "Um deine fehlende Holzenergie zu beleben, umgieb deinen Alltag mit lebendigen grünen Gegenständen und Zimmerpflanzen. Spaziere an Wochenenden durch üppige Parks, um die frische Vitalität aufzunehmen, die deinen Antrieb neu startet.",
+  "feuer" : "Um deine fehlende Feuerenergie zu entfachen, zünde täglich Duftkerzen an und setze auf rote oder orangefarbene Akzente. Genieße an sonnigen Tagen die Sonne auf einer Café-Terrasse, um deine Leidenschaft aufzuladen.",
+  "erde" : "Um deine fehlende Erd-Stabilität zu erden, trage oft warme Beige- oder Brauntöne und berühre Keramikbecher. Wandere an Wochenenden oder gehe barfuß auf feldwegen, um dein berggleiches, friedliches Zentrum zu finden.",
+  "metall" : "Um deine fehlende Metall-Entschlossenheit zu schärfen, trage eleganten Silber- oder Goldschmuck und halte Spiegel sauber. Genieße moderne Räume und klassische Musik, um deine Selbstbeherrschung und Entschlossenheit aufzuladen.",
+  "wasser" : "Um deine fehlende Wasserweisheit einzuladen, trage tiefe Schwarz- oder Marinetöne und trinke aus transparenten Bechern. Wenn dein Geist überlastet ist, schlendere bei Sonnenuntergang an einem flussufer entlang, um Unruhe aufzulösen."
 },
+      "advise_strong" : {
+  "holz" : "Um deine überschüssige Holzenergie zu beruhigen, platziere helle Beleuchtung oder rote Accessoires in deinem Raum. Das Mitführen von Metallwerkzeugen wie einem Nagelknipser-Set hilft zudem, sture Impulse zu stutzen, was dir dabei hilft, rationale und ruhige Entscheidungen zu treffen.",
+  "feuer" : "Um deine explodierende Feuerenergie zu kühlen, trage schwarze Gegenstände oder dunkelblaue Kleidung. Keramikvasen oder Steindekor im Schlafzimmer lassen die schwere Erde plötzliche Wut absorbieren, was impulsiven Fehlern effektiv vorbeugt und dir hilft, innere Ruhe zu bewahren.",
+  "erde" : "Um stagnierende Erdenergie und Starrheit zu lösen, trage glänzende Metallgegenstände wie Silberringe oder Uhren. Das Aufhängen eines lebendigen grünen Bildes an deinem Fenster erlaubt es der Holzenergie, deine Hilflosigkeit und Erschöpfung bequem abzuschütteln und Vitalität zu bringen.",
+  "metall" : "Um deinen eisigen Metall-Perfektionismus zu mildern, trage stets eine klare Wasserflasche bei dir, um scharfe Obsessionen fortzuspülen. Das Anzünden von Duftkerzen oder orangefarbene Vorhänge bringen warmes Feuer, das deine starren Grenzen in sanfte Güte für alle schmilzt.",
+  "wasser" : "Um deine überlaufende Wasser-Unruhe zu kontrollieren, nutze beige Ledergeldbörsen, um eine solide Erdbarriere zu errichten. Holzmöbel oder Pflanzen auf deinem Schreibtisch helfen dem Holz, negatives Grübeln aufzusaugen, was deinen Geist sofort für neue Produktivität klärt."
+      },
+      "advise_no_st" : {
+"advise_no_st" : "Alle Elemente in dir harmonieren perfekt, wie eine friedliche Natur, in der die Jahreszeiten makellos kreisen. Mit deinem ausgeglichenen Charakter passt du dich jeder fremden Umgebung mit flexibelem Taktgefühl an. Während dein Leben weniger extreme Krisen erfährt, kann diese perfekte Mischung deine explosive Ausstrahlung oder deinen scharfen Drang schwächen. Da du vieles gut kannst, neigst du zu Unentschlossenheit oder Bequemlichkeit. Vermeide es, zu vorsichtig zu sein. Tritt gelegentlich kräftig auf das Gaspedal deines Lebens."
+      },
 "verbindung": [
 "Du stehst zwischen Bewegung und Stillstand.",
 "In dir kämpfen zwei Kräfte um Richtung.",
@@ -157,3 +197,4 @@
 "Nicht alles ist gesagt."
 ]
 }
+ 

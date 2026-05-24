@@ -95,45 +95,41 @@ def compute_raw_scores(features: Dict[str, Any]) -> Dict[str, float]:
     ring_fp = finger_profile["ring"]
     little_fp = finger_profile["little"]
 
-    #std_dev_fin = np.std([index_fp, middle_fp, ring_fp, little_fp])
+    base_finger_weight = 1.0  # Vorher 1.5
+    base_palm_weight = 0.5
 
-    #we have to make sure that every element is not symmetric easily. and every hand should be have various ratio....
-
-    # Roh-Scores nach eurem konzeptionellen Mapping
-    # 1. Holz (Wood): Long palm, long fingers, index finger dominance (Elongated and elegant shape)
     holz = (
-            1.5 * finger_length_ratio  # Weight for long fingers
-            + 1.0 * palm_aspect_ratio  # Weight for long palm
-            + 0.5 * (index_to_ring_ratio ** 2)  # Higher score if the index finger is longer
-    )
+                base_finger_weight * finger_length_ratio 
+            + base_palm_weight * palm_aspect_ratio 
+            + 1.0 * (index_to_ring_ratio ** 2) # Higher score if the index finger is longer
+        )
 
     # 2. Feuer (Fire): Long palm, long fingers, ring finger dominance (Expressive and dynamic)
     feuer = (
-            1.5 * finger_length_ratio  # Weight for long fingers
-            + 1.0 * palm_aspect_ratio  # Weight for long palm
-            - 0.5 * (index_to_ring_ratio ** 2)  # Higher score if the ring finger is longer (lower index ratio)
+            base_finger_weight * finger_length_ratio 
+            + base_palm_weight * palm_aspect_ratio 
+            + 1.0 * (1.0 / max(0.1, index_to_ring_ratio)) # Higher score if the ring finger is longer (lower index ratio)
     )
 
     # 3. Erde (Earth): Wide/short palm, short fingers, index finger dominance (Thick and solid shape)
     erde = (
-            1.5 * (1.0 - palm_aspect_ratio)  # Higher score for a wider/shorter palm
-            + 1.0 * (1.0 - finger_length_ratio)  # Higher score for shorter fingers
-            + 0.5 * (index_to_ring_ratio ** 2)  # Higher score if the index finger is longer
+          1.5 * (1.0 - palm_aspect_ratio) 
+            + 1.5 * (1.0 - finger_length_ratio)  # Erhöht, um kurzen Fingern mehr Gewicht zu geben
+            + 0.5 * (index_to_ring_ratio ** 2) # Higher score if the index finger is longer
     )
 
     # 4. Metall (Metal): Square palm (1:1), balanced finger lengths (Symmetry and order)
     # * Designed to score higher as values approach the balanced 1:1 ratio.
-    metall = (
-            1.5 * (1.0 - abs(palm_aspect_ratio - 0.5) * 2.0)  # Highest score when palm ratio is near 0.5 (1:1)
-            + 1.0 * ((1.0 - abs(index_to_ring_ratio - 0.5) * 2.0) ** 2) # Highest score when index and ring fingers are similar in length
-    )
+    palm_symmetry = 1.0 - abs(palm_aspect_ratio - 0.68) * 2.0
+    finger_symmetry = 1.0 - abs(index_to_ring_ratio - 0.95) * 2.0
+    metall = 1.2 * palm_symmetry + 1.2 * (finger_symmetry ** 2)
 
     # 5. Wasser (Water): long palm, long fingers, ring finger dominance (Fluid and adaptable)
+    middle_dominance = middle_fp - (index_fp + ring_fp) / 2
     wasser = (
-            1.5 * finger_length_ratio  # Weight for long fingers
-            + 1.0 * palm_aspect_ratio # weight for long palm
-            + 1.0 * middle_fp  # Factor in middle finger characteristics/length
-            - 0.5 * (index_to_ring_ratio ** 2)  # Higher score if the ring finger is longer
+            base_finger_weight * finger_length_ratio 
+            + base_palm_weight * palm_aspect_ratio 
+            + 2.0 * middle_dominance  # Reagiert jetzt auf echte, variable Anatomie!
     )
 
     return {
@@ -166,9 +162,9 @@ def normalize_scores(raw_scores: Dict[str, float]) -> Dict[str, float]:
 def determine_base_states(scores: Dict[str, float]) -> Dict[str, str]:
     states = {}
     for element, score in scores.items():
-        if score > 35:
+        if score > 26:
             states[element] = "zu_stark"
-        elif score < 8:
+        elif score < 14:
             states[element] = "zu_schwach"
         else:
             states[element] = "in_balance"
@@ -176,6 +172,9 @@ def determine_base_states(scores: Dict[str, float]) -> Dict[str, str]:
 
 def determine_dominant_element(scores: Dict[str, float]) -> str:
     return max(scores.items(), key=lambda item: item[1])[0]
+
+def determine_weakest_element(scores: Dict[str, float]) -> str:
+    return min(scores.items(), key=lambda item: item[1])[0]
 
 def element_ratio(raw_scores: Dict[str, Any]) -> Dict[str, Any]:
     return {k: round((v / sum(raw_scores.values())) * 100, 2) for k, v in raw_scores.items()}
@@ -190,6 +189,11 @@ def build_result(input_payload: Dict[str, Any], average_payload: Dict[str, Any] 
     final_states= determine_base_states(element_ratio(raw_scores))
 
     dominant_element = determine_dominant_element(normalized_scores)
+    weakest_element = determine_weakest_element(normalized_scores)
+
+    core_element = None
+    if average_payload:
+        core_element = find_core_element(average_payload, features)
 
     return {
         "request_id": meta.get("request_id"),
@@ -207,8 +211,10 @@ def build_result(input_payload: Dict[str, Any], average_payload: Dict[str, Any] 
         "element_ratio" : element_ratio(raw_scores),
         "element_states": final_states,
         "dominant_element": dominant_element,
-        "core_element" : find_core_element(average_payload, input_payload) if average_payload else None
+        "weakest_element": weakest_element,
+        "core_element" : core_element
     }
+
 def GetLines(result: Dict[str, Any]) -> list[str]:
     lines_list = []
 
@@ -219,81 +225,81 @@ def GetLines(result: Dict[str, Any]) -> list[str]:
     except:
         print("the json file is not valid")
         return lines_list
+    
     core_element = result.get("core_element")
+    dominant_element = result.get("dominant_element")
+    weakest_element = result.get("weakest_element")
+
     if core_element:
         core_line = lines.get("core_element", {}).get(core_element)
         if core_line:
             lines_list.append(core_line)
+   
+   
+    if core_element and dominant_element:
+        dominant_line = lines.get("dominant_element", {}).get(core_element, {}).get(dominant_element)
+        if dominant_line:
+            lines_list.append(dominant_line)
+       
 
-    for key, values in result.get("element_states", {}).items():
-        one_line = lines.get("elemente", {}).get(key, {}).get(values)
-        if one_line:
-            lines_list.append(one_line[random.randint(0,2)])
+    if core_element and weakest_element:
+        state = result.get("element_states", {}).get(weakest_element, "in_balance")
+        if state == "in_balance":
+            balanced_line = lines.get("balanced_element", {}).get(core_element, {}).get(weakest_element)
+            if balanced_line:
+                lines_list.append(balanced_line)
         else:
-            print("the line is not available")
+            weak_line = lines.get("weak_element", {}).get(core_element, {}).get(weakest_element)
+            if weak_line:
+                lines_list.append(weak_line)
+
+    #advise
+    if result.get("element_states", {}).get(dominant_element) == "zu_stark":
+        adv_line = lines.get("advise_strong", {}).get(weakest_element)
+        if adv_line:
+            lines_list.append(adv_line)
+        else:
+            print("the line is not available : adv_line : strong")
+
+    elif result.get("element_states", {}).get(weakest_element) == "zu_schwach":
+        adv_line = lines.get("advise_weak", {}).get(weakest_element)
+        if adv_line:
+            lines_list.append(adv_line)
+        else:
+            print("the line is not available : adv_line : weak")
+
+    else :
+        adv_line = lines.get("advise_no_st", {}).get("advise_no_st")
+        if adv_line:
+            lines_list.append(adv_line)
+        else:
+            print("the line is not available : adv_line : no_st")
+
 
     return lines_list
 
-def find_core_element(average : Dict[str, Any] | None, input: Dict[str, Any]) -> str:
-    if not average:
-        return "NaN"
+def find_core_element(average_payload: Dict[str, Any], current_features: Dict[str, Any]) -> str:
+    # 1. Features des Durchschnitts extrahieren
+    avg_features = extract_features(average_payload)
 
-    avg_features = extract_features(average)
-    input_features = extract_features(input)
+    # 2. Raw Scores direkt berechnen (ohne build_result aufzurufen!)
+    current_raw = compute_raw_scores(current_features)
+    avg_raw = compute_raw_scores(avg_features)
 
-    features = {
-        "palm_aspect_ratio": abs(avg_features["palm_aspect_ratio"] - input_features["palm_aspect_ratio"]),
-        "finger_length_ratio": abs(avg_features["finger_length_ratio"] - input_features["finger_length_ratio"]),
-        "index_to_ring_ratio": abs(avg_features["index_to_ring_ratio"] - input_features["index_to_ring_ratio"]),
-        "index": abs(avg_features["finger_profile"]["index"] - input_features["finger_profile"]["index"]),
-        "middle": abs(avg_features["finger_profile"]["middle"] - input_features["finger_profile"]["middle"]),
-        "ring": abs(avg_features["finger_profile"]["ring"] - input_features["finger_profile"]["ring"]),
-        "little": abs(avg_features["finger_profile"]["little"] - input_features["finger_profile"]["little"])
+    # 3. Scores z-standardisieren
+    current_normalized = normalize_scores(current_raw)
+    avg_normalized = normalize_scores(avg_raw)
+
+    # 4. Höchste positive Abweichung vom Durchschnitt finden
+    element_differences = {
+        element: current_normalized[element] - avg_normalized[element]
+        for element in ELEMENTS
     }
 
-    best_feature = max(features, key=features.get)
-
-    # print(features)
-    # print(best_feature)
-
-    #this is not that good too... It must be some reason that why the core element is some element, but this one makes no sense...
-    match best_feature:
-        case "palm_aspect_ratio":
-            return "earth"
-
-        case "finger_length_ratio":
-            return "water"
-
-        case "index_to_ring_ratio":
-            return "fire"
-
-        case "index" | "middle":
-            return "wood"
-
-        case "ring" | "little":
-            return "metal"
-
-        case _:
-            print("best feature is not valid")
-            return "NaN"
+    return max(element_differences, key=element_differences.get)
 
 
 if __name__ == "__main__":
-    # sample_input = {
-    #     "request_id": "example-001",
-    #     "session_id": "session-42",
-    #     "handedness": "right",
-    #     "tracking_quality": 0.93,
-    #     "palm_aspect_ratio": 0.30,
-    #     "finger_length_ratio": 0.80,
-    #     "index_to_ring_ratio": 0.40,
-    #     "finger_profile": {
-    #         "index": 0.70,
-    #         "middle": 0.90,
-    #         "ring": 0.75,
-    #         "little": 0.50
-    #     }
-    # }
 
     sample_input = {
         "request_id": "example-001",
@@ -323,7 +329,7 @@ if __name__ == "__main__":
         }
     }
 
-    result = build_result(sample_input)
+    result = build_result(sample_input, input_average)
     Lines = GetLines(result)
     print(json.dumps(result, ensure_ascii=False, indent=2))
 
