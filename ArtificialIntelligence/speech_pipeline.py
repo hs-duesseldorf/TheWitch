@@ -136,7 +136,13 @@ def find_audio_devices() -> list[int | None]:
                     if _linux_output_score(devices[index]["name"]) >= 0
                 )
         else:
-            selected.extend(index for index, _ in output_devices)
+            default = sd.default.device
+            if isinstance(default, tuple):
+                default = default[1]
+            if None in selected and default is not None:
+                selected.extend(index for index, _ in output_devices if index != default)
+            else:
+                selected.extend(index for index, _ in output_devices)
     except Exception as e:
         logger.warning(f"Error finding devices: {e}")
 
