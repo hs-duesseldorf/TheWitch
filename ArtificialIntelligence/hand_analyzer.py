@@ -10,20 +10,15 @@ from . import hand_analysis
 
 
 _SYSTEM_PROMPT = (
-    "/no_think\n"
+ "/no_think\n"
     "Antworte ausschliesslich auf Deutsch.\n"
     "Gib nur die finale gesprochene Antwort aus.\n"
     "Beginne sofort mit der Vorhersage, ohne Analyse oder Vorrede.\n"
-    "Schreibe eine mystische Zukunftsvorhersage wie eine Hexe oder Wahrsagerin.\n"
-    "Deute die menschliche Hand anhand von Proportionen, Handflaeche, Fingern und Linien.\n"
-    "Sprich ueber kommende Ereignisse, Entscheidungen, Warnungen oder verborgene Chancen.\n"
-    "Antworte mit genau 4 vollstaendigen Saetzen.\n"
-    "Beende den letzten Satz vollstaendig.\n"
-    "Gib eine detaillierte Deutung, aber ohne Wortzaehlungen oder formale Hinweise.\n"
+    "STRIKTE REGEL: Du bist ein reiner Text-Transformator. Erfinde KEINE eigenen Geschichten, Linien oder Metaphern.\n"
+    "Nimm die bereitgestellten Basistexte und übersetze sie VOLLSTÄNDIG und OHNE Sinnveränderung in den Tonfall einer weisen, düsteren Wahrsagerin.\n"
+    "Das in den Basistexten genannte dominante Element MUSS namentlich und prominent in der Antwort vorkommen.\n"
     "Es geht immer um eine menschliche Hand, niemals um ein Handtuch.\n"
     "Verwende nie die Woerter Handtuch, Tuch oder Stoff.\n"
-    "Benutze konkrete Handlese-Bilder wie Lebenslinie, Schicksalslinie, Finger oder Handflaeche.\n"
-    "Erfinde keine Messwerte und erwaehne keine technischen Begriffe.\n"
     "Kein Markdown, keine Klammern, keine Emojis.\n"
     "Ton: weise, leicht dunkel, konkret.\n"
     "/no_think\n"
@@ -78,10 +73,11 @@ def _get_base_texts(trigger: str, hand_event: HandEvent, lengths: dict[str, floa
         return ""
 
     joined = " ".join(line for line in storyline if line)
+
     return (
-        "Formuliere die folgenden Basistexte frei um und folge der Reihenfolge. "
-        "Die Antwort MUSS das dominante Element explizit nennen. "
-        "Du darfst zusammenfassen, aber die Reihenfolge muss erkennbar bleiben: "
+        "Hier sind deine verbindlichen Basistexte. Übersetze sie fließend in deinen "
+        "mystischen Stil, aber behalte JEDE Information und JEDEN Satzbau-Sinn bei. "
+        "Es darf absolut kein Fakt oder Inhalt weggelassen oder verkürzt werden: "
         f"{joined}"
     )
 
@@ -95,11 +91,6 @@ def _load_package_texts() -> dict[str, list[str]]:
         return {}
 
 
-def _pick_random(values: list[str]) -> str:
-    if not values:
-        return ""
-    return values[random.randint(0, len(values) - 1)]
-
 
 def _build_storyline(
     element_lines: list[str],
@@ -108,36 +99,13 @@ def _build_storyline(
 ) -> list[str]:
     storyline: list[str] = []
 
-    intro = _pick_random(package_texts.get("einstieg", []))
-    if intro:
-        storyline.append(intro)
-
-    if dominant_element:
-        label = _format_element_label(dominant_element)
-        storyline.append(f"Dein dominantes Element ist {label}.")
-
     for line in element_lines:
         if line:
             storyline.append(line)
 
-    verbindung = _pick_random(package_texts.get("verbindung", []))
-    if verbindung:
-        storyline.append(verbindung)
-
-    zukunft = _pick_random(package_texts.get("zukunft", []))
-    if zukunft:
-        storyline.append(zukunft)
-
-    abschluss = _pick_random(package_texts.get("abschluss", []))
-    if abschluss:
-        storyline.append(abschluss)
-
     return storyline
 
 
-def _format_element_label(element: str) -> str:
-    label = element.strip().lower()
-    return label.capitalize()
 
 
 def _hand_label(hand_event: HandEvent) -> str:

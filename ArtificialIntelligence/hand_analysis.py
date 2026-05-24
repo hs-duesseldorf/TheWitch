@@ -30,8 +30,8 @@ def extract_features(payload: Dict[str, Any]) -> Dict[str, Any]:
         }
 
     lengths = payload.get("lengths", {})
-    palm_width = lengths.get("palm width", lengths.get("palm_width", 0.0))
-    palm_height = lengths.get("palm_ height", lengths.get("palm height", lengths.get("palm_height", 0.0)))
+    palm_width = lengths.get("palm_width", lengths.get("palm_width", 0.0))
+    palm_height = lengths.get("palm_height", lengths.get("palm_height", 0.0))
 
     index_length = lengths.get("index_length", 0.0)
     middle_length = lengths.get("middle_length", 0.0)
@@ -226,20 +226,25 @@ def GetLines(result: Dict[str, Any]) -> list[str]:
         print("the json file is not valid")
         return lines_list
     
-    core_element = result.get("core_element")
-    dominant_element = result.get("dominant_element")
-    weakest_element = result.get("weakest_element")
+    core_element = result.get("core_element").strip().lower()
+    dominant_element = result.get("dominant_element").strip().lower()
+    weakest_element = result.get("weakest_element").strip().lower()
+    element_states = result.get("element_states", {})
 
     if core_element:
         core_line = lines.get("core_element", {}).get(core_element)
         if core_line:
             lines_list.append(core_line)
+        else:
+            print(f"DEBUG: core_line nicht gefunden fuer '{core_element}'")
    
    
     if core_element and dominant_element:
         dominant_line = lines.get("dominant_element", {}).get(core_element, {}).get(dominant_element)
         if dominant_line:
             lines_list.append(dominant_line)
+        else:
+            print(f"DEBUG: dominant_line nicht gefunden fuer Core: '{core_element}', Dom: '{dominant_element}'")
        
 
     if core_element and weakest_element:
@@ -253,28 +258,31 @@ def GetLines(result: Dict[str, Any]) -> list[str]:
             if weak_line:
                 lines_list.append(weak_line)
 
+
     #advise
-    if result.get("element_states", {}).get(dominant_element) == "zu_stark":
-        adv_line = lines.get("advise_strong", {}).get(weakest_element)
+    dom_state = element_states.get(dominant_element)
+    weak_state = element_states.get(weakest_element)
+    
+    if dom_state == "zu_stark":
+        adv_line = lines.get("advise_strong", {}).get(dominant_element)
         if adv_line:
             lines_list.append(adv_line)
         else:
             print("the line is not available : adv_line : strong")
 
-    elif result.get("element_states", {}).get(weakest_element) == "zu_schwach":
+    elif weak_state == "zu_schwach":
         adv_line = lines.get("advise_weak", {}).get(weakest_element)
         if adv_line:
             lines_list.append(adv_line)
         else:
             print("the line is not available : adv_line : weak")
-
-    else :
+    
+    else:
         adv_line = lines.get("advise_no_st", {}).get("advise_no_st")
         if adv_line:
             lines_list.append(adv_line)
         else:
             print("the line is not available : adv_line : no_st")
-
 
     return lines_list
 
