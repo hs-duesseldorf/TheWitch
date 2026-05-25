@@ -191,9 +191,6 @@ def build_result(input_payload: Dict[str, Any], average_payload: Dict[str, Any] 
     dominant_element = determine_dominant_element(normalized_scores)
     weakest_element = determine_weakest_element(normalized_scores)
 
-    core_element = None
-    if average_payload:
-        core_element = find_core_element(average_payload, features)
 
     return {
         "request_id": meta.get("request_id"),
@@ -212,7 +209,6 @@ def build_result(input_payload: Dict[str, Any], average_payload: Dict[str, Any] 
         "element_states": final_states,
         "dominant_element": dominant_element,
         "weakest_element": weakest_element,
-        "core_element" : core_element
     }
 
 def GetLines(result: Dict[str, Any]) -> list[str]:
@@ -226,35 +222,33 @@ def GetLines(result: Dict[str, Any]) -> list[str]:
         print("the json file is not valid")
         return lines_list
     
-    core_element = result.get("core_element").strip().lower()
-    dominant_element = result.get("dominant_element").strip().lower()
-    weakest_element = result.get("weakest_element").strip().lower()
+
+    dominant_element = result.get("dominant_element")
+    weakest_element = result.get("weakest_element")
     element_states = result.get("element_states", {})
 
-    if core_element:
-        core_line = lines.get("core_element", {}).get(core_element)
-        if core_line:
-            lines_list.append(core_line)
+    if dominant_element:
+        dominant_intro = lines.get("dominant_intro", {}).get(dominant_element)
+        if dominant_intro:
+            lines_list.append(dominant_intro)
         else:
-            print(f"DEBUG: core_line nicht gefunden fuer '{core_element}'")
-   
-   
-    if core_element and dominant_element:
-        dominant_line = lines.get("dominant_element", {}).get(core_element, {}).get(dominant_element)
-        if dominant_line:
-            lines_list.append(dominant_line)
-        else:
-            print(f"DEBUG: dominant_line nicht gefunden fuer Core: '{core_element}', Dom: '{dominant_element}'")
-       
+            print(f"DEBUG: dominant_intro nicht gefunden fuer '{dominant_element}'")
 
-    if core_element and weakest_element:
-        state = result.get("element_states", {}).get(weakest_element, "in_balance")
+        dominant_map = lines.get("dominant_element", {}).get(dominant_element, {})
+        if isinstance(dominant_map, dict) and dominant_map:
+            random_key = random.choice(list(dominant_map.keys()))
+            dominant_line = dominant_map.get(random_key)
+            if dominant_line:
+                lines_list.append(dominant_line)
+
+    if dominant_element and weakest_element:
+        state = element_states.get(weakest_element, "in_balance")
         if state == "in_balance":
-            balanced_line = lines.get("balanced_element", {}).get(core_element, {}).get(weakest_element)
+            balanced_line = lines.get("balanced_element", {}).get(dominant_element, {}).get(weakest_element)
             if balanced_line:
                 lines_list.append(balanced_line)
         else:
-            weak_line = lines.get("weak_element", {}).get(core_element, {}).get(weakest_element)
+            weak_line = lines.get("weak_element", {}).get(dominant_element, {}).get(weakest_element)
             if weak_line:
                 lines_list.append(weak_line)
 
@@ -286,25 +280,6 @@ def GetLines(result: Dict[str, Any]) -> list[str]:
 
     return lines_list
 
-def find_core_element(average_payload: Dict[str, Any], current_features: Dict[str, Any]) -> str:
-    # 1. Features des Durchschnitts extrahieren
-    avg_features = extract_features(average_payload)
-
-    # 2. Raw Scores direkt berechnen (ohne build_result aufzurufen!)
-    current_raw = compute_raw_scores(current_features)
-    avg_raw = compute_raw_scores(avg_features)
-
-    # 3. Scores z-standardisieren
-    current_normalized = normalize_scores(current_raw)
-    avg_normalized = normalize_scores(avg_raw)
-
-    # 4. Höchste positive Abweichung vom Durchschnitt finden
-    element_differences = {
-        element: current_normalized[element] - avg_normalized[element]
-        for element in ELEMENTS
-    }
-
-    return max(element_differences, key=element_differences.get)
 
 
 if __name__ == "__main__":
@@ -325,19 +300,10 @@ if __name__ == "__main__":
       }
     }
 
-    input_average = {
-        "palm_aspect_ratio": 0.48,
-        "finger_length_ratio": 0.77,
-        "index_to_ring_ratio": 0.49,
-        "finger_profile": {
-            "index": 0.67,
-            "middle": 0.77,
-            "ring": 0.68,
-            "little": 0.53
-        }
-    }
 
-    result = build_result(sample_input, input_average)
+
+
+    result = build_result(sample_input)
     Lines = GetLines(result)
     print(json.dumps(result, ensure_ascii=False, indent=2))
 
