@@ -5,6 +5,18 @@ import random
 
 ELEMENTS = ["holz", "feuer", "erde", "metall", "wasser"]
 
+input_average = {
+    "palm_aspect_ratio": 0.48,
+    "finger_length_ratio": 0.77,
+    "index_to_ring_ratio": 0.49,
+    "finger_profile": {
+        "index": 0.67,
+        "middle": 0.77,
+        "ring": 0.68,
+        "little": 0.53,
+    },
+}
+
 
 def clamp(value: float, min_value: float, max_value: float) -> float:
     return max(min_value, min(max_value, value))
@@ -176,8 +188,39 @@ def determine_dominant_element(scores: Dict[str, float]) -> str:
 def determine_weakest_element(scores: Dict[str, float]) -> str:
     return min(scores.items(), key=lambda item: item[1])[0]
 
+def find_core_element(current_features: Dict[str, Any]) -> str:
+    # 1. Features des Durchschnitts extrahieren
+    avg_features = extract_features(input_average)
+
+    # 2. Raw Scores direkt berechnen (ohne build_result aufzurufen!)
+    current_raw = compute_raw_scores(current_features)
+    avg_raw = compute_raw_scores(avg_features)
+
+    # 3. Scores z-standardisieren
+    current_normalized = normalize_scores(current_raw)
+    avg_normalized = normalize_scores(avg_raw)
+
+    # 4. Hoechste positive Abweichung vom Durchschnitt finden
+    element_differences = {
+        element: current_normalized[element] - avg_normalized[element]
+        for element in ELEMENTS
+    }
+
+    sorted_diffs = sorted(element_differences.items(), key=lambda item: item[1], reverse=True)
+    top_element, top_diff = sorted_diffs[0]
+    runner_diff = sorted_diffs[1][1] if len(sorted_diffs) > 1 else top_diff
+
+    # Stabilitaet: nur wechseln, wenn der Vorsprung klar ist
+    min_delta = 0.15
+    if top_diff - runner_diff < min_delta:
+        return max(current_normalized.items(), key=lambda item: item[1])[0]
+
+    return top_element
+
 def element_ratio(raw_scores: Dict[str, Any]) -> Dict[str, Any]:
     return {k: round((v / sum(raw_scores.values())) * 100, 2) for k, v in raw_scores.items()}
+
+
 
 def build_result(input_payload: Dict[str, Any], average_payload: Dict[str, Any] | None = None) -> Dict[str, Any]:
     normalized = normalize_input(input_payload)
@@ -190,6 +233,7 @@ def build_result(input_payload: Dict[str, Any], average_payload: Dict[str, Any] 
 
     dominant_element = determine_dominant_element(normalized_scores)
     weakest_element = determine_weakest_element(normalized_scores)
+    core_element = find_core_element(features)
 
 
     return {
@@ -209,6 +253,7 @@ def build_result(input_payload: Dict[str, Any], average_payload: Dict[str, Any] 
         "element_states": final_states,
         "dominant_element": dominant_element,
         "weakest_element": weakest_element,
+        "core_element": core_element,
     }
 
 def GetLines(result: Dict[str, Any]) -> list[str]:
@@ -222,26 +267,24 @@ def GetLines(result: Dict[str, Any]) -> list[str]:
         print("the json file is not valid")
         return lines_list
     
-
+    core_element = result.get("core_element")
     dominant_element = result.get("dominant_element")
     weakest_element = result.get("weakest_element")
     element_states = result.get("element_states", {})
 
-    if dominant_element:
-        dominant_intro = lines.get("dominant_intro", {}).get(dominant_element)
-        if dominant_intro:
-            lines_list.append(dominant_intro)
+    if core_element:
+        core_line = lines.get("core_element", {}).get(core_element)
+        if core_line:
+            lines_list.append(core_line)
         else:
-            print(f"DEBUG: dominant_intro nicht gefunden fuer '{dominant_element}'")
+            print(f"DEBUG: core_line nicht gefunden fuer '{core_element}'")
 
-        dominant_map = lines.get("dominant_element", {}).get(dominant_element, {})
-        if isinstance(dominant_map, dict) and dominant_map:
-            random_key = random.choice(list(dominant_map.keys()))
-            dominant_line = dominant_map.get(random_key)
-            if dominant_line:
-                lines_list.append(dominant_line)
+    if core_element and dominant_element:
+        dominant_line = lines.get("dominant_element", {}).get(core_element, {}).get(dominant_element)
+        if dominant_line:
+            lines_list.append(dominant_line)
 
-    if dominant_element and weakest_element:
+    if core_element and weakest_element:
         state = element_states.get(weakest_element, "in_balance")
         if state == "in_balance":
             balanced_line = lines.get("balanced_element", {}).get(dominant_element, {}).get(weakest_element)
@@ -300,10 +343,26 @@ if __name__ == "__main__":
       }
     }
 
+    sample2 = {
+    "request_id": "person-1-left",
+    "session_id": "session-42",
+    "handedness": "left",
+    "tracking_quality": 0.93,
+    "lengths": {
+        "palm_width": 0.064823,
+        "palm_height": 0.09616,
+        "thumb_length": 0.091336,
+        "index_length": 0.084551,
+        "middle_length": 0.097795,
+        "ring_length": 0.086348,
+        "pinky_length": 0.06959
+    }
+}
 
 
 
-    result = build_result(sample_input)
+
+    result = build_result(sample2)
     Lines = GetLines(result)
     print(json.dumps(result, ensure_ascii=False, indent=2))
 
