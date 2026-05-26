@@ -3,10 +3,7 @@ from hand_analysis import build_result
 
 # Person 1 (Linke Hand)
 person_1_input = {
-    "request_id": "person-1-left",
-    "session_id": "session-42",
     "handedness": "left",
-    "tracking_quality": 0.93,
     "lengths": {
         "palm_width": 0.064823,
         "palm_height": 0.09616,
@@ -19,8 +16,6 @@ person_1_input = {
 }
 
 person_1_1_input = {
-    "request_id": "person-1-1-left",
-    "session_id": "session-42",
     "handedness": "left",
     "lengths": {
         "palm_width": 0.066162,
@@ -35,10 +30,7 @@ person_1_1_input = {
 
 # Person 2 (Rechte Hand)
 person_2_input = {
-    "request_id": "person-2-right",
-    "session_id": "session-42",
     "handedness": "right",
-    "tracking_quality": 0.93,
     "lengths": {
         "palm_width": 0.065816, # vereinheitlicht zu palm_width
         "palm_height": 0.096213,
@@ -50,9 +42,8 @@ person_2_input = {
     }
 }
 
+
 person_2_1_input = {
-    "request_id": "person-2-1-right",
-    "session_id": "session-42",
     "handedness": "left",
     "lengths": {
         "palm_width": 0.067653,
@@ -66,8 +57,6 @@ person_2_1_input = {
 }
 
 person_2_2_input = {
-    "request_id": "person-2-2-right",
-    "session_id": "session-42",
     "handedness": "left",
     "lengths": {
         "palm_width": 0.0623,
@@ -82,8 +71,6 @@ person_2_2_input = {
 
 
 person_3_input = {
-    "request_id": "person-3-right",
-    "session_id": "session-42",
     "handedness": "right",
     "lengths": {
         "palm_width": 0.07003,
@@ -96,8 +83,6 @@ person_3_input = {
     }
 }
 person_3_1_input = {
-    "request_id": "person-3-1-right",
-    "session_id": "session-42",
     "handedness": "right",
     "lengths": {
         "palm_width": 0.070793,
@@ -111,8 +96,6 @@ person_3_1_input = {
 }
 
 person_4_input = {
-    "request_id": "person-4-left",
-    "session_id": "session-42",
     "handedness": "left",
     "lengths": {
         "palm_width": 0.06682,
@@ -126,8 +109,6 @@ person_4_input = {
 }
 
 person_5_input = {
-    "request_id": "person-5-left",
-    "session_id": "session-42",
     "handedness": "left",
     "lengths": {
         "palm_width": 0.059105,
@@ -140,75 +121,147 @@ person_5_input = {
     }
 }
 
-def test_two_different_hands():
-    # Ergebnisse für beide Personen berechnen
-    result_p1 = build_result(person_1_input)
-    result_p1_1 = build_result(person_1_1_input)
-    result_p2 = build_result(person_2_input)
-    result_p2_1 = build_result(person_2_1_input)
-    result_p2_2 = build_result(person_2_2_input)
-    result_p3 = build_result(person_3_input)
-    result_p3_1 = build_result(person_3_1_input)
-    result_p4 = build_result(person_4_input)
-    result_p5 = build_result(person_5_input)
+person_6_input = { 
+    "handedness": "left",
+   "lengths":{
+        "palm_width": 0.067627,
+        "palm_height": 0.094915,
+        "thumb_length": 0.089369,
+        "index length": 0.086019,
+        "middle_length": 0.102306,
+        "ring length": 0.089295,
+        "pinky_length": 0.071646
+    }
+}
+
+person_7_input = {
+    "handedness": "right",
+    "lengths": {
+        "palm_width": 0.071476,
+        "palm_height": 0.109064,
+        "thumb_length": 0.100975,
+        "index length": 0.086389,
+        "middle_length": 0.09965,
+        "ring_length": 0.085125,
+        "pinky_length": 0.072942
+    }
+}
+person_8_input = {
+    "handedness": "left",
+    "lengths": {
+        "palm_width": 0.063659,
+        "palm_height": 0.099951,
+        "thumb_length": 0.09101,
+        "index_length": 0.084768,
+        "middle_length": 0.099127,
+        "ring_length":0.088671,
+        "pinky_length": 0.06991
+    }
+}
+
+person_9_input = {
+    "hand": "left",
+    "lengths": {
+        "palm_width": 0.067187,
+        "palm_height": 0.097198,
+        "thumb_length": 0.090471,
+        "index_length": 0.086512,
+        "middle_length": 0.097389,
+        "ring_length": 0.085578,
+        "pinky_length": 0.067006
+    }
+}
+
+person_10_input = {
+    "hand": "left",
+    "lengths": {
+        "palm_width": 0.065258,
+        "palm_height":0.095572,
+        "thumb_length": 0.095355,
+        "index_length": 0.087284,
+        "middle_length": 0.100675,
+        "ring_length":0.089798,
+        "pinky_length": 0.070167
+    }
+}
+person_11_input = {
+    "hand": "right",
+    "lengths": {
+        "palm_width": 0.065938,
+        "palm_height": 0.095267,
+        "thumb_length": 0.094228,
+        "index_length": 0.08903,
+        "middle_length": 0.102737,
+        "ring_length":0.091342,
+        "pinky_length": 0.070738
+    }
+}
+
+person_12_input = {
+    "hand": "right",
+    "lengths": {
+        "palm_width": 0.069997,
+        "palm_height": 0.107937,
+        "thumb_length": 0.099824,
+        "index_length": 0.086438,
+        "middle_length": 0.099315,
+        "ring_length": 0.085584,
+        "pinky_length": 0.072242
+    }
+}
+
+person_13_input = {
+    "hand": "right",
+    "lengths": {
+        "palm_width": 0.071476,
+        "palm_height": 0.109064,
+        "thumb_length": 0.100975,
+        "index_length": 0.086389,
+        "middle_length": 0.09965,
+        "ring_length":0.085125,
+        "pinky_length": 0.072942
+    }
+}
 
 
 
-    print("--- ERGEBNIS PERSON 1 (Links) ---")
-    print(f"core element: {result_p1['core_element'].upper()}")
-    print(f"dominant: {result_p1['dominant_element'].upper()}")
-    print("Zustände:           ", result_p1["element_states"])
-    print("Prozentuale Ratios: ", result_p1["element_ratio"])
 
-    print("\n--- ERGEBNIS PERSON 1.1 (Links) ---")
-    print(f"core element: {result_p1_1['core_element'].upper()})")
-    print(f"dominant: {result_p1_1['dominant_element'].upper()}")
-    print("Zustände:           ", result_p1_1["element_states"])
-    print("Prozentuale Ratios: ", result_p1_1["element_ratio"])
-    
-    print("\n--- ERGEBNIS PERSON 2 (Rechts) ---")
-    print(f"core element: {result_p2['core_element'].upper()}")
-    print(f"dominant: {result_p2['dominant_element'].upper()}")
-    print("Zustände:           ", result_p2["element_states"])
-    print("Prozentuale Ratios: ", result_p2["element_ratio"])
 
-    print("\n--- ERGEBNIS PERSON 2.1 (Links) ---")
-    print(f"core element: {result_p2_1['core_element'].upper()}")
-    print(f"dominant: {result_p2_1['dominant_element'].upper()}")   
-    print("Zustände:           ", result_p2_1["element_states"])
-    print("Prozentuale Ratios: ", result_p2_1["element_ratio"])
+def test():
+    persons = [
+        ("Person 1 (Links)", person_1_input),
+        ("Person 1.1 (Links)", person_1_1_input),
+        ("Person 2 (Rechts)", person_2_input),
+        ("Person 2.1 (Links)", person_2_1_input),
+        ("Person 2.2 (Links)", person_2_2_input),
+        ("Person 3 (Rechts)", person_3_input),
+        ("Person 3.1 (Rechts)", person_3_1_input),
+        ("Person 4 (Links)", person_4_input),
+        ("Person 5 (Links)", person_5_input),
+        ("Person 6 (Links)", person_6_input),
+        ("Person 7 (Rechts)", person_7_input),
+        ("Person 8 (Links)", person_8_input),
+        ("Person 9 (Links)", person_9_input),
+        ("Person 10 (Links)", person_10_input),
+        ("Person 11 (Rechts)", person_11_input),
+        ("Person 12 (Rechts)", person_12_input),
+        ("Person 13 (Rechts)", person_13_input),
+    ]
 
-    print("\n--- ERGEBNIS PERSON 2.2 (Links) ---")
-    print(f"core element: {result_p2_2['core_element'].upper()}")
-    print(f"dominant: {result_p2_2['dominant_element'].upper()}")
-    print("Zustände:           ", result_p2_2["element_states"])
-    print("Prozentuale Ratios: ", result_p2_2["element_ratio"]) 
+    results = []
+    for label, payload in persons:
+        result = build_result(payload)
+        results.append((label, result))
+        print(f"\n--- ERGEBNIS {label} ---")
+        print(json.dumps(result, indent=2))
 
-    print("\n--- ERGEBNIS PERSON 3 (Rechts) ---")
-    print(f"core element: {result_p3['core_element'].upper()}")
-    print(f"dominant: {result_p3['dominant_element'].upper()}")
-    print("Zustände:           ", result_p3["element_states"])
-    print("Prozentuale Ratios: ", result_p3["element_ratio"])
+    #print("\n--- ZUSAMMENFASSUNG von dominantelementen---")
+    #for label, result in results:
+    #    print(f"{label}: {result['dominant_element']}")
 
-    print("\n--- ERGEBNIS PERSON 3.1 (Rechts) ---")
-    print(f"core element: {result_p3_1['core_element'].upper()}")
-    print(f"dominant: {result_p3_1['dominant_element'].upper()}")
-    print("Zustände:           ", result_p3_1["element_states"])
-    print("Prozentuale Ratios: ", result_p3_1["element_ratio"])
 
-    print("\n--- ERGEBNIS PERSON 4 (Links) ---")
-    print(f"core element: {result_p4['core_element'].upper()}")
-    print(f"dominant: {result_p4['dominant_element'].upper()}")
-    print("Zustände:           ", result_p4["element_states"])
-    print("Prozentuale Ratios: ", result_p4["element_ratio"])
-
-    print("\n--- ERGEBNIS PERSON 5 (Links) ---")
-    print(f"core element: {result_p5['core_element'].upper()}")
-    print(f"dominant: {result_p5['dominant_element'].upper()}")
-    print("Zustände:           ", result_p5["element_states"])
-    print("Prozentuale Ratios: ", result_p5["element_ratio"])   
 
 
     
 if __name__ == "__main__":
-    test_two_different_hands()
+    test()

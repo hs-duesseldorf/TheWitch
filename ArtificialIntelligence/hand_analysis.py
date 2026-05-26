@@ -120,11 +120,11 @@ def compute_raw_scores(features: Dict[str, Any]) -> Dict[str, float]:
     feuer = (
             base_finger_weight * finger_length_ratio 
             + base_palm_weight * palm_aspect_ratio 
-            + 1.0 * (1.0 / max(0.1, index_to_ring_ratio)) # Higher score if the ring finger is longer (lower index ratio)
+            +0.9* (1.0 / max(0.6, index_to_ring_ratio)) # Higher score if the ring finger is longer (lower index ratio)
     )
 
     # 3. Erde (Earth): Wide/short palm, short fingers, index finger dominance (Thick and solid shape)
-    erde = (
+    erde = 1.6 * (
           1.5 * (1.0 - palm_aspect_ratio) 
             + 1.5 * (1.0 - finger_length_ratio)  # Erhöht, um kurzen Fingern mehr Gewicht zu geben
             + 0.5 * (index_to_ring_ratio ** 2) # Higher score if the index finger is longer
@@ -134,11 +134,11 @@ def compute_raw_scores(features: Dict[str, Any]) -> Dict[str, float]:
     # * Designed to score higher as values approach the balanced 1:1 ratio.
     palm_symmetry = 1.0 - abs(palm_aspect_ratio - 0.68) * 2.0
     finger_symmetry = 1.0 - abs(index_to_ring_ratio - 0.95) * 2.0
-    metall = 1.2 * palm_symmetry + 1.2 * (finger_symmetry ** 2)
+    metall = 1.2 * palm_symmetry + 1.1 * (finger_symmetry ** 2)
 
     # 5. Wasser (Water): long palm, long fingers, ring finger dominance (Fluid and adaptable)
     middle_dominance = middle_fp - (index_fp + ring_fp) / 2
-    wasser = (
+    wasser = 1.15 * (
             base_finger_weight * finger_length_ratio 
             + base_palm_weight * palm_aspect_ratio 
             + 2.0 * middle_dominance  # Reagiert jetzt auf echte, variable Anatomie!
@@ -237,12 +237,7 @@ def build_result(input_payload: Dict[str, Any], average_payload: Dict[str, Any] 
 
 
     return {
-        "request_id": meta.get("request_id"),
-        "session_id": meta.get("session_id"),
         "handedness": meta.get("handedness"),
-        "tracking_quality": meta.get("tracking_quality"),
-        "trigger": meta.get("trigger"),
-        "type": meta.get("type"),
         "element_scores_raw": {
             k: round2(v) for k, v in raw_scores.items()
         },
@@ -362,7 +357,7 @@ if __name__ == "__main__":
 
 
 
-    result = build_result(sample2)
+    result = build_result(sample_input)
     Lines = GetLines(result)
     print(json.dumps(result, ensure_ascii=False, indent=2))
 
