@@ -27,21 +27,23 @@ class Hand(str, Enum):
 
 
 class Scene(str, Enum):
+    # DEBUG / HAND DETECTION
+    SCENE_DEBUG_HAND_DETECTION = "scene_debug_hand_detection"
+    SCENE_DEBUG_SHOT_1_HAND_ABSENT = "scene_debug_shot_1_hand_absent"
+    SCENE_DEBUG_SHOT_2_HAND_MOVING = "scene_debug_shot_2_hand_moving"
+    SCENE_DEBUG_SHOT_3_HAND_TILTED = "scene_debug_shot_3_hand_tilted"
+    SCENE_DEBUG_SHOT_4_HAND_OUTSIDE_FRAME = "scene_debug_shot_4_hand_not_fully_in_view"
+    SCENE_DEBUG_SHOT_5_HAND_WRONG_SIDE = "scene_debug_shot_5_hand_wrong_side"
     # START / IDLE
     SCENE_0_IDLE = "scene_0_idle"
     # WELCOME
     SCENE_1_AWAITING_HAND = "scene_1_awaiting_hand"
-    SCENE_1_SHOT_1_NO_HAND_FOUND = "scene_1_shot_1_no_hand_found"
     SCENE_1_SHOT_2_YES_HAND_FOUND = "scene_1_shot_2_yes_hand_found"
     # INTRO
     SCENE_2_SHOT_1_HAND_STAYS_FOCUSED = "scene_2_shot_1_hand_stays_focused"
-    SCENE_2_SHOT_2_HAND_WITHDRAWN = "scene_2_shot_2_hand_withdrawn"
-    SCENE_2_SHOT_3_STILL_NO_HAND = "scene_2_shot_3_still_no_hand"
     # SCAN
     SCENE_3_SCANNING_HAND = "scanning_hand"
     SCENE_3_SHOT_1_CORRECT_HAND = "scene_3_shot_1_correct_hand"
-    SCENE_3_SHOT_2_HAND_NOT_READABLE = "scene_3_shot_2_hand_not_readable"
-    SCENE_3_SHOT_3_HAND_FAST_MOVEMENTS = "scene_3_shot_3_hand_fast_movements"
     SCENE_3_SHOT_4_SCAN_DONE = "scene_3_shot_4_scan_done"
     # TRANSFORM
     SCENE_4_TRANSFORM = "scene_4_transform"

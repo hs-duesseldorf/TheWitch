@@ -8,20 +8,22 @@ from transitions.extensions import GraphMachine
 from shared.events import HandEvent, HandTrigger, PersonEvent, PersonTrigger, Scene
 
 
+DEBUG = Scene.SCENE_DEBUG_HAND_DETECTION.value
+DEBUG_HAND_ABSENT = Scene.SCENE_DEBUG_SHOT_1_HAND_ABSENT.value
+DEBUG_HAND_MOVING = Scene.SCENE_DEBUG_SHOT_2_HAND_MOVING.value
+DEBUG_HAND_TILTED = Scene.SCENE_DEBUG_SHOT_3_HAND_TILTED.value
+DEBUG_HAND_OUTSIDE_FRAME = Scene.SCENE_DEBUG_SHOT_4_HAND_OUTSIDE_FRAME.value
+DEBUG_HAND_WRONG_SIDE = Scene.SCENE_DEBUG_SHOT_5_HAND_WRONG_SIDE.value
+
 IDLE = Scene.SCENE_0_IDLE.value
 
 SC1_AWAITING_HAND = Scene.SCENE_1_AWAITING_HAND.value
-SC1_1_NO_HAND_FOUND = Scene.SCENE_1_SHOT_1_NO_HAND_FOUND.value
 SC1_2_YES_HAND_FOUND = Scene.SCENE_1_SHOT_2_YES_HAND_FOUND.value
 
 SC2_1_HAND_STAYS_FOCUSED = Scene.SCENE_2_SHOT_1_HAND_STAYS_FOCUSED.value
-SC2_2_HAND_WITHDRAWN = Scene.SCENE_2_SHOT_2_HAND_WITHDRAWN.value
-SC2_3_STILL_NO_HAND = Scene.SCENE_2_SHOT_3_STILL_NO_HAND.value
 
 SC3_SCANNING_HAND = Scene.SCENE_3_SCANNING_HAND.value
 SC3_1_CORRECT_HAND = Scene.SCENE_3_SHOT_1_CORRECT_HAND.value
-SC3_2_HAND_NOT_READABLE = Scene.SCENE_3_SHOT_2_HAND_NOT_READABLE.value
-SC3_3_HAND_FAST_MOVEMENTS = Scene.SCENE_3_SHOT_3_HAND_FAST_MOVEMENTS.value
 SC3_4_SCAN_DONE = Scene.SCENE_3_SHOT_4_SCAN_DONE.value
 
 SC4_TRANSFORM = Scene.SCENE_4_TRANSFORM.value
@@ -48,6 +50,14 @@ STATES = [scene.value for scene in Scene]
 INITIAL = IDLE
 ANY_SOURCE = "*"
 
+DEBUG_STATES = {
+    DEBUG,
+    DEBUG_HAND_ABSENT,
+    DEBUG_HAND_MOVING,
+    DEBUG_HAND_TILTED,
+    DEBUG_HAND_OUTSIDE_FRAME,
+    DEBUG_HAND_WRONG_SIDE,
+}
 
 @dataclass(frozen=True)
 class StateChange:
@@ -56,28 +66,47 @@ class StateChange:
     dest: str
 
 
-def transition(trigger: str, source: str | list[str], dest: str) -> dict[str, object]:
-    return {"trigger": trigger, "source": source, "dest": dest}
+def transition(trigger: str, source: str | list[str], dest: str, **kwargs) -> dict[str, object]:
+    data = {
+        "trigger": trigger,
+        "source": source,
+        "dest": dest,
+    }
+    data.update(kwargs)
+    return data
 
 
 TRANSITIONS = [
     # Camera / hand input.
+
+    # Debug
+    transition("enter_debug", [SC1_AWAITING_HAND, 
+                               SC1_2_YES_HAND_FOUND, 
+                               SC2_1_HAND_STAYS_FOCUSED,
+                               SC3_SCANNING_HAND, 
+                               SC3_1_CORRECT_HAND], 
+                               DEBUG, before="store_previous_state"),
+    transition("ip_hand_absent", DEBUG, DEBUG_HAND_ABSENT),
+    transition("ip_hand_moving", DEBUG, DEBUG_HAND_MOVING),
+    transition("ip_hand_tilted", DEBUG, DEBUG_HAND_TILTED),
+    transition("ip_hand_outside_frame", DEBUG, DEBUG_HAND_OUTSIDE_FRAME),
+    transition("ip_hand_wrong_side", DEBUG, DEBUG_HAND_WRONG_SIDE),
+    transition("exit_debug", [DEBUG, 
+                              DEBUG_HAND_ABSENT, 
+                              DEBUG_HAND_MOVING, 
+                              DEBUG_HAND_TILTED, 
+                              DEBUG_HAND_OUTSIDE_FRAME, 
+                              DEBUG_HAND_WRONG_SIDE], 
+                              DEBUG, after="return_to_previous_state"),
     
     # Scene 0
     transition("ip_person_seated", IDLE, SC1_AWAITING_HAND), 
     # Scene 1
-    transition("ip_hand_absent", [SC1_AWAITING_HAND, SC1_1_NO_HAND_FOUND, SC1_2_YES_HAND_FOUND] , SC1_1_NO_HAND_FOUND), 
-    transition("ip_hand_present", [SC1_AWAITING_HAND, SC1_1_NO_HAND_FOUND], SC1_2_YES_HAND_FOUND),
+    transition("ip_hand_present", SC1_AWAITING_HAND, SC1_2_YES_HAND_FOUND),
     transition("hand_found", SC1_2_YES_HAND_FOUND, SC2_1_HAND_STAYS_FOCUSED),
     # Scene 2
-    transition("ip_hand_removed", SC2_1_HAND_STAYS_FOCUSED, SC2_2_HAND_WITHDRAWN),
-    transition("ip_hand_stays_gone", [SC2_2_HAND_WITHDRAWN, SC2_3_STILL_NO_HAND], SC2_3_STILL_NO_HAND),
-    transition("ip_hand_present", [SC2_2_HAND_WITHDRAWN, SC2_3_STILL_NO_HAND], SC2_1_HAND_STAYS_FOCUSED),
     transition("hand_stays_still", SC2_1_HAND_STAYS_FOCUSED, SC3_SCANNING_HAND),
     # Scene 3
-    transition("ip_hand_no_full_view", [SC3_SCANNING_HAND, SC3_1_CORRECT_HAND, SC3_3_HAND_FAST_MOVEMENTS], SC3_2_HAND_NOT_READABLE),
-    transition("ip_hand_movement", [SC3_SCANNING_HAND, SC3_1_CORRECT_HAND, SC3_2_HAND_NOT_READABLE], SC3_3_HAND_FAST_MOVEMENTS),
-    transition("hand_corrected", [SC3_2_HAND_NOT_READABLE, SC3_3_HAND_FAST_MOVEMENTS], SC3_SCANNING_HAND),
     transition("ip_hand_correct", SC3_SCANNING_HAND, SC3_1_CORRECT_HAND),
     transition("hand_scanning", SC3_1_CORRECT_HAND, SC3_4_SCAN_DONE),
     transition("ip_scan_complete", SC3_4_SCAN_DONE, SC4_TRANSFORM),
@@ -127,89 +156,97 @@ HAND_TRIGGER_BY_STATE = {
         "ready": "ip_person_seated",
     },
     SC1_AWAITING_HAND: {
-        "absent": "ip_hand_absent",
-        "present": "ip_hand_present",
-        "wrong": "ip_hand_present",
-        "ready": "ip_hand_present",
-    },
-    SC1_1_NO_HAND_FOUND: {
-        "absent": "ip_hand_absent",
+        "absent": "enter_debug",
         "present": "ip_hand_present",
         "wrong": "ip_hand_present",
         "ready": "ip_hand_present",
     },
     SC1_2_YES_HAND_FOUND: {
-        "absent": "ip_hand_absent",
+        "absent": "enter_debug",
         "present": "hand_found",
         "wrong": "hand_found",
         "ready": "hand_found",
     },
     SC2_1_HAND_STAYS_FOCUSED: {
-        "absent": "ip_hand_removed",
+        "absent": "enter_debug",
         "present": "hand_stays_still",
         "wrong": "hand_stays_still",
         "ready": "hand_stays_still",
     },
-    SC2_2_HAND_WITHDRAWN: {
-        "absent": "ip_hand_stays_gone",
-        "present": "ip_hand_present",
-        "wrong": "ip_hand_present",
-        "ready": "ip_hand_present",
-    },
-    SC2_3_STILL_NO_HAND: {
-        "absent": "ip_hand_stays_gone",
-        "present": "ip_hand_present",
-        "wrong": "ip_hand_present",
-        "ready": "ip_hand_present",
-    },
     SC3_SCANNING_HAND: {
-        "absent": "ip_hand_no_full_view",
-        "present": "ip_hand_no_full_view",
-        "wrong": "ip_hand_movement",
+        "absent": "enter_debug",
+        "present": "enter_debug",
+        "wrong": "enter_debug",
         "ready": "ip_hand_correct",
     },
-    SC3_3_HAND_FAST_MOVEMENTS: {
-        "absent": "ip_hand_no_full_view",
-        "present": "ip_hand_no_full_view",
-        "ready": "hand_corrected",
-    },
-    SC3_2_HAND_NOT_READABLE: {
-        "wrong": "ip_hand_movement",
-        "ready": "hand_corrected",
-    },
     SC3_1_CORRECT_HAND: {
-        "absent": "ip_hand_no_full_view",
-        "present": "ip_hand_no_full_view",
-        "wrong": "ip_hand_movement",
+        "absent": "enter_debug",
+        "present": "enter_debug",
+        "wrong": "enter_debug",
         "ready": "hand_scanning",
     },
     SC3_4_SCAN_DONE: {
         "ready": "ip_scan_complete",
     },
     SC6_2_INTERACTIVE_TASK: {
-        "absent": "ip_hand_absent",
+        "absent": "enter_debug",
         "ready": "ip_hand_present",
     },
+    DEBUG: {
+        "absent": "ip_hand_absent",
+        "tilted": "ip_hand_tilted",
+        "wrong_side": "ip_hand_wrong_side",
+        "outside_frame": "ip_hand_outside_frame",
+        "present": "exit_debug",
+        "ready": "exit_debug",
+    },
+    DEBUG_HAND_ABSENT: {
+        "present": "exit_debug",
+        "ready": "exit_debug",
+    },
+    DEBUG_HAND_MOVING: {
+        "present": "exit_debug",
+        "ready": "exit_debug",
+    },
+    DEBUG_HAND_TILTED: {
+        "present": "exit_debug",
+        "ready": "exit_debug",
+    },
+    DEBUG_HAND_OUTSIDE_FRAME: {
+        "present": "exit_debug",
+        "ready": "exit_debug",
+    },
+    DEBUG_HAND_WRONG_SIDE: {
+        "present": "exit_debug",
+        "ready": "exit_debug",
+    }
 }
 
 SCENES_THAT_START_ANALYSIS = frozenset({SC3_4_SCAN_DONE, SC6_VISUAL_IMAGE_HAND})
 SCENES_THAT_DELIVER_FORTUNE = frozenset({SC6_VISUAL_IMAGE_HAND})
 
 STATE_DESCRIPTIONS = {
+    DEBUG: "Szene wird immer aufgerufen, wenn Hand in relevanten Szenen nicht richtig erkannt wird",
+    DEBUG_HAND_ABSENT: "Debug, wenn Hand überhaupt nicht anwesend ist",
+    DEBUG_HAND_MOVING: "Debug, wenn Hand sich bewegt", # GERADE NICHT IMPLEMENTIERT!!
+    DEBUG_HAND_TILTED: "Debug, wenn Hand nicht gerade, mit der Innenfläche nach oben, gehalten wird",
+    DEBUG_HAND_OUTSIDE_FRAME: "Debug, wenn Hand nicht vollständig von der Kamera zu erfassen ist",
+    DEBUG_HAND_WRONG_SIDE: "Debug, wenn die falsche Hand (Rechts/Links) verwendet wurde",
+
     IDLE: "Szene 0: Wahrsagerin reagiert nicht, Besucher betritt den Raum",
 
     SC1_AWAITING_HAND: "Szene 1: Besucher hat sich hingesetzt, Ausstellung startet",
-    SC1_1_NO_HAND_FOUND: "Szene 1 Shot 1: Aufforderung der Witch, Hand in den Stein zu legen",
+    #SC1_1_NO_HAND_FOUND: "Szene 1 Shot 1: Aufforderung der Witch, Hand in den Stein zu legen",
     SC1_2_YES_HAND_FOUND: "Szene 1 Shot 2: Hand liegt im Stein und ist (grob) für die Kamera erkennbar",
 
     SC2_1_HAND_STAYS_FOCUSED: "Szene 2 Shot 1: Hand bleibt ruhig unter der Kamera",
-    SC2_2_HAND_WITHDRAWN: "Szene 2 Shot 2: Hand wurde zurückgezogen, Aufforderung sie zurück zu legen",
-    SC2_3_STILL_NO_HAND: "Szene 2 Shot 3: Hand bleibt fern, erneute, strengere Aufforderung sie zurück zu legen",
+    #SC2_2_HAND_WITHDRAWN: "Szene 2 Shot 2: Hand wurde zurückgezogen, Aufforderung sie zurück zu legen",
+    #SC2_3_STILL_NO_HAND: "Szene 2 Shot 3: Hand bleibt fern, erneute, strengere Aufforderung sie zurück zu legen",
 
     SC3_SCANNING_HAND: "Szene 3: Hand wird erkannt, warten auf stabiles Bild",
     SC3_1_CORRECT_HAND: "Szene 3 Shot 1: Hand liegt still, stabil und gut erkenntlich",
-    SC3_2_HAND_NOT_READABLE: "Szene 3 Shot 2: Hand ist nicht vollständig auf der Kamera erkennbar",
-    SC3_3_HAND_FAST_MOVEMENTS: "Szene 3 Shot 3: Hand bewegt sich, Scan dauert lange",
+    #SC3_2_HAND_NOT_READABLE: "Szene 3 Shot 2: Hand ist nicht vollständig auf der Kamera erkennbar",
+    #SC3_3_HAND_FAST_MOVEMENTS: "Szene 3 Shot 3: Hand bewegt sich, Scan dauert lange",
     SC3_4_SCAN_DONE: "Szene 3 Shot 4: Hand wurde gescannt, Witch sagt, Hand kann raus",
 
     SC4_TRANSFORM: "Szene 4: Witch transformiert sich für die Analyse der Hand",
@@ -236,6 +273,7 @@ STATE_DESCRIPTIONS = {
 
 class WitchStateMachine:
     def __init__(self) -> None:
+        self.previous_state = None
         self.machine = GraphMachine(
             model=self,
             states=STATES,
@@ -247,8 +285,15 @@ class WitchStateMachine:
             title="The Witch State Machine",
         )
 
+    def store_previous_state(self, event):
+        self.previous_state = event.transition.source
+    def return_to_previous_state(self):
+        if self.previous_state:
+            self.to_state(self.previous_state)
+
     def hand_event(self, event: HandEvent) -> list[StateChange]:
-        condition = hand_condition(event)
+        # Gives out detailed or general events depending on if we are in a DEBUG State or not
+        condition = self.hand_condition_by_state(event)
         max_changes = 1 if condition == "absent" else 8
         changes: list[StateChange] = []
         seen_states = {self.state}
@@ -303,6 +348,12 @@ class WitchStateMachine:
         mermaid = self.machine.get_graph().source.replace("direction LR", "direction TB")
         path.write_text(f"```mermaid\n{mermaid.strip()}\n```\n", encoding="utf-8")
         return path
+        
+    def hand_condition_by_state(self, event: HandEvent) -> str:
+        if self.state in DEBUG_STATES:
+            return hand_condition_debug(event)
+        return hand_condition(event)
+
 
 
 def hand_condition(event: HandEvent) -> str:
@@ -312,6 +363,19 @@ def hand_condition(event: HandEvent) -> str:
         return "wrong"
     return "ready" if event.vector else "present"
 
+def hand_condition_debug(event: HandEvent) -> str:
+    match event.trigger:
+        case HandTrigger.ABSENT: 
+            return "absent"
+        case HandTrigger.WRONG_SIDE:
+            return "wrong_side"
+        case HandTrigger.NOT_FULLY_IN_VIEW:
+            return "outside_frame"
+        case HandTrigger.TILTED:
+            return "tilted"
+        #case HandTrigger.MOVING:
+        #    return "moving"
+    return "ready" if event.vector else "present"
 
 if __name__ == "__main__":
     machine = WitchStateMachine()
