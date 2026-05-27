@@ -32,9 +32,9 @@ from shared.events import (
 logger = logging.getLogger("ai")
 
 POST_SCAN_NO_WAIT_STATES = frozenset({
-    Scene.SCENE_3_SCAN_COMPLETE.value,
-    Scene.SCENE_4_TRANSFORMATION.value,
-    Scene.SCENE_5_INTRODUCTION.value,
+    Scene.SCENE_3_SHOT_4_SCAN_DONE.value,
+    Scene.SCENE_4_TRANSFORM.value,
+    Scene.SCENE_5_WITCH_ORIGIN_STORY.value,
 })
 
 
