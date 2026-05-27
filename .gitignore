@@ -40,6 +40,10 @@ speakers/
 ArtificialIntelligence/assets/*.wav
 !ArtificialIntelligence/assets/.gitkeep
 
+# Fish Speech runtime assets
+ArtificialIntelligence/servers/tts/fish-speech/
+ArtificialIntelligence/servers/tts/checkpoints/
+
 # Unreal generated folders
 Binaries/
 DerivedDataCache/
