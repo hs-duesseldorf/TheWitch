@@ -1,3 +1,5 @@
-vllm==0.20.0
-vllm-omni==0.20.0
 python-dotenv
+huggingface_hub[cli]
+ormsgpack
+pyaudio
+-e ./ArtificialIntelligence/servers/tts/fish-speech[cu129]

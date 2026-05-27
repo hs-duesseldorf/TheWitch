@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import os
-import subprocess
 import sys
 from pathlib import Path
 
@@ -10,54 +9,53 @@ from dotenv import load_dotenv
 
 SERVER_DIR = Path(__file__).resolve().parent
 ROOT = SERVER_DIR.parents[2]
-PATCH_DIR = ROOT / "scripts" / "tts_python_patches"
-PATCH_INSTALLER = ROOT / "scripts" / "patch_tts_server_venv.py"
-VENV_DIR = SERVER_DIR / ".venv"
-
-
-def _install_patches() -> None:
-    python = VENV_DIR / "bin" / "python"
-    if not python.exists():
-        raise RuntimeError(f"TTS venv Python not found: {python}")
-    subprocess.check_call(
-        [
-            sys.executable,
-            str(PATCH_INSTALLER),
-            "--python",
-            str(python),
-        ],
-        cwd=ROOT,
-    )
+FISH_DIR = SERVER_DIR / "fish-speech"
+CHECKPOINT_DIR = SERVER_DIR / "checkpoints" / "s2-pro"
 
 
 def run() -> None:
     load_dotenv(ROOT / ".env")
-    _install_patches()
-    model = os.environ["WITCH_TTS_MODEL"]
+
     port = os.environ["WITCH_TTS_PORT"]
-    os.environ.setdefault("VLLM_USE_FLASHINFER_SAMPLER", "0")
+    codec_path = CHECKPOINT_DIR / "codec.pth"
+
+    if not FISH_DIR.exists():
+        raise RuntimeError(f"Fish Speech repo not found: {FISH_DIR}")
+
+    if not CHECKPOINT_DIR.exists():
+        raise RuntimeError(
+            f"Fish S2 checkpoint folder not found: {CHECKPOINT_DIR}\n"
+            "Download it with:\n"
+            "  ./ArtificialIntelligence/servers/tts/.venv/bin/hf download fishaudio/s2-pro "
+            "--local-dir ArtificialIntelligence/servers/tts/checkpoints/s2-pro"
+        )
+
+    if not codec_path.exists():
+        raise RuntimeError(f"Fish codec checkpoint not found: {codec_path}")
+
     os.environ.setdefault("OMP_NUM_THREADS", "2")
     os.environ.setdefault("OPENBLAS_NUM_THREADS", "2")
     os.environ.setdefault("MKL_NUM_THREADS", "2")
     os.environ.setdefault("NUMEXPR_NUM_THREADS", "2")
-    existing_pythonpath = os.environ.get("PYTHONPATH")
-    os.environ["PYTHONPATH"] = (
-        str(PATCH_DIR)
-        if not existing_pythonpath
-        else os.pathsep.join((str(PATCH_DIR), existing_pythonpath))
+
+    print(f"[run_tts] Starting TTS: Model=Fish S2 native server on port={port}", flush=True)
+
+    os.chdir(FISH_DIR)
+
+    os.execvp(
+        sys.executable,
+        [
+            sys.executable,
+            "tools/api_server.py",
+            "--llama-checkpoint-path",
+            str(CHECKPOINT_DIR),
+            "--decoder-checkpoint-path",
+            str(codec_path),
+            "--listen",
+            f"0.0.0.0:{port}",
+            "--half",
+        ],
     )
-    print(f"[run_tts] Starting TTS: model={model} port={port}", flush=True)
-    python = VENV_DIR / "bin" / "vllm-omni"
-    deploy_config = SERVER_DIR / "qwen3_tts_witch.yaml"
-    os.execv(str(python), [str(python), "serve", model,
-        "--deploy-config", str(deploy_config),
-        "--host", "0.0.0.0",
-        "--port", port,
-        "--gpu-memory-utilization", os.environ["TTS_GPU_MEMORY_UTILIZATION"],
-        "--generation-config", "vllm",
-        "--trust-remote-code",
-        "--omni",
-    ])
 
 
 if __name__ == "__main__":

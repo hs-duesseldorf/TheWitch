@@ -4,6 +4,7 @@ import asyncio
 import logging
 import os
 import wave
+import ormsgpack
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
 from urllib.parse import urljoin
@@ -12,17 +13,11 @@ import aiohttp
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_QWEN_SAMPLE_RATE = 24_000
-QWEN_SPEECH_PATH = "/v1/audio/speech"
+DEFAULT_TTS_SAMPLE_RATE = int(os.getenv("WITCH_TTS_SAMPLE_RATE", "44100"))
+FISH_SPEECH_PATH = "/v1/tts"
 PCM_SAMPLE_WIDTH = 2
 PCM_CHUNK_SECONDS = 0.1
-DEFAULT_LANGUAGE = "German"
-DEFAULT_VOICE = "vivian"
-DEFAULT_INSTRUCTIONS = (
-    "A mystical fortune teller from the mountains. She speaks German with a very strong Korean accent, her voice "
-    "ancient yet youthful, carrying whispers of incense and distant valleys. Warm, calm, with quiet "
-    "wisdom and subtle mystery. Stable pitch and tone throughout."
-)
+DEFAULT_VOICE = "witch"
 
 REQUEST_ATTEMPTS = 5
 RETRY_DELAY_SECONDS = 1.0
@@ -44,29 +39,57 @@ class TTSClient:
         model: str,
         voice: str | None = None,
         instructions: str | None = None,
-        language: str = DEFAULT_LANGUAGE,
         task_type: str | None = None,
     ):
+        from pathlib import Path
+        
         base_url = base_url.strip()
         if not base_url:
             raise ValueError("TTS base URL must not be empty")
 
         self.base_url = base_url.rstrip("/")
         self.model = model.strip()
-        self.language = language.strip()
-        self.task_type = (task_type or self._task_type_from_model(self.model)).strip()
+        self.task_type = (task_type or "CustomVoice").strip()
 
         configured_voice = (voice or "").strip()
-        if self.task_type == "CustomVoice" and self._looks_like_instructions(
-            configured_voice
-        ):
-            self.voice = DEFAULT_VOICE
-            self.instructions = (instructions or configured_voice).strip()
-        else:
-            self.voice = (configured_voice or DEFAULT_VOICE).strip()
-            self.instructions = (instructions or DEFAULT_INSTRUCTIONS).strip()
+        self.voice = (configured_voice or DEFAULT_VOICE).strip()
+        self.instructions = ""
+        
         stream_setting = os.getenv("WITCH_TTS_STREAM", "").strip().lower()
         self.stream = stream_setting not in {"0", "false", "no", "off"}
+        
+        voice_root = (
+            Path(__file__).resolve().parents[1]
+            / "servers"
+            / "tts"
+            / "voice_refs"
+            / self.voice
+        )
+
+        self.voice_audio_path = voice_root / "reference.wav"
+        transcript_path = voice_root / "reference.lab"
+
+        if not self.voice_audio_path.exists():
+            raise RuntimeError(
+                f"Missing voice reference audio: {self.voice_audio_path}"
+            )
+
+        if not transcript_path.exists():
+            raise RuntimeError(
+                f"Missing voice reference transcript: {transcript_path}"
+            )
+
+        self.voice_transcript = transcript_path.read_text(
+            encoding="utf-8"
+        ).strip()
+
+        self.voice_audio = self.voice_audio_path.read_bytes()
+
+        logger.info(
+            "Loaded Fish voice reference '%s' from %s",
+            self.voice,
+            voice_root,
+        )
 
     async def stream_synthesize(
         self, text: str, *, seed: int | None = None
@@ -79,9 +102,9 @@ class TTSClient:
             logger.warning("Text too short for TTS (%d chars), skipping", len(text))
             return
 
-        url = urljoin(self.base_url + "/", QWEN_SPEECH_PATH.lstrip("/"))
+        url = urljoin(self.base_url + "/", FISH_SPEECH_PATH.lstrip("/"))
         logger.info(
-            "Qwen HTTP TTS %s: url=%s text_chars=%d",
+            "Fish HTTP TTS %s: url=%s text_chars=%d",
             "stream" if self.stream else "full",
             url,
             len(text),
@@ -95,7 +118,8 @@ class TTSClient:
                 async with aiohttp.ClientSession() as session:
                     async with session.post(
                         url,
-                        json=self._speech_request(text, seed=seed),
+                        data=ormsgpack.packb(self._speech_request(text, seed=seed)),
+                        headers={"content-type": "application/msgpack"},
                         timeout=aiohttp.ClientTimeout(total=None),
                     ) as resp:
                         if resp.status >= 400:
@@ -108,7 +132,7 @@ class TTSClient:
                                 yielded_audio = True
                                 yield AudioFrame(
                                     audio=chunk,
-                                    sample_rate=DEFAULT_QWEN_SAMPLE_RATE,
+                                    sample_rate=DEFAULT_TTS_SAMPLE_RATE,
                                     format="pcm",
                                     mime_type=resp.headers.get("content-type", "audio/pcm"),
                                 )
@@ -120,7 +144,7 @@ class TTSClient:
                                     yielded_audio = True
                                     yield AudioFrame(
                                         audio=chunk,
-                                        sample_rate=DEFAULT_QWEN_SAMPLE_RATE,
+                                        sample_rate=DEFAULT_TTS_SAMPLE_RATE,
                                         format="pcm",
                                         mime_type=content_type,
                                     )
@@ -128,7 +152,7 @@ class TTSClient:
                                 yielded_audio = True
                                 yield AudioFrame(
                                     audio=audio,
-                                    sample_rate=DEFAULT_QWEN_SAMPLE_RATE,
+                                    sample_rate=DEFAULT_TTS_SAMPLE_RATE,
                                     format="pcm",
                                     mime_type=content_type,
                                 )
@@ -149,21 +173,25 @@ class TTSClient:
         self, text: str, *, seed: int | None = None
     ) -> dict[str, object]:
         request: dict[str, object] = {
-            "model": self.model,
-            "input": text,
-            "language": self.language,
-            "response_format": "pcm",
-            "task_type": self.task_type,
-            "stream": self.stream,
-            "speed": 1.0,
-            "temperature": 0.1,
-            "repetition_penalty": 1.2,
+            "text": text,
+            "format": "pcm",
+            "streaming": self.stream,
+            "latency": "balanced",
+            "max_new_tokens": 1024,
+            "chunk_length": 300,
+            "top_p": 0.8,
+            "repetition_penalty": 1.1,
+            "temperature": 0.6,
+            "use_memory_cache": "off",
+            "normalize": True,
+            "references": [
+                {
+                    "audio": self.voice_audio,
+                    "text": self.voice_transcript,
+                }
+            ],
         }
 
-        if self.task_type == "CustomVoice":
-            request["voice"] = self.voice
-        if self.task_type in ("CustomVoice", "VoiceDesign") and self.instructions:
-            request["instructions"] = self.instructions
         if seed is not None:
             request["seed"] = seed
         return request
@@ -177,7 +205,7 @@ class TTSClient:
             return
 
         min_chunk_bytes = (
-            int(DEFAULT_QWEN_SAMPLE_RATE * PCM_CHUNK_SECONDS) * PCM_SAMPLE_WIDTH
+            int(DEFAULT_TTS_SAMPLE_RATE * PCM_CHUNK_SECONDS) * PCM_SAMPLE_WIDTH
         )
         buffer = bytearray()
         async for chunk in resp.content.iter_any():
@@ -210,12 +238,12 @@ class TTSClient:
                 raise RuntimeError(
                     f"Unsupported WAV channel count: {wav.getnchannels()}"
                 )
-            if wav.getframerate() != DEFAULT_QWEN_SAMPLE_RATE:
+            if wav.getframerate() != DEFAULT_TTS_SAMPLE_RATE:
                 raise RuntimeError(f"Unsupported WAV sample rate: {wav.getframerate()}")
             pcm = wav.readframes(wav.getnframes())
 
         chunk_bytes = (
-            int(DEFAULT_QWEN_SAMPLE_RATE * PCM_CHUNK_SECONDS) * PCM_SAMPLE_WIDTH
+            int(DEFAULT_TTS_SAMPLE_RATE * PCM_CHUNK_SECONDS) * PCM_SAMPLE_WIDTH
         )
         return [pcm[i : i + chunk_bytes] for i in range(0, len(pcm), chunk_bytes)]
 
@@ -225,6 +253,3 @@ class TTSClient:
         if model.endswith("-Base"):
             return "Base"
         return "CustomVoice"
-
-    def _looks_like_instructions(self, voice: str) -> bool:
-        return " " in voice or "," in voice or "." in voice
