@@ -81,18 +81,18 @@ TRANSITIONS = [
     # Camera / hand input.
 
     # Debug
-    transition("enter_debug", [SC1_AWAITING_HAND, 
+    _transition("enter_debug", [SC1_AWAITING_HAND, 
                                SC1_2_YES_HAND_FOUND, 
                                SC2_1_HAND_STAYS_FOCUSED,
                                SC3_SCANNING_HAND, 
                                SC3_1_CORRECT_HAND], 
                                DEBUG, before="store_previous_state"),
-    transition("ip_hand_absent", DEBUG, DEBUG_HAND_ABSENT),
-    transition("ip_hand_moving", DEBUG, DEBUG_HAND_MOVING),
-    transition("ip_hand_tilted", DEBUG, DEBUG_HAND_TILTED),
-    transition("ip_hand_outside_frame", DEBUG, DEBUG_HAND_OUTSIDE_FRAME),
-    transition("ip_hand_wrong_side", DEBUG, DEBUG_HAND_WRONG_SIDE),
-    transition("exit_debug", [DEBUG, 
+    _transition("ip_hand_absent", DEBUG, DEBUG_HAND_ABSENT),
+    _transition("ip_hand_moving", DEBUG, DEBUG_HAND_MOVING),
+    _transition("ip_hand_tilted", DEBUG, DEBUG_HAND_TILTED),
+    _transition("ip_hand_outside_frame", DEBUG, DEBUG_HAND_OUTSIDE_FRAME),
+    _transition("ip_hand_wrong_side", DEBUG, DEBUG_HAND_WRONG_SIDE),
+    _transition("exit_debug", [DEBUG, 
                               DEBUG_HAND_ABSENT, 
                               DEBUG_HAND_MOVING, 
                               DEBUG_HAND_TILTED, 
@@ -101,34 +101,34 @@ TRANSITIONS = [
                               DEBUG, after="return_to_previous_state"),
     
     # Scene 0
-    transition("ip_person_seated", IDLE, SC1_AWAITING_HAND), 
+    _transition("ip_person_seated", IDLE, SC1_AWAITING_HAND), 
     # Scene 1
-    transition("ip_hand_present", SC1_AWAITING_HAND, SC1_2_YES_HAND_FOUND),
-    transition("hand_found", SC1_2_YES_HAND_FOUND, SC2_1_HAND_STAYS_FOCUSED),
+    _transition("ip_hand_present", SC1_AWAITING_HAND, SC1_2_YES_HAND_FOUND),
+    _transition("hand_found", SC1_2_YES_HAND_FOUND, SC2_1_HAND_STAYS_FOCUSED),
     # Scene 2
-    transition("hand_stays_still", SC2_1_HAND_STAYS_FOCUSED, SC3_SCANNING_HAND),
+    _transition("hand_stays_still", SC2_1_HAND_STAYS_FOCUSED, SC3_SCANNING_HAND),
     # Scene 3
-    transition("ip_hand_correct", SC3_SCANNING_HAND, SC3_1_CORRECT_HAND),
-    transition("hand_scanning", SC3_1_CORRECT_HAND, SC3_4_SCAN_DONE),
-    transition("ip_scan_complete", SC3_4_SCAN_DONE, SC4_TRANSFORM),
+    _transition("ip_hand_correct", SC3_SCANNING_HAND, SC3_1_CORRECT_HAND),
+    _transition("hand_scanning", SC3_1_CORRECT_HAND, SC3_4_SCAN_DONE),
+    _transition("ip_scan_complete", SC3_4_SCAN_DONE, SC4_TRANSFORM),
     # Scene 4+5
-    transition("transformation_done", SC4_TRANSFORM, SC5_WITCH_ORIGIN_STORY),
-    transition("originstory_done", SC5_WITCH_ORIGIN_STORY, SC6_VISUAL_IMAGE_HAND),
+    _transition("transformation_done", SC4_TRANSFORM, SC5_WITCH_ORIGIN_STORY),
+    _transition("originstory_done", SC5_WITCH_ORIGIN_STORY, SC6_VISUAL_IMAGE_HAND),
     # Scene 6
-    transition("hand_visual_done", SC6_VISUAL_IMAGE_HAND, SC6_1_POINT_OUT_DETAILS),
-    transition("reading_hand_details_done", SC6_1_POINT_OUT_DETAILS, SC6_2_INTERACTIVE_TASK),
-    transition("ip_hand_present", SC6_2_INTERACTIVE_TASK, SC6_2_1_TASK_DONE),
-    transition("ip_hand_absent", SC6_2_INTERACTIVE_TASK, SC6_2_2_TASK_IGNORED),
-    transition("task_done_or_skipped", [SC6_1_POINT_OUT_DETAILS, SC6_2_1_TASK_DONE, SC6_2_2_TASK_IGNORED], SC6_3_ASSIGN_ELEMENTS),
-    transition("reading_assign_element_done", SC6_3_ASSIGN_ELEMENTS, SC6_4_ELEMENT_ANALYSIS),
-    transition("reading_analysis_done", SC6_4_ELEMENT_ANALYSIS, SC6_5_INNER_BALANCE),
-    transition("reading_balance_done", SC6_5_INNER_BALANCE, SC7_LAST_WORDS),
+    _transition("hand_visual_done", SC6_VISUAL_IMAGE_HAND, SC6_1_POINT_OUT_DETAILS),
+    _transition("reading_hand_details_done", SC6_1_POINT_OUT_DETAILS, SC6_2_INTERACTIVE_TASK),
+    _transition("ip_hand_present", SC6_2_INTERACTIVE_TASK, SC6_2_1_TASK_DONE),
+    _transition("ip_hand_absent", SC6_2_INTERACTIVE_TASK, SC6_2_2_TASK_IGNORED),
+    _transition("task_done_or_skipped", [SC6_1_POINT_OUT_DETAILS, SC6_2_1_TASK_DONE, SC6_2_2_TASK_IGNORED], SC6_3_ASSIGN_ELEMENTS),
+    _transition("reading_assign_element_done", SC6_3_ASSIGN_ELEMENTS, SC6_4_ELEMENT_ANALYSIS),
+    _transition("reading_analysis_done", SC6_4_ELEMENT_ANALYSIS, SC6_5_INNER_BALANCE),
+    _transition("reading_balance_done", SC6_5_INNER_BALANCE, SC7_LAST_WORDS),
     # Scene 7
-    transition("detransfrom_end", SC7_LAST_WORDS, SC7_1_RETURN_TO_IDLE),
-    transition("disappear_end", SC7_LAST_WORDS, SC7_2_DISAPPEAR),
-    transition("end_done", [SC7_1_RETURN_TO_IDLE, SC7_2_DISAPPEAR], RESTART),
+    _transition("detransfrom_end", SC7_LAST_WORDS, SC7_1_RETURN_TO_IDLE),
+    _transition("disappear_end", SC7_LAST_WORDS, SC7_2_DISAPPEAR),
+    _transition("end_done", [SC7_1_RETURN_TO_IDLE, SC7_2_DISAPPEAR], RESTART),
     # End
-    transition("reset", ANY_SOURCE, IDLE),
+    _transition("reset", ANY_SOURCE, IDLE),
 ]
 
 TRANSITION_IDS = list(dict.fromkeys(item["trigger"] for item in TRANSITIONS))
@@ -288,12 +288,14 @@ class WitchStateMachine:
             title="The Witch State Machine",
         )
 
-    def store_previous_state(self, event):
-        self.previous_state = event.transition.source
+    def store_previous_state(self, event=None):
+        if event:
+            self.previous_state = event.transition.source
+
     def return_to_previous_state(self):
         if self.previous_state:
             self.to_state(self.previous_state)
-            
+    
     @property
     def state(self) -> str:
         return self._state
