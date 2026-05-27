@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from typing import Any
 
 import msgspec
@@ -7,6 +8,8 @@ import msgspec
 from .message_parser import decode_event
 from shared.events import WitchEvent
 from .websocket_server.websocket_server import WebSocketServer
+
+logger = logging.getLogger(__name__)
 
 
 class EventChannel:
@@ -33,8 +36,10 @@ class EventChannel:
         exclude: Any | None = None,
         origin: str | None = None,
     ) -> None:
+        encoded = self._encode(event, origin=origin)
+        logger.debug("Broadcasting on %s: %s", self._path, encoded[:200])
         await self._ws_server.broadcast(
-            self._encode(event, origin=origin),
+            encoded,
             path=self._path,
             exclude=exclude,
         )

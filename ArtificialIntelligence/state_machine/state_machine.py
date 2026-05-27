@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any, Awaitable, Callable
 
 from transitions.extensions import GraphMachine
 
@@ -66,7 +67,7 @@ class StateChange:
     dest: str
 
 
-def transition(trigger: str, source: str | list[str], dest: str, **kwargs) -> dict[str, object]:
+def _transition(trigger: str, source: str | list[str], dest: str, **kwargs) -> dict[str, object]:
     data = {
         "trigger": trigger,
         "source": source,
@@ -132,7 +133,7 @@ TRANSITIONS = [
 
 TRANSITION_IDS = list(dict.fromkeys(item["trigger"] for item in TRANSITIONS))
 
-ANIMATION_TRIGGER_BY_STATE = {
+ANIMATION_TRIGGER_BY_STATE: dict[str, str] = {
     SC3_4_SCAN_DONE: "ip_scan_complete",
     SC4_TRANSFORM: "transformation_done",
     SC5_WITCH_ORIGIN_STORY: "originstory_done",
@@ -149,7 +150,7 @@ ANIMATION_TRIGGER_BY_STATE = {
 }
 
 
-HAND_TRIGGER_BY_STATE = {
+HAND_TRIGGER_BY_STATE: dict[str, dict[str, str]] = {
     IDLE: {
         "present": "ip_person_seated",
         "wrong": "ip_person_seated",
@@ -225,7 +226,7 @@ HAND_TRIGGER_BY_STATE = {
 SCENES_THAT_START_ANALYSIS = frozenset({SC3_4_SCAN_DONE, SC6_VISUAL_IMAGE_HAND})
 SCENES_THAT_DELIVER_FORTUNE = frozenset({SC6_VISUAL_IMAGE_HAND})
 
-STATE_DESCRIPTIONS = {
+STATE_DESCRIPTIONS: dict[str, str] = {
     DEBUG: "Szene wird immer aufgerufen, wenn Hand in relevanten Szenen nicht richtig erkannt wird",
     DEBUG_HAND_ABSENT: "Debug, wenn Hand überhaupt nicht anwesend ist",
     DEBUG_HAND_MOVING: "Debug, wenn Hand sich bewegt", # GERADE NICHT IMPLEMENTIERT!!
@@ -274,7 +275,9 @@ STATE_DESCRIPTIONS = {
 class WitchStateMachine:
     def __init__(self) -> None:
         self.previous_state = None
-        self.machine = GraphMachine(
+        self._transition_handlers: dict[str, list[Callable[[StateChange], Awaitable[None]]]] = {}
+        self._state: str = INITIAL
+        self._machine = GraphMachine(
             model=self,
             states=STATES,
             transitions=TRANSITIONS,
@@ -290,6 +293,26 @@ class WitchStateMachine:
     def return_to_previous_state(self):
         if self.previous_state:
             self.to_state(self.previous_state)
+            
+    @property
+    def state(self) -> str:
+        return self._state
+
+    @state.setter
+    def state(self, value: str) -> None:
+        self._state = value
+
+    def register_transition_handler(self, trigger: str, handler: Callable[[StateChange], Awaitable[None]]) -> None:
+        if trigger not in self._transition_handlers:
+            self._transition_handlers[trigger] = []
+        self._transition_handlers[trigger].append(handler)
+
+    def get_transition_handlers(self, trigger: str) -> list[Callable[[StateChange], Awaitable[None]]]:
+        return self._transition_handlers.get(trigger, [])
+
+    @property
+    def machine(self):
+        return self._machine
 
     def hand_event(self, event: HandEvent) -> list[StateChange]:
         # Gives out detailed or general events depending on if we are in a DEBUG State or not
@@ -337,7 +360,7 @@ class WitchStateMachine:
 
     def force_state(self, state: str) -> str:
         if state in STATES:
-            self.machine.set_state(state, model=self)
+            self._machine.set_state(state, model=self)
         return self.state
 
     def description(self) -> str:
@@ -345,7 +368,7 @@ class WitchStateMachine:
 
     def save_markdown(self, path: Path | None = None) -> Path:
         path = path or Path(__file__).with_name("StateMachine.md")
-        mermaid = self.machine.get_graph().source.replace("direction LR", "direction TB")
+        mermaid = self._machine.get_graph().source.replace("direction LR", "direction TB")
         path.write_text(f"```mermaid\n{mermaid.strip()}\n```\n", encoding="utf-8")
         return path
         
