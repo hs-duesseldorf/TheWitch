@@ -85,7 +85,9 @@ TRANSITIONS = [
                                SC1_2_YES_HAND_FOUND, 
                                SC2_1_HAND_STAYS_FOCUSED,
                                SC3_SCANNING_HAND, 
-                               SC3_1_CORRECT_HAND], 
+                               SC3_1_CORRECT_HAND,
+                               SC6_VISUAL_IMAGE_HAND, # TEMPORÄR ZUM VORFÜHREN
+                               ], 
                                DEBUG, before="store_previous_state"),
     _transition("ip_hand_absent", DEBUG, DEBUG_HAND_ABSENT),
     _transition("ip_hand_moving", DEBUG, DEBUG_HAND_MOVING),
@@ -98,7 +100,7 @@ TRANSITIONS = [
                               DEBUG_HAND_TILTED, 
                               DEBUG_HAND_OUTSIDE_FRAME, 
                               DEBUG_HAND_WRONG_SIDE], 
-                              DEBUG, after="return_to_previous_state"),
+                              IDLE, after="return_to_previous_state"),
     
     # Scene 0
     _transition("ip_person_seated", IDLE, SC1_AWAITING_HAND), 
@@ -129,6 +131,8 @@ TRANSITIONS = [
     _transition("end_done", [SC7_1_RETURN_TO_IDLE, SC7_2_DISAPPEAR], RESTART),
     # End
     _transition("reset", ANY_SOURCE, IDLE),
+
+    _transition("debug_vorzeige_temp", SC6_VISUAL_IMAGE_HAND, SC6_VISUAL_IMAGE_HAND),
 ]
 
 TRANSITION_IDS = list(dict.fromkeys(item["trigger"] for item in TRANSITIONS))
@@ -220,6 +224,11 @@ HAND_TRIGGER_BY_STATE: dict[str, dict[str, str]] = {
     DEBUG_HAND_WRONG_SIDE: {
         "present": "exit_debug",
         "ready": "exit_debug",
+    },
+    # TEMPORÄR, NUR ZUM VORZEIGEN
+    SC6_VISUAL_IMAGE_HAND: {
+        "absent": "enter_debug",
+        "ready": "debug_vorzeige_temp",
     }
 }
 
@@ -294,7 +303,7 @@ class WitchStateMachine:
 
     def return_to_previous_state(self):
         if self.previous_state:
-            self.to_state(self.previous_state)
+            self._machine.set_state(self.previous_state, model=self)
     
     @property
     def state(self) -> str:
