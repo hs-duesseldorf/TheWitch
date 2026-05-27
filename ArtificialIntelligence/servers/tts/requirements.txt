@@ -2,4 +2,4 @@ python-dotenv
 huggingface_hub[cli]
 ormsgpack
 pyaudio
--e ./ArtificialIntelligence/servers/tts/fish-speech[cu129]
+-e ./ArtificialIntelligence/servers/tts/fish-speech[stable,cu129]
