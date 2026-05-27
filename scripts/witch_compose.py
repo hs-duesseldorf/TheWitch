@@ -17,7 +17,9 @@ from typing import Iterable
 ROOT = Path(__file__).resolve().parents[1]
 ENV_FILE = ROOT / ".env"
 REQUIRED_PYTHON_VERSION = (3, 12)
+TTS_REQUIRED_PYTHON_VERSION = (3, 11)
 UV_PYTHON = "3.12"
+TTS_UV_PYTHON = "3.11"
 
 
 @dataclass
@@ -137,7 +139,17 @@ def ensure_service(service: Service, uv: str) -> None:
     python = venv_python(service.venv)
     stamp = service.venv / ".requirements.stamp"
     version = python_version(python)
-    if version is not None and version != REQUIRED_PYTHON_VERSION:
+    required_python_version = (
+        TTS_REQUIRED_PYTHON_VERSION
+        if service.name == "tts"
+        else REQUIRED_PYTHON_VERSION
+    )
+    uv_python = (
+        TTS_UV_PYTHON
+        if service.name == "tts"
+        else UV_PYTHON
+    )
+    if version is not None and version != required_python_version:
         log(
             f"[{service.name}] removing Python {version[0]}.{version[1]} venv; "
             "Python 3.12 is required"
@@ -150,9 +162,9 @@ def ensure_service(service: Service, uv: str) -> None:
             return
     if not python.exists():
         log(f"[{service.name}] creating venv")
-        subprocess.check_call([uv, "venv", "--python", UV_PYTHON, str(service.venv)], cwd=ROOT)
+        subprocess.check_call([uv, "venv", "--python", uv_python, str(service.venv)], cwd=ROOT)
     version = python_version(python)
-    if version != REQUIRED_PYTHON_VERSION:
+    if version != required_python_version:
         actual = "unknown" if version is None else f"{version[0]}.{version[1]}"
         raise SystemExit(f"[{service.name}] venv uses Python {actual}; Python 3.12 is required")
     log(f"[{service.name}] installing requirements")
