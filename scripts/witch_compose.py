@@ -150,9 +150,10 @@ def ensure_service(service: Service, uv: str) -> None:
         else UV_PYTHON
     )
     if version is not None and version != required_python_version:
+        required = f"{required_python_version[0]}.{required_python_version[1]}"
         log(
             f"[{service.name}] removing Python {version[0]}.{version[1]} venv; "
-            "Python 3.12 is required"
+            f"Python {required} is required"
         )
         shutil.rmtree(service.venv)
         version = None
