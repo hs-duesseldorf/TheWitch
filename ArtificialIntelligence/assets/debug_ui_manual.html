@@ -112,11 +112,11 @@
                 <h2>Manual Hand Events</h2>
             </div>
             <div class="body">
-                <button data-event="hand_detected">Hand detected</button>
-                <button data-event="hand_absent">Hand absent</button>
-                <button data-event="hand_wrong_side">Wrong side</button>
-                <button data-event="hand_not_fully_in_view">Not fully in view</button>
-                <button data-event="hand_tilted">Hand tilted</button>
+                <button data-event="ip_hand_present">Hand detected</button>
+                <button data-event="ip_hand_absent">Hand absent</button>
+                <button data-event="ip_hand_wrong_side">Wrong side</button>
+                <button data-event="ip_hand_not_fully_in_view">Not fully in view</button>
+                <button data-event="ip_hand_tilted">Hand tilted</button>
             </div>
         </section>
 
@@ -156,6 +156,8 @@
             securityLevel: "loose",
         });
 
+        fetch("/api/manual_mode/on", { method: "POST" });
+
         async function json(path) {
             return (await fetch(`${API}${path}`)).json();
         }
@@ -164,19 +166,6 @@
             const nextState = (await json("/api/state")).state || "-";
             document.getElementById("currentState").textContent = nextState;
         }
-
-        document.querySelectorAll("[data-event]").forEach(btn => {
-            btn.onclick = async () => {
-                const ev = btn.dataset.event;
-                await fetch(`${API}/api/trigger/${ev}`, { method: "POST" });
-                await updateState();
-            };
-        });
-
-        document.getElementById("resetButton").onclick = async () => {
-            await fetch(`${API}/api/reset`, { method: "POST" });
-            await updateState();
-        };
 
         async function loadGraph() {
             if (graphPending) return;
@@ -208,6 +197,10 @@
                 await loadGraph();
             };
 
+            document.getElementById("switchToDebug").onclick = () => {
+                window.location.href = "/debug_ui.html";
+            };
+
             document.querySelectorAll("[data-event]").forEach(btn => {
                 btn.onclick = async () => {
                     const ev = btn.dataset.event;
@@ -218,9 +211,9 @@
             });
         });
 
-        document.getElementById("switchToDebug").onclick = () => {
-            window.location.href = "/debug_ui.html";
-        };
+        window.addEventListener("beforeunload", () => {
+            fetch("/api/manual_mode/off", { method: "POST" });
+        });
     
     </script>
   </body>

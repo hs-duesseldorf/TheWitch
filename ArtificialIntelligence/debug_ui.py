@@ -83,6 +83,19 @@ def set_state(state: str):
     return {"state": result}
 
 
+# MANUAL MODE
+
+@app.post("/api/manual_mode/on")
+def manual_on():
+    _runtime.manual_mode = True
+    return {"manual_mode": True}
+
+@app.post("/api/manual_mode/off")
+def manual_off():
+    _runtime.manual_mode = False
+    return {"manual_mode": False}
+
+
 def run():
     port = int(os.getenv("WITCH_AI_UI_PORT"))
     logger.info("FastAPI server starting on 0.0.0.0:%d", port)

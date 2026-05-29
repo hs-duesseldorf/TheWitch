@@ -51,6 +51,7 @@ class WitchRuntime:
         self._state_machine = state_machine
         self._hand_event: HandEvent | None = None
         self._pending_scene_changes: list[StateChange] = []
+        self.manual_mode = False
 
         self._ip_channel = EventChannel(
             ws_server=ws_server,
@@ -89,6 +90,9 @@ class WitchRuntime:
             return
 
         if isinstance(event, HandEvent):
+            if self.manual_mode:
+                return
+
             logger.info("Broadcasting hand event: %s", event.trigger)
             await self._handle_hand_event(event)
             await self._ip_channel.broadcast(event)
