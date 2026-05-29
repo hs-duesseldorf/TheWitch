@@ -15,6 +15,7 @@ logger = logging.getLogger("debug-ui")
 
 this_dir = Path(__file__).parent
 html_path = this_dir / "assets" / "debug_ui.html"
+html_path_manual = this_dir / "assets" / "debug_ui_manual.html"
 
 app = FastAPI()
 app.add_middleware(
@@ -38,6 +39,9 @@ def set_runtime(ws_server, state_machine, runtime):
 @app.get("/debug_ui.html")
 def get_ui():
     return FileResponse(html_path, media_type="text/html")
+@app.get("/debug_ui_manual.html")
+def get_manual_ui():
+    return FileResponse(html_path_manual)
 
 
 @app.get("/api/state")

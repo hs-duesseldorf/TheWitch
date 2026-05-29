@@ -1,0 +1,228 @@
+<html>
+  <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <title>The Witch Debug - Manual</title>
+        <script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
+        <style>
+            :root {
+                color-scheme: dark;
+                --bg: #101113;
+                --panel: #17191d;
+                --text: #e9eaec;
+                --muted: #989da6;
+                --line: #2b2f36;
+                --accent: #f0c36a;
+            }
+            * {
+                box-sizing: border-box;
+            }
+            body {
+                margin: 0;
+                background: var(--bg);
+                color: var(--text);
+                font:
+                    14px/1.45 system-ui,
+                    sans-serif;
+            }
+            main {
+                display: grid;
+                gap: 12px;
+                padding: 16px;
+            }
+            .switcher {
+                display: flex;
+                gap: 10px;
+                padding: 12px 16px;
+                background: var(--panel);
+                border-bottom: 1px solid var(--line);
+            }
+            .panel {
+                border: 1px solid var(--line);
+                background: var(--panel);
+                border-radius: 8px;
+                overflow: hidden;
+            }
+            .head {
+                display: flex;
+                align-items: center;
+                height: 38px;
+                padding: 0 12px;
+                border-bottom: 1px solid var(--line);
+            }
+            .state {
+                color: var(--accent);
+                font:
+                    13px ui-monospace,
+                    monospace;
+            }
+            pre {
+                margin: 0;
+                padding: 10px 12px;
+                min-height: 100px;
+                max-height: 200px;
+                overflow: auto;
+                white-space: pre-wrap;
+                overflow-wrap: anywhere;
+                background: #111316;
+                font:
+                    12px ui-monospace,
+                    monospace;
+            }
+            .wide {
+                grid-column: 1 / -1;
+            }
+            button {
+                height: 30px;
+                border: 1px solid var(--line);
+                background: #20242a;
+                color: var(--text);
+                border-radius: 6px;
+                padding: 0 10px;
+                font: inherit;
+                font-size: 12px;
+                cursor: pointer;
+            }
+
+            button:hover {
+                background: #2a3038;
+            }
+            #graphViewport {
+                height: 450px;
+                overflow: auto;
+                background: #090a0c;
+            }
+            #graphContent {
+                padding: 24px;
+            }
+            #graphContent svg {
+                max-width: none !important;
+            }
+        </style>
+  </head>
+
+  <body>
+    <header class="switcher">
+        <button id="switchToDebug">Full Debug UI</button>
+    </header>
+    <main>
+
+        <section class="panel">
+            <div class="head">
+                <h2>Manual Hand Events</h2>
+            </div>
+            <div class="body">
+                <button data-event="hand_detected">Hand detected</button>
+                <button data-event="hand_absent">Hand absent</button>
+                <button data-event="hand_wrong_side">Wrong side</button>
+                <button data-event="hand_not_fully_in_view">Not fully in view</button>
+                <button data-event="hand_tilted">Hand tilted</button>
+            </div>
+        </section>
+
+        <section class="panel">
+            <div class="head">
+                <h2>Current State</h2>
+            </div>
+            <div class="body">
+                <div>
+                    <span id="currentState" class="state">-</span>
+                </div>
+                <div>
+                    <button id="resetButton">Reset</button>
+                </div>
+            </div>
+        </section>
+
+        <section class="panel wide">
+            <div class="head">
+                <h2>State Machine</h2>
+            </div>
+            <div id="graphViewport">
+                <div id="graphContent"></div>
+            </div>
+        </section>
+
+    </main>
+    <script>
+        const API = location.origin;
+        const $ = (id) => document.getElementById(id);
+        let currentState = "";
+        let graphRenderId = 0;
+        let graphPending = false;
+        mermaid.initialize({
+            startOnLoad: false,
+            theme: "dark",
+            securityLevel: "loose",
+        });
+
+        async function json(path) {
+            return (await fetch(`${API}${path}`)).json();
+        }
+
+        async function updateState() {
+            const nextState = (await json("/api/state")).state || "-";
+            document.getElementById("currentState").textContent = nextState;
+        }
+
+        document.querySelectorAll("[data-event]").forEach(btn => {
+            btn.onclick = async () => {
+                const ev = btn.dataset.event;
+                await fetch(`${API}/api/trigger/${ev}`, { method: "POST" });
+                await updateState();
+            };
+        });
+
+        document.getElementById("resetButton").onclick = async () => {
+            await fetch(`${API}/api/reset`, { method: "POST" });
+            await updateState();
+        };
+
+        async function loadGraph() {
+            if (graphPending) return;
+            graphPending = true;
+            setTimeout(async () => {
+                graphPending = false;
+                const div = $("graphContent");
+                const renderId = ++graphRenderId;
+                const { graph } = await json("/api/state-machine-graph");
+                try {
+                    const rendered = await mermaid.render(
+                        `g${Date.now()}-${renderId}`,
+                        graph,
+                    );
+                    if (renderId === graphRenderId) div.innerHTML = rendered.svg;
+                } catch {
+                    if (renderId === graphRenderId) div.textContent = graph;
+                }
+            }, 100);
+        }
+
+        document.addEventListener("DOMContentLoaded", () => {
+            updateState();
+            loadGraph();
+
+            document.getElementById("resetButton").onclick = async () => {
+                await fetch(`${API}/api/reset`, { method: "POST" });
+                await updateState();
+                await loadGraph();
+            };
+
+            document.querySelectorAll("[data-event]").forEach(btn => {
+                btn.onclick = async () => {
+                    const ev = btn.dataset.event;
+                    await fetch(`${API}/api/trigger/${ev}`, { method: "POST" });
+                    await updateState();
+                    await loadGraph();
+                };
+            });
+        });
+
+        document.getElementById("switchToDebug").onclick = () => {
+            window.location.href = "/debug_ui.html";
+        };
+    
+    </script>
+  </body>
+
+</html>

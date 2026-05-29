@@ -154,7 +154,10 @@
             }
         </style>
     </head>
-    <body>
+    <body> 
+        <header class="switcher">
+            <button id="switchToDebugManual">Debug Manual UI</button>
+        </header>
         <main>
             <section class="debug-layout">
                 <section class="panel">
@@ -229,6 +232,10 @@
                 await fetch(`${API}/api/reset`, { method: "POST" });
                 const changed = await updateState();
                 if (!changed) loadGraph();
+            };
+
+            document.getElementById("switchToDebugManual").onclick = () => {
+                window.location.href = "/debug_ui_manual.html";
             };
 
             async function init() {
