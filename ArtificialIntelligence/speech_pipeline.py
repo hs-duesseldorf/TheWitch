@@ -110,18 +110,13 @@ def find_audio_devices() -> list[int | None]:
             for index, device in enumerate(devices)
             if device["max_output_channels"] > 0
         ]
-        
-        virtual_cables = [
-            index
-            for index, device in output_devices
-            if _is_virtual_cable(system, device["name"])
-        ]
-
-        if virtual_cables:
-            selected.append(virtual_cables[0])
 
         if output_devices:
             selected.append(None)
+            
+        for i, dev in output_devices:
+                if _is_virtual_cable(system, dev["name"]):
+                    selected.append(i)
 
         if system == "Linux":
             if not selected:
@@ -134,14 +129,7 @@ def find_audio_devices() -> list[int | None]:
                     )
                     if _linux_output_score(devices[index]["name"]) >= 0
                 )
-        else:
-            default = sd.default.device
-            if isinstance(default, tuple):
-                default = default[1]
-            if None in selected and default is not None:
-                selected.extend(index for index, _ in output_devices if index != default)
-            else:
-                selected.extend(index for index, _ in output_devices)
+                
     except Exception as e:
         logger.warning(f"Error finding devices: {e}")
 
@@ -198,6 +186,7 @@ class StreamingAudioPlayer:
                     "underruns": 0,
                     "last_underrun_log": 0.0,
                     "generation": 0,
+                    "delay_frames_remaining": self._speaker_delay_frames if device is None else 0,
                     "lock": threading.Lock(),
                 }
                 stream = sd.OutputStream(
@@ -256,6 +245,20 @@ class StreamingAudioPlayer:
     ) -> None:
         outdata.fill(0)
         written = 0
+        
+        with output["lock"]:
+            delay_frames = output["delay_frames_remaining"]
+
+        if delay_frames > 0:
+            silent = min(frames, delay_frames)
+            written += silent
+
+            with output["lock"]:
+                output["delay_frames_remaining"] -= silent
+
+            if written >= frames:
+                return
+        
         with output["lock"]:
             generation = output["generation"]
             pending = output["pending"]
@@ -412,6 +415,9 @@ class StreamingAudioPlayer:
             )
             output["buffered_frames"] = 0
             output["pending"] = np.empty((0, 2), dtype=np.float32)
+            output["delay_frames_remaining"] = (
+                self._speaker_delay_frames if output["device"] is None else 0
+            )
         chunks: queue.Queue[np.ndarray | None] = output["queue"]
         while True:
             try:
