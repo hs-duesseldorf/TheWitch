@@ -170,8 +170,7 @@ class StreamingAudioPlayer:
         self._prebuffer_frames = int(SR * self._prebuffer_seconds)
         self._speaker_delay_seconds = max(
             0.0,
-            float(self._prebuffer_seconds)
-            + float(os.environ["WITCH_SPEAKER_DELAY_SECONDS"].strip()),
+            float(os.environ["WITCH_SPEAKER_DELAY_SECONDS"].strip()),
         )
         self._speaker_delay_frames = int(SR * self._speaker_delay_seconds)
         self._pcm_remainder = b""
@@ -215,7 +214,6 @@ class StreamingAudioPlayer:
                     "last_underrun_log": 0.0,
                     "generation": 0,
                     "is_virtual_cable": is_virtual_cable,
-                    "delay_frames_remaining": self._speaker_delay_frames if is_speaker else 0,
                     "lock": threading.Lock(),
                 }
                 stream = sd.OutputStream(
@@ -263,6 +261,13 @@ class StreamingAudioPlayer:
         self.start()
         for output in self._outputs:
             self._clear_output(output, producer_done=False)
+            
+        if self._speaker_delay_frames > 0:
+            silence = np.zeros((self._speaker_delay_frames, 2), dtype=np.float32)
+
+            for output in self._outputs:
+                if not output["is_virtual_cable"]:
+                    self._enqueue(output, silence)
 
     def _callback(
         self,
@@ -274,19 +279,6 @@ class StreamingAudioPlayer:
     ) -> None:
         outdata.fill(0)
         written = 0
-        
-        with output["lock"]:
-            delay_frames = output["delay_frames_remaining"]
-
-        if delay_frames > 0:
-            silent = min(frames, delay_frames)
-            written += silent
-
-            with output["lock"]:
-                output["delay_frames_remaining"] -= silent
-
-            if written >= frames:
-                return
         
         with output["lock"]:
             generation = output["generation"]
@@ -444,9 +436,6 @@ class StreamingAudioPlayer:
             )
             output["buffered_frames"] = 0
             output["pending"] = np.empty((0, 2), dtype=np.float32)
-            output["delay_frames_remaining"] = (
-                0 if output["is_virtual_cable"] else self._speaker_delay_frames
-            )
         chunks: queue.Queue[np.ndarray | None] = output["queue"]
         while True:
             try:
