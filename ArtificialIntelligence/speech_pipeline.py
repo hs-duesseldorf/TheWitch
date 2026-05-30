@@ -110,12 +110,18 @@ def find_audio_devices() -> list[int | None]:
             for index, device in enumerate(devices)
             if device["max_output_channels"] > 0
         ]
+        
+        virtual_cables = [
+            index
+            for index, device in output_devices
+            if _is_virtual_cable(system, device["name"])
+        ]
+
+        if virtual_cables:
+            return [virtual_cables[0]]
+
         if output_devices:
             selected.append(None)
-
-        for i, dev in output_devices:
-            if _is_virtual_cable(system, dev["name"]):
-                selected.append(i)
 
         if system == "Linux":
             if not selected:
