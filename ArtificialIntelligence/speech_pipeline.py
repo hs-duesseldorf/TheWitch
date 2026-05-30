@@ -118,7 +118,7 @@ def find_audio_devices() -> list[int | None]:
         ]
 
         if virtual_cables:
-            return [virtual_cables[0]]
+            selected.append(virtual_cables[0])
 
         if output_devices:
             selected.append(None)
@@ -165,6 +165,11 @@ class StreamingAudioPlayer:
             float(os.environ["WITCH_AUDIO_PREBUFFER_SECONDS"].strip()),
         )
         self._prebuffer_frames = int(SR * self._prebuffer_seconds)
+        self._speaker_delay_seconds = max(
+            0.0,
+            float(os.environ["WITCH_SPEAKER_DELAY_SECONDS"].strip()),
+        )
+        self._speaker_delay_frames = int(SR * self._speaker_delay_seconds)
         self._pcm_remainder = b""
         self._outputs: list[dict[str, Any]] = []
 
