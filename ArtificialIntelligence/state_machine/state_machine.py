@@ -46,8 +46,8 @@ SC7_2_DISAPPEAR = Scene.SCENE_7_SHOT_2_DISAPPEAR.value
 
 RESTART = Scene.SCENE_RESTART.value
 
-
 STATES = [scene.value for scene in Scene]
+
 INITIAL = IDLE
 ANY_SOURCE = "*"
 
@@ -87,20 +87,39 @@ TRANSITIONS = [
                                SC3_SCANNING_HAND, 
                                SC3_1_CORRECT_HAND,
                                SC6_VISUAL_IMAGE_HAND, # TEMPORÄR ZUM VORFÜHREN
-                               ], 
-                               DEBUG, before="store_previous_state"),
-    _transition("ip_hand_absent", DEBUG, DEBUG_HAND_ABSENT),
-    _transition("ip_hand_moving", DEBUG, DEBUG_HAND_MOVING),
-    _transition("ip_hand_tilted", DEBUG, DEBUG_HAND_TILTED),
-    _transition("ip_hand_outside_frame", DEBUG, DEBUG_HAND_OUTSIDE_FRAME),
-    _transition("ip_hand_wrong_side", DEBUG, DEBUG_HAND_WRONG_SIDE),
+                               ], DEBUG, before="store_previous_transition"),
+    _transition("ip_hand_absent",[DEBUG, 
+                              DEBUG_HAND_MOVING, 
+                              DEBUG_HAND_TILTED, 
+                              DEBUG_HAND_OUTSIDE_FRAME, 
+                              DEBUG_HAND_WRONG_SIDE], DEBUG_HAND_ABSENT),
+    _transition("ip_hand_moving", [DEBUG, 
+                              DEBUG_HAND_ABSENT, 
+                              DEBUG_HAND_TILTED, 
+                              DEBUG_HAND_OUTSIDE_FRAME, 
+                              DEBUG_HAND_WRONG_SIDE], DEBUG_HAND_MOVING),
+    _transition("ip_hand_tilted", [DEBUG, 
+                              DEBUG_HAND_ABSENT, 
+                              DEBUG_HAND_MOVING,
+                              DEBUG_HAND_OUTSIDE_FRAME, 
+                              DEBUG_HAND_WRONG_SIDE], DEBUG_HAND_TILTED),
+    _transition("ip_hand_outside_frame", [DEBUG, 
+                              DEBUG_HAND_ABSENT, 
+                              DEBUG_HAND_MOVING, 
+                              DEBUG_HAND_TILTED,
+                              DEBUG_HAND_WRONG_SIDE], DEBUG_HAND_OUTSIDE_FRAME),
+    _transition("ip_hand_wrong_side", [DEBUG, 
+                              DEBUG_HAND_ABSENT, 
+                              DEBUG_HAND_MOVING, 
+                              DEBUG_HAND_TILTED, 
+                              DEBUG_HAND_OUTSIDE_FRAME], DEBUG_HAND_WRONG_SIDE),
     _transition("exit_debug", [DEBUG, 
                               DEBUG_HAND_ABSENT, 
                               DEBUG_HAND_MOVING, 
                               DEBUG_HAND_TILTED, 
                               DEBUG_HAND_OUTSIDE_FRAME, 
                               DEBUG_HAND_WRONG_SIDE], 
-                              IDLE, after="return_to_previous_state"),
+                              IDLE, after="return_to_previous_transition"),
     
     # Scene 0
     _transition("ip_person_seated", IDLE, SC1_AWAITING_HAND), 
@@ -206,6 +225,9 @@ HAND_TRIGGER_BY_STATE: dict[str, dict[str, str]] = {
         "ready": "exit_debug",
     },
     DEBUG_HAND_ABSENT: {
+        "tilted": "ip_hand_tilted",
+        "wrong_side": "ip_hand_wrong_side",
+        "outside_frame": "ip_hand_outside_frame",
         "present": "exit_debug",
         "ready": "exit_debug",
     },
@@ -214,19 +236,29 @@ HAND_TRIGGER_BY_STATE: dict[str, dict[str, str]] = {
         "ready": "exit_debug",
     },
     DEBUG_HAND_TILTED: {
+        "absent": "ip_hand_absent",
+        "wrong_side": "ip_hand_wrong_side",
+        "outside_frame": "ip_hand_outside_frame",
         "present": "exit_debug",
         "ready": "exit_debug",
     },
     DEBUG_HAND_OUTSIDE_FRAME: {
+        "absent": "ip_hand_absent",
+        "tilted": "ip_hand_tilted",
+        "wrong_side": "ip_hand_wrong_side",
         "present": "exit_debug",
         "ready": "exit_debug",
     },
     DEBUG_HAND_WRONG_SIDE: {
+        "absent": "ip_hand_absent",
+        "tilted": "ip_hand_tilted",
+        "outside_frame": "ip_hand_outside_frame",
         "present": "exit_debug",
         "ready": "exit_debug",
     },
     # TEMPORÄR, NUR ZUM VORZEIGEN
     SC6_VISUAL_IMAGE_HAND: {
+        "wrong": "enter_debug",
         "absent": "enter_debug",
         "ready": "debug_vorzeige_temp",
     }
@@ -241,7 +273,7 @@ STATE_DESCRIPTIONS: dict[str, str] = {
     DEBUG_HAND_MOVING: "Debug, wenn Hand sich bewegt", # GERADE NICHT IMPLEMENTIERT!!
     DEBUG_HAND_TILTED: "Debug, wenn Hand nicht gerade, mit der Innenfläche nach oben, gehalten wird",
     DEBUG_HAND_OUTSIDE_FRAME: "Debug, wenn Hand nicht vollständig von der Kamera zu erfassen ist",
-    DEBUG_HAND_WRONG_SIDE: "Debug, wenn die falsche Hand (Rechts/Links) verwendet wurde",
+    DEBUG_HAND_WRONG_SIDE: "Debug, wenn die Hand Rückenseite gezeigt wird",
 
     IDLE: "Szene 0: Wahrsagerin reagiert nicht, Besucher betritt den Raum",
 
@@ -284,6 +316,7 @@ STATE_DESCRIPTIONS: dict[str, str] = {
 class WitchStateMachine:
     def __init__(self) -> None:
         self.previous_state = None
+        self.previous_trigger = None
         self._transition_handlers: dict[str, list[Callable[[StateChange], Awaitable[None]]]] = {}
         self._state: str = INITIAL
         self._machine = GraphMachine(
@@ -297,13 +330,21 @@ class WitchStateMachine:
             title="The Witch State Machine",
         )
 
-    def store_previous_state(self, event=None):
+    def store_previous_transition(self, event=None):
         if event:
             self.previous_state = event.transition.source
+            self.previous_trigger = event.event.name
 
-    def return_to_previous_state(self):
+    def return_to_previous_transition(self):
         if self.previous_state:
             self._machine.set_state(self.previous_state, model=self)
+
+    # Triggers Debug anew with the Triggerevent we entered Debug with
+    # -> Immediate jump into Debug-Subscenes
+    def on_enter_scene_debug_hand_detection(self):
+        debug_trigger = self.debug_hand_condition(self.last_hand_event)
+        getattr(self, debug_trigger)()
+
     
     @property
     def state(self) -> str:
