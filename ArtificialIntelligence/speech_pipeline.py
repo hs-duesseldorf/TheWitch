@@ -110,14 +110,15 @@ def find_audio_devices() -> list[int | None]:
             for index, device in enumerate(devices)
             if device["max_output_channels"] > 0
         ]
+
         if output_devices:
             selected.append(None)
-
-        for i, dev in output_devices:
-            if _is_virtual_cable(system, dev["name"]):
-                selected.append(i)
-
+            
         if system == "Linux":
+            for i, dev in output_devices:
+                if _is_virtual_cable(system, dev["name"]):
+                    selected.append(i)
+                    
             if not selected:
                 selected.extend(
                     index
@@ -129,13 +130,21 @@ def find_audio_devices() -> list[int | None]:
                     if _linux_output_score(devices[index]["name"]) >= 0
                 )
         else:
-            default = sd.default.device
-            if isinstance(default, tuple):
-                default = default[1]
-            if None in selected and default is not None:
-                selected.extend(index for index, _ in output_devices if index != default)
-            else:
-                selected.extend(index for index, _ in output_devices)
+            best_match = None
+            for i, dev in output_devices:
+                if _is_virtual_cable(system, dev["name"]):
+                    hostapi = sd.query_hostapis(dev["hostapi"])["name"]
+
+                    if "WASAPI" in hostapi:
+                        best_match = i
+                        break
+
+                    if best_match is None:
+                        best_match = i
+
+            if best_match is not None:
+                selected.append(best_match)
+                
     except Exception as e:
         logger.warning(f"Error finding devices: {e}")
 
@@ -159,6 +168,11 @@ class StreamingAudioPlayer:
             float(os.environ["WITCH_AUDIO_PREBUFFER_SECONDS"].strip()),
         )
         self._prebuffer_frames = int(SR * self._prebuffer_seconds)
+        self._speaker_delay_seconds = max(
+            0.0,
+            float(os.environ["WITCH_SPEAKER_DELAY_SECONDS"].strip()),
+        )
+        self._speaker_delay_frames = int(SR * self._speaker_delay_seconds)
         self._pcm_remainder = b""
         self._outputs: list[dict[str, Any]] = []
 
@@ -170,6 +184,7 @@ class StreamingAudioPlayer:
             return
 
         devices = find_audio_devices()
+        logger.info("Audio devices selected: %s", devices)
 
         if not devices:
             logger.warning("No audio device found")
@@ -177,6 +192,17 @@ class StreamingAudioPlayer:
 
         for device in devices:
             try:
+                is_virtual_cable = False
+
+                if device is not None:
+                    try:
+                        device_info = sd.query_devices(device)
+                        is_virtual_cable = _is_virtual_cable(platform.system(), device_info["name"])
+                    except Exception:
+                        pass
+
+                is_speaker = not is_virtual_cable
+                
                 output = {
                     "device": device,
                     "queue": queue.Queue(maxsize=0),
@@ -187,6 +213,7 @@ class StreamingAudioPlayer:
                     "underruns": 0,
                     "last_underrun_log": 0.0,
                     "generation": 0,
+                    "is_virtual_cable": is_virtual_cable,
                     "lock": threading.Lock(),
                 }
                 stream = sd.OutputStream(
@@ -234,6 +261,13 @@ class StreamingAudioPlayer:
         self.start()
         for output in self._outputs:
             self._clear_output(output, producer_done=False)
+            
+        if self._speaker_delay_frames > 0:
+            silence = np.zeros((self._speaker_delay_frames, 2), dtype=np.float32)
+
+            for output in self._outputs:
+                if not output["is_virtual_cable"]:
+                    self._enqueue(output, silence)
 
     def _callback(
         self,
@@ -245,6 +279,7 @@ class StreamingAudioPlayer:
     ) -> None:
         outdata.fill(0)
         written = 0
+        
         with output["lock"]:
             generation = output["generation"]
             pending = output["pending"]
