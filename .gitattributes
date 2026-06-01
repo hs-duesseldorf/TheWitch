@@ -1,3 +1,5 @@
 3D/Content/MetaHumans/Witch/Face/SKM_Witch_FaceMesh.uasset filter=lfs diff=lfs merge=lfs -text
 3D/Content/MetahumanDefinitions/Witch.uasset filter=lfs diff=lfs merge=lfs -text
 3D/Content/Textures/Normal.uasset filter=lfs diff=lfs merge=lfs -text
+3D/Content/Fab/Megascans/Surfaces/Denim_xiurbeml/Raw/xiurbeml_tier_0/Textures/T_xiurbeml_8K_B.uasset filter=lfs diff=lfs merge=lfs -text
+3D/Content/Fab/Megascans/Surfaces/Fabric_Clothes_Cotton_Plain_Weave_White_xfeced0qx/Raw/xfeced0qx_tier_0/Textures/T_xfeced0qx_8K_ORM.uasset filter=lfs diff=lfs merge=lfs -text
