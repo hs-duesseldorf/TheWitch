@@ -255,9 +255,9 @@ def test():
         print(f"\n--- ERGEBNIS {label} ---")
         print(json.dumps(result, indent=2))
 
-    #print("\n--- ZUSAMMENFASSUNG von dominantelementen---")
-    #for label, result in results:
-    #    print(f"{label}: {result['dominant_element']}")
+    print("\n--- ZUSAMMENFASSUNG von dominantelementen---")
+    for label, result in results:
+        print(f"{label}: {result['dominant_element']}")
 
 
 
