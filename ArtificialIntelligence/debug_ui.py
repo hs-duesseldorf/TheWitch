@@ -15,6 +15,7 @@ logger = logging.getLogger("debug-ui")
 
 this_dir = Path(__file__).parent
 html_path = this_dir / "assets" / "debug_ui.html"
+html_path_manual = this_dir / "assets" / "debug_ui_manual.html"
 
 app = FastAPI()
 app.add_middleware(
@@ -38,6 +39,9 @@ def set_runtime(ws_server, state_machine, runtime):
 @app.get("/debug_ui.html")
 def get_ui():
     return FileResponse(html_path, media_type="text/html")
+@app.get("/debug_ui_manual.html")
+def get_manual_ui():
+    return FileResponse(html_path_manual)
 
 
 @app.get("/api/state")
@@ -72,11 +76,27 @@ def trigger_event(event: str):
     result = _runtime.trigger_state_event(event)
     return {"state": result}
 
+@app.post("/api/sim_hand_event/{event}")
+async def simulate_hand_event(event: str):
+    result = await _runtime.simulate_hand_event(event)
+    return {"state": result}
 
 @app.post("/api/state/{state}")
 def set_state(state: str):
     result = _runtime.force_state(state)
     return {"state": result}
+
+# MANUAL MODE
+
+@app.post("/api/manual_mode/on")
+def manual_on():
+    _runtime.manual_mode = True
+    return {"manual_mode": True}
+
+@app.post("/api/manual_mode/off")
+def manual_off():
+    _runtime.manual_mode = False
+    return {"manual_mode": False}
 
 
 def run():

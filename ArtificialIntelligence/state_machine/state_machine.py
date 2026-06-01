@@ -29,9 +29,12 @@ SC5_3_ADVICE = Scene.SCENE_5_SHOT_3_ADVICE.value
 
 STATES = [scene.value for scene in Scene]
 
-INITIAL = IDLE
+INITIAL = SC2_AWAITING_HAND
 ANY_SOURCE = "*"
 
+DEBUG_STATES = [DEBUG_HAND_ABSENT, 
+                DEBUG_HAND_TILTED, 
+                DEBUG_HAND_WRONG_SIDE]
 
 @dataclass(frozen=True)
 class StateChange:
@@ -54,14 +57,14 @@ TRANSITIONS = [
     # Camera / hand input.
 
     # Debug
-    _transition("ip_hand_absent",[ DEBUG_HAND_TILTED,DEBUG_HAND_WRONG_SIDE], 
+    _transition("ip_hand_absent",[ DEBUG_HAND_TILTED,DEBUG_HAND_WRONG_SIDE, SC2_AWAITING_HAND, SC2_HAND_FOUND], 
                                 DEBUG_HAND_ABSENT, before="store_previous_transition"),
-    _transition("ip_hand_tilted",[ DEBUG_HAND_ABSENT,DEBUG_HAND_WRONG_SIDE], 
+    _transition("ip_hand_tilted",[ DEBUG_HAND_ABSENT,DEBUG_HAND_WRONG_SIDE, SC2_AWAITING_HAND, SC2_HAND_FOUND], 
                                 DEBUG_HAND_TILTED, before="store_previous_transition"),
-    _transition("ip_hand_wrong_side",[ DEBUG_HAND_ABSENT,DEBUG_HAND_TILTED], 
+    _transition("ip_hand_wrong_side",[ DEBUG_HAND_ABSENT,DEBUG_HAND_TILTED, SC2_AWAITING_HAND, SC2_HAND_FOUND], 
                                 DEBUG_HAND_WRONG_SIDE, before="store_previous_transition"),
     _transition("exit_debug", [DEBUG_HAND_ABSENT, DEBUG_HAND_TILTED, DEBUG_HAND_WRONG_SIDE], 
-                                IDLE, after="return_to_previous_transition"),
+                                None, before="return_to_previous_transition"),
     # Scene 0
     _transition("ip_person_seated", IDLE, SC1_START), 
     # Scene 1
@@ -81,7 +84,7 @@ TRANSITIONS = [
     _transition("advice_done", SC5_3_ADVICE, OUTRO),
     # End
     _transition("ip_person_left", OUTRO, RESTART),
-    _transition("reset", ANY_SOURCE, IDLE),
+    _transition("reset", ANY_SOURCE, SC2_AWAITING_HAND),
 ]
 
 TRANSITION_IDS = list(dict.fromkeys(item["trigger"] for item in TRANSITIONS))
@@ -178,16 +181,19 @@ class WitchStateMachine:
             ignore_invalid_triggers=True,
             graph_engine="mermaid",
             title="The Witch State Machine",
+            send_event = True,
         )
 
-    def store_previous_transition(self, event=None):
-        if event:
-            self.previous_state = event.transition.source
-            self.previous_trigger = event.event.name
+    def store_previous_transition(self, event_data):
+        source = event_data.transition.source
+        if source not in DEBUG_STATES:
+            self.previous_state = source
+            self.previous_trigger = event_data.event.name
 
-    def return_to_previous_transition(self):
+    def return_to_previous_transition(self, event_data):
         if self.previous_state:
-            self._machine.set_state(self.previous_state, model=self)
+            event_data.transition.dest = self.previous_state
+            event_data.result = True
 
     
     @property
@@ -222,6 +228,8 @@ class WitchStateMachine:
             if change is None:
                 break
             changes.append(change)
+            if trigger == "exit_debug":
+                break
             if self.state in seen_states:
                 break
             seen_states.add(self.state)
