@@ -62,17 +62,12 @@ def _get_base_texts(trigger: str, hand_event: HandEvent, lengths: dict[str, floa
     except Exception:
         return ""
 
-    dominant = result.get("dominant_element") if result else None
-
-    package_texts = _load_package_texts()
-    if not lines and not package_texts:
+    if not lines:
         return ""
 
-    storyline = _build_storyline(lines, package_texts, dominant)
-    if not storyline:
-        return ""
 
-    joined = " ".join(line for line in storyline if line)
+
+    joined = " ".join(line for line in lines if line)
 
     return (
         "Hier sind deine verbindlichen Basistexte. Übersetze sie fließend in deinen "
@@ -81,29 +76,6 @@ def _get_base_texts(trigger: str, hand_event: HandEvent, lengths: dict[str, floa
         f"{joined}"
     )
 
-
-def _load_package_texts() -> dict[str, list[str]]:
-    try:
-        package_path = Path(__file__).resolve().parent / "package.json"
-        with open(package_path, "r") as json_file:
-            return json.loads(json_file.read())
-    except Exception:
-        return {}
-
-
-
-def _build_storyline(
-    element_lines: list[str],
-    package_texts: dict[str, list[str]],
-    dominant_element: str | None = None,
-) -> list[str]:
-    storyline: list[str] = []
-
-    for line in element_lines:
-        if line:
-            storyline.append(line)
-
-    return storyline
 
 
 
