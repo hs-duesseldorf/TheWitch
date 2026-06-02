@@ -136,10 +136,12 @@
         </section>
 
         <section class="panel top-box">
-            <div class="head"><h2>Person Events</h2></div>
+            <div class="head"><h2>Other Events</h2></div>
             <div class="body">
                 <button data-person-event="person_detected">Person detected</button>
                 <button data-person-event="person_absent">Person absent</button>
+
+                <button data-animation-event="animation-event_done">Animation done</button>
             </div>
         </section>
 
@@ -235,6 +237,17 @@
                     await loadGraph();
                 };
             });
+
+            document.querySelectorAll("[data-animation-event]").forEach(btn => {
+                btn.onclick = async () => {
+                    const ev = btn.dataset.animationEvent;
+                    await fetch(`${API}/api/sim_animation_event`, { method: "POST" });
+                    await updateState();
+                    await loadGraph();
+                };
+            });
+
+            
         });
 
         window.addEventListener("beforeunload", () => {

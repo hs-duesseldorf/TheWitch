@@ -86,6 +86,11 @@ async def simulate_person_event(event: str):
     result = await _runtime.simulate_person_event(event)
     return {"state": result}
 
+@app.post("/api/sim_animation_event")
+async def simulate_event_done():
+    result = await _runtime._simulate_event_done()
+    return {"state": result}
+
 @app.post("/api/state/{state}")
 def set_state(state: str):
     result = _runtime.force_state(state)
@@ -96,11 +101,13 @@ def set_state(state: str):
 @app.post("/api/manual_mode/on")
 def manual_on():
     _runtime.manual_mode = True
+    _state_machine.manual_mode = True
     return {"manual_mode": True}
 
 @app.post("/api/manual_mode/off")
 def manual_off():
     _runtime.manual_mode = False
+    _state_machine.manual_mode = False
     return {"manual_mode": False}
 
 

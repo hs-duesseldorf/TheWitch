@@ -31,8 +31,8 @@ class Scene(str, Enum):
 
     # DEBUG / HAND DETECTION
     SCENE_DEBUG_SHOT_1_HAND_ABSENT = "scene_debug_shot_1_hand_absent"
-    SCENE_DEBUG_SHOT_2_HAND_TILTED = "scene_debug_shot_3_hand_tilted"
-    SCENE_DEBUG_SHOT_3_HAND_WRONG_SIDE = "scene_debug_shot_5_hand_wrong_side"
+    SCENE_DEBUG_SHOT_2_HAND_TILTED = "scene_debug_shot_2_hand_tilted"
+    SCENE_DEBUG_SHOT_3_HAND_WRONG_SIDE = "scene_debug_shot_3_hand_wrong_side"
     # OTHER SCENES
     SCENE_0_IDLE = "scene_0_idle"
     SCENE_6_OUTRO = "scene_6_outro"

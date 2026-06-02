@@ -109,8 +109,6 @@ class WitchRuntime:
                         trigger=change.trigger,
                     ),
                 )
-                if self.manual_mode:
-                    asyncio.create_task(self._simulate_event_done())
             await self._ip_channel.broadcast(event)
 
     async def _handle_hand_event(self, event: HandEvent) -> None:
@@ -132,6 +130,7 @@ class WitchRuntime:
     async def _advance_post_scan_without_3d_events(self) -> list[StateChange]:
         changes: list[StateChange] = []
         while self._state_machine.state in POST_SCAN_NO_WAIT_STATES:
+            asyncio.create_task(self._simulate_event_done())
             next_changes = self._state_machine.event_done(self._state_machine.state)
             if not next_changes:
                 break
@@ -212,14 +211,17 @@ class WitchRuntime:
             self._pending_scene_changes = []
 
 
-    async def _simulate_event_done(self):
-        await asyncio.sleep(3)
+    async def _simulate_event_done(self) -> str:
+        if not self.manual_mode:
+            await asyncio.sleep(3)
 
         changes = self._state_machine.event_done(self._state_machine.state)
         await self._broadcast_scene_changes(changes)
 
-        if self._state_machine.state in SCENES_THAT_DELIVER_FORTUNE:
-            await self._trigger_analysis([])
+        #if self._state_machine.state in SCENES_THAT_DELIVER_FORTUNE:
+        #    await self._trigger_analysis([])
+
+        return self._state_machine.state
 
     async def simulate_hand_event(self, event:str) -> str:
         try:
