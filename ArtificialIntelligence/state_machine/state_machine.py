@@ -29,7 +29,7 @@ SC5_3_ADVICE = Scene.SCENE_5_SHOT_3_ADVICE.value
 
 STATES = [scene.value for scene in Scene]
 
-INITIAL = SC2_AWAITING_HAND
+INITIAL = IDLE
 ANY_SOURCE = "*"
 
 DEBUG_STATES = [DEBUG_HAND_ABSENT, 
@@ -84,7 +84,7 @@ TRANSITIONS = [
     _transition("advice_done", SC5_3_ADVICE, OUTRO),
     # End
     _transition("ip_person_left", OUTRO, RESTART),
-    _transition("reset", ANY_SOURCE, SC2_AWAITING_HAND),
+    _transition("reset", ANY_SOURCE, INITIAL),
 ]
 
 TRANSITION_IDS = list(dict.fromkeys(item["trigger"] for item in TRANSITIONS))
@@ -122,6 +122,10 @@ HAND_TRIGGER_BY_STATE: dict[str, dict[str, str]] = {
         "tilted": "ip_hand_tilted",
         "ready": "exit_debug",
         "present": "exit_debug",
+    },
+    SC1_START: {
+        "ready": "instructions_stone_done",
+        "present": "instructions_stone_done",
     },
     SC2_AWAITING_HAND: {
         "absent": "ip_hand_absent",
@@ -228,8 +232,11 @@ class WitchStateMachine:
             if change is None:
                 break
             changes.append(change)
-            if trigger == "exit_debug":
-                break
+        # THIS IS FOR MANUAL MODE TO NOT LEAVE THE NEW STATE IMMEDIATELY
+        # Gonna have to look if once the states are properly working it will resume the old state or just skip it
+        # on debug return
+            #if trigger == "exit_debug":
+            #    break
             if self.state in seen_states:
                 break
             seen_states.add(self.state)

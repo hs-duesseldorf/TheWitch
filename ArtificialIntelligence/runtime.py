@@ -25,6 +25,7 @@ from shared.events import (
     HandEvent,
     HandTrigger,
     PersonEvent,
+    PersonTrigger,
     Scene,
     SceneCommandEvent,
     WitchEvent,
@@ -122,6 +123,11 @@ class WitchRuntime:
 
         if self._state_machine.state in SCENES_THAT_START_ANALYSIS:
             await self._trigger_analysis([])
+
+    async def _handle_person_event(self, event: PersonEvent) -> None:
+        self._person_event = event
+        changes = self._state_machine.person_event(event)
+        await self._broadcast_scene_changes(changes)
 
     async def _advance_post_scan_without_3d_events(self) -> list[StateChange]:
         changes: list[StateChange] = []
@@ -232,7 +238,21 @@ class WitchRuntime:
         await self._handle_hand_event(event)
 
         return self._state_machine.state
+    
+    async def simulate_person_event(self, event:str) -> str:
+        try:
+            trigger_enum = PersonTrigger(event)
+        except ValueError:
+            raise ValueError(f"Ungültiger PersonTrigger: {event}")
 
+        event = PersonEvent(
+            trigger=trigger_enum,
+            origin="ManualSimulation",
+        )
+
+        await self._handle_person_event(event)
+
+        return self._state_machine.state
 
     @property
     def state(self) -> str:

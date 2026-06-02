@@ -81,6 +81,11 @@ async def simulate_hand_event(event: str):
     result = await _runtime.simulate_hand_event(event)
     return {"state": result}
 
+@app.post("/api/sim_person_event/{event}")
+async def simulate_person_event(event: str):
+    result = await _runtime.simulate_person_event(event)
+    return {"state": result}
+
 @app.post("/api/state/{state}")
 def set_state(state: str):
     result = _runtime.force_state(state)

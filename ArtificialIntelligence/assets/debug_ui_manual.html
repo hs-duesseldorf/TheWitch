@@ -27,8 +27,25 @@
             }
             main {
                 display: grid;
-                gap: 12px;
+                grid-template-columns: 250px 250px 1fr;
+                grid-template-rows: auto auto;
+                gap: 16px;
                 padding: 16px;
+            }
+            .body {
+                display: flex;
+                flex-direction: column;   
+                align-items: center;      
+                gap: 10px;                
+                padding: 16px;
+            }
+            .top-box {
+                grid-row: 1;
+            }
+
+            .graph-wide {
+                grid-column: 1 / 4;
+                grid-row: 2;
             }
             .switcher {
                 display: flex;
@@ -105,32 +122,32 @@
     <header class="switcher">
         <button id="switchToDebug">Full Debug UI</button>
     </header>
-    <main>
+        <main>
 
-        <section class="panel">
-            <div class="head">
-                <h2>Manual Hand Events</h2>
-            </div>
+                <section class="panel top-box">
+            <div class="head"><h2>Hand Events</h2></div>
             <div class="body">
-                <button data-event="hand_detected">Hand detected</button>
-                <button data-event="hand_absent">Hand absent</button>
-                <button data-event="hand_wrong_side">Wrong side</button>
-                <button data-event="hand_not_fully_in_view">Not fully in view</button>
-                <button data-event="hand_tilted">Hand tilted</button>
+                <button data-hand-event="hand_detected">Hand detected</button>
+                <button data-hand-event="hand_absent">Hand absent</button>
+                <button data-hand-event="hand_wrong_side">Wrong side</button>
+                <button data-hand-event="hand_not_fully_in_view">Not fully in view</button>
+                <button data-hand-event="hand_tilted">Hand tilted</button>
             </div>
         </section>
 
-        <section class="panel">
-            <div class="head">
-                <h2>Current State</h2>
-            </div>
+        <section class="panel top-box">
+            <div class="head"><h2>Person Events</h2></div>
             <div class="body">
-                <div>
-                    <span id="currentState" class="state">-</span>
-                </div>
-                <div>
-                    <button id="resetButton">Reset</button>
-                </div>
+                <button data-person-event="person_detected">Person detected</button>
+                <button data-person-event="person_absent">Person absent</button>
+            </div>
+        </section>
+
+        <section class="panel top-box">
+            <div class="head"><h2>Current State</h2></div>
+            <div class="body">
+                <span id="currentState" class="state">-</span>
+                <button id="resetButton">Reset</button>
             </div>
         </section>
 
@@ -201,10 +218,19 @@
                 window.location.href = "/debug_ui.html";
             };
 
-            document.querySelectorAll("[data-event]").forEach(btn => {
+            document.querySelectorAll("[data-hand-event]").forEach(btn => {
                 btn.onclick = async () => {
-                    const ev = btn.dataset.event;
+                    const ev = btn.dataset.handEvent;
                     await fetch(`${API}/api/sim_hand_event/${ev}`, { method: "POST" });
+                    await updateState();
+                    await loadGraph();
+                };
+            });
+
+            document.querySelectorAll("[data-person-event]").forEach(btn => {
+                btn.onclick = async () => {
+                    const ev = btn.dataset.personEvent;
+                    await fetch(`${API}/api/sim_person_event/${ev}`, { method: "POST" });
                     await updateState();
                     await loadGraph();
                 };
