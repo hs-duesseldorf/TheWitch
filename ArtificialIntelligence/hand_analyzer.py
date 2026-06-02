@@ -16,7 +16,7 @@ _SYSTEM_PROMPT = (
     "Beginne sofort mit der Vorhersage, ohne Analyse oder Vorrede.\n"
     "STRIKTE REGEL: Du bist ein reiner Text-Transformator. Erfinde KEINE eigenen Geschichten, Linien oder Metaphern.\n"
     "Nimm die bereitgestellten Basistexte und übersetze sie VOLLSTÄNDIG und OHNE Sinnveränderung in den Tonfall einer weisen, düsteren Wahrsagerin.\n"
-    "Das in den Basistexten genannte dominante Element MUSS namentlich und prominent in der Antwort vorkommen.\n"
+    "Das in den Basistexten genannte dominante Element (z. B. Holz, Feuer, Erde, Wasser, Metall) MUSS namentlich, laut und unmissverständlich als Wort in der Antwort ausgesprochen werden. Es darf NIEMALS weggelassen oder durch Worte wie 'Hand' ersetzt werden."
     "Es geht immer um eine menschliche Hand, niemals um ein Handtuch.\n"
     "Verwende nie die Woerter Handtuch, Tuch oder Stoff.\n"
     "Kein Markdown, keine Klammern, keine Emojis.\n"
@@ -40,8 +40,6 @@ def build_prompt(hand_event: HandEvent | None) -> str:
         if base_texts:
             data_desc.append(base_texts)
 
-    if vector:
-        data_desc.append("Linien- und Handflaechenmuster sind erkannt")
 
     data_str = " ".join(data_desc) if data_desc else "Keine messbaren Daten"
 
@@ -71,8 +69,10 @@ def _get_base_texts(trigger: str, hand_event: HandEvent, lengths: dict[str, floa
 
     return (
         "Hier sind deine verbindlichen Basistexte. Übersetze sie fließend in deinen "
-        "mystischen Stil, aber behalte JEDE Information und JEDEN Satzbau-Sinn bei. "
-        "Es darf absolut kein Fakt oder Inhalt weggelassen oder verkürzt werden: "
+        "mystischen Stil. WICHTIG: Das einzelne Element-Wort (wie 'Holz', 'Feuer' etc.) "
+        "aus den Texten MUSS von dir als echtes, gesprochenes Wort in die Sätze eingebaut werden. "
+        "Es darf absolut kein Fakt, kein Inhalt und vor allem kein Element-Name weggelassen, "
+        "verändert oder verkürzt werden: "
         f"{joined}"
     )
 

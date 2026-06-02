@@ -1,64 +1,29 @@
 
+
 {
-"einstieg": [
-"Setz dich. Der Raum hat dich bereits bemerkt.",
-"Du bist nicht zufällig hier erschienen.",
-"Dein Atem trägt Geschichten mit sich.",
-"Ich habe dich erwartet, auch wenn du es nicht wusstest.",
-"Sprich nicht. Ich sehe bereits genug.",
-"Der Moment hat dich zu mir geführt."
-],
-
-"allgemeine_aussagen": [
-"Du trägst eine Entscheidung in dir, die du noch nicht anerkannt hast.",
-"Ein Teil von dir hält fest, während ein anderer längst loslassen will.",
-"Du suchst Klarheit, aber fürchtest, was sie dir zeigen könnte.",
-"Etwas Unausgesprochenes begleitet dich schon lange.",
-"Du stehst näher an einer Veränderung, als du glaubst.",
-"Dein Weg ist nicht blockiert, nur verzögert."
-],
-
-"dominant_element" : {
-  "holz": "Dein Kernelement ist das Holz, das deinen endlosen Wunsch antreibt, zu wachsen, deinen Horizont zu erweitern und dich jeder Kontrolle zu entziehen. Mit einem unbeugsamen Überlebensinstinkt und einem reinen, abenteuerlustigen Herzen beschreitest du furchtlos neue Wege und bleibst deinen einzigartigen Standards treu.",
-  "feuer" : "Dein Kernelement, dasjenige, das dich definiert, ist das Feuer. Wie ein Lagerfeuer, das in der Dunkelheit brennt, stichst du heraus. Deine Emotionen kommen schnell an die Oberfläche. Du bist niemand, der Geheimnisse für sich behält, und du hast wenig Toleranz für Respektlosigkeit. ",
-  "erde" : "Dein Kernelement ist die Erde, was dir das vertrauenswürdige Wesen eines unbeweglichen Berges verleiht, der in jeder Situation das Gleichgewicht bewahrt und standhaft bleibt. Hinter einem ruhigen, lächelnden Pokerface verbirgt sich eine heimliche Sturheit, verankert in unumstößlichen Routinen und einem vorsichtigen Geist, der deine Taten manchmal verzögern kann. ",
-  "wasser" : "Dein Kernelement ist das Wasser, was dir die ultimative Anpassungsfähigkeit und Flexibilität verleiht, dich nahtlos in jede Umgebung einzufügen. Wie Wasser, das in die feinsten Risse eines festen Felsens sickert, besitzt du eine scharfe Intuition, die den Kern der Dinge durchdringt und Wissen mühelos aufsaugt, um die verborgenen Muster der Welt zu verstehen."
-},
-
-"weak_element": {
-    "holz": "Du stehst als einsamer, riesiger Baum auf einer weiten Ebene und trotzt den heftigen Winden ganz allein. Da dir schützende Gefährten fehlen, um den Sturm zu teilen, verlässt du dich auf unnachgiebige Unabhängigkeit und sturen Ehrgeiz. Doch nirgends anlehnen zu können, macht dich extrem misstrauisch und hinterlässt eine geheime Einsamkeit.  ",
-    "feuer": "Du brennst allein auf einem dunklen Platz und erschöpfst deine Flamme für andere, während dein Funken zu erlöschen droht. Ohne Gefährten, die deine Hitze teilen, verbirgst du Einsamkeit und Erschöpfung hinter einer hellen fassade. Dein Überlebensinstinkt ist stark entwickelt. Doch weil dein inneres Ich-Rückgrat schwach ist, schwankt deine Flamme leicht unter äußeren Anforderungen.",
-    "erde": "Du stehst völlig allein inmitten eines heftigen Sturms; es fehlt an schützenden Mauern oder solidem Boden, um dich zu verankern. Jede Prüfung allein zu meistern, erzeugt eine tiefe Einsamkeit, doch dein Überlebensinstinkt ist stark entwickelt. Da dein inneres Ich-Rückgrat jedoch schwach ist, verlierst du leicht den Halt und wirst von anderen beeinflusst oder ausgenutzt.",
-    "wasser": "Du stehst als zerbrechliche Quelle völlig allein in einer ausgetrockneten Wüste; es fehlt an Gefährten, um deine Strömung zu teilen. Jede Prüfung allein zu meistern, erzeugt eine tiefe Einsamkeit, doch dein unabhängiger Geist ist stark entwickelt. Da dein inneres Ich-Rückgrat jedoch schwach ist, zerbricht dein Geist trotz flexibler fassade leicht unter äußeren Anforderungen. "
-},
-
-"advise_weak" : {
-  "holz": "Um deine fehlende Holzenergie zu beleben, umgieb deinen Alltag mit lebendigen grünen Gegenständen und Zimmerpflanzen. Spaziere an Wochenenden durch üppige Parks, um die frische Vitalität aufzunehmen, die deinen Antrieb neu startet.",
-  "feuer" : "Um deine fehlende Feuerenergie zu entfachen, zünde täglich Duftkerzen an und setze auf rote oder orangefarbene Akzente. Genieße an sonnigen Tagen die Sonne auf einer Café-Terrasse, um deine Leidenschaft aufzuladen.",
-  "erde" : "Um deine fehlende Erd-Stabilität zu erden, trage oft warme Beige- oder Brauntöne und berühre Keramikbecher. Wandere an Wochenenden oder gehe barfuß auf feldwegen, um dein berggleiches, friedliches Zentrum zu finden.",
-  "wasser" : "Um deine fehlende Wasserweisheit einzuladen, trage tiefe Schwarz- oder Marinetöne und trinke aus transparenten Bechern. Wenn dein Geist überlastet ist, schlendere bei Sonnenuntergang an einem flussufer entlang, um Unruhe aufzulösen."
-},
-
-"verbindung": [
-"Du stehst zwischen Bewegung und Stillstand.",
-"In dir kämpfen zwei Kräfte um Richtung.",
-"Du suchst Kontrolle, doch etwas will sich entfalten.",
-"Deine Stärke und deine Unsicherheit sind enger verbunden, als du denkst.",
-"Was dich schützt, hält dich gleichzeitig zurück."
-],
-"zukunft": [
-"Der richtige Moment nähert sich, aber er ist noch nicht da.",
-"Wenn du jetzt handelst, veränderst du mehr als geplant.",
-"Ein neuer Weg wird sich zeigen, wenn du bereit bist.",
-"Du wirst wählen müssen, auch wenn du es vermeiden willst.",
-"Das, was kommt, hängt von deinem nächsten Schritt ab."
-],
-"abschluss": [
-"Der Kreis ist noch nicht geschlossen.",
-"Wir werden uns wiedersehen.",
-"Der Schatten folgt dir noch.",
-"Achte auf das, was sich wiederholt.",
-"Nicht alles ist gesagt."
-]
+  "shot_1" : {
+    "erde": "Deine Finger bleiben nah beieinander. Kaum Spannung nach außen.Du gehst selten ins Risiko, wenn du keinen Grund siehst.Und du brauchst oft einen sehr guten Grund.",
+    "holz": "Deine Finger sind lang und oft unter Spannung. Das zeigt deinen endlosen Wunsch, zu wachsen und deinen Horizont zu erweitern. Stillstand erträgst du schwer.",
+    "feuer": "Deine Haut wirkt lebhaft und warm. Das zeigt: Deine Emotionen kommen schnell an die Oberfläche. Und du hast wenig Toleranz für Respektlosigkeit.",
+    "wasser": "Deine Hand wirkt geschmeidig, die Finger passen sich leicht an. Das verleiht dir die ultimative Anpassungsfähigkeit, dich nahtlos in jede Umgebung einzufügen."
+  },
+  "shot_3" : {
+    "erde": "Erde.Du hältst Dinge zusammen. Auch wenn sie eigentlich auseinanderfallen sollten",
+    "holz": "Holz. Du beschreitest furchtlos neue Wege[cite: 19]. Auch wenn du dich dabei oft jeder Kontrolle entziehen willst.",
+    "feuer": "Feuer. Wie ein Lagerfeuer, das in der Dunkelheit brennt, stichst du heraus. Du bist niemand, der Geheimnisse für sich behält.",
+    "wasser": "Wasser. Du besitzt eine scharfe Intuition, die den Kern der Dinge durchdringt. Wie Feuchtigkeit, die in Risse sickert."
+  },
+  "shot_4" :{
+    "erde": "Andere verlassen sich schnell auf dich. Du wirkst stabil.Aber du denkst lange. Sehr lange. Ist es die Sorgfalt oder das Zögern?",
+    "holz": "Deine Kraft zu planen und dich zu entfalten ist immens. Doch es fällt dir schwer, die Dinge zu einem fruchtbaren Abschluss zu bringen.",
+    "feuer": "Deine Tatkraft ist intensiv. Dennoch neigst du zum Burnout, genau wie ein Feuer, dem der Brennstoff ausgeht.",
+    "wasser": "Du saugst Wissen mühelos auf, um die Muster der Welt zu verstehen. Doch ähnlich wie die Tiefe des Ozeans neigst du dazu, deine wahren Gedanken bis ganz zum Schluss zu verbergen."
+  },
+  "shot_5" : {
+    "erde": "Um deine fehlende Erd-Stabilität zu erden, trage oft warme Beige- oder Brauntöne und berühre Keramikbecher. Wandere an Wochenenden oder gehe barfuß auf feldwegen, um dein berggleiches, friedliches Zentrum zu finden.",
+    "holz": "Um deine fehlende Holzenergie zu beleben, umgieb deinen Alltag mit lebendigen grünen Gegenständen und Zimmerpflanzen. Spaziere an Wochenenden durch üppige Parks, um die frische Vitalität aufzunehmen, die deinen Antrieb neu startet.",
+    "feuer": "Um deine fehlende Feuerenergie zu entfachen, zünde täglich Duftkerzen an und setze auf rote oder orangefarbene Akzente. Genieße an sonnigen Tagen die Sonne auf einer Café-Terrasse, um deine Leidenschaft aufzuladen.",
+    "wasser": "Um deine fehlende Wasserweisheit einzuladen, trage tiefe Schwarz- oder Marinetöne und trinke aus transparenten Bechern. Wenn dein Geist überlastet ist, schlendere bei Sonnenuntergang an einem flussufer entlang, um Unruhe aufzulösen."
+  }
 }
  

@@ -194,24 +194,33 @@ def GetLines(result: Dict[str, Any]) -> list[str]:
     
     dominant_element = result.get("dominant_element")
     weakest_element = result.get("weakest_element")
-    element_states = result.get("element_states", {})
 
 
     if dominant_element:
-        dominant_line = lines.get("dominant_element", {}).get(dominant_element)
-        if dominant_line:
-            lines_list.append(dominant_line)
+        shot_1_line = lines.get("shot_1", {}).get(dominant_element)
+        if shot_1_line:
+            lines_list.append(shot_1_line)
         else:
-            print(f"DEBUG: dominant_line nicht gefunden fuer '{dominant_element}'")
+            print(f"DEBUG: shot_1_line nicht gefunden fuer '{dominant_element}'")
+        
+        shot_3_line = lines.get("shot_3", {}).get(dominant_element)
+        if shot_3_line:
+            lines_list.append(shot_3_line)
+        else:
+            print(f"DEBUG: shot_3_line nicht gefunden fuer '{dominant_element}'")
+        
+        shot_4_line = lines.get("shot_4", {}).get(dominant_element)
+        if shot_4_line:
+            lines_list.append(shot_4_line)
+        else:
+            print(f"DEBUG: shot_4_line nicht gefunden fuer '{dominant_element}'")
 
     if weakest_element:
-        weakest_line = lines.get("weak_element", {}).get(weakest_element)
-        adv_line = lines.get("advise_weak", {}).get(weakest_element)
-        if weakest_line:
-            lines_list.append(weakest_line)
-            lines_list.append(adv_line) 
+        shot_5_line = lines.get("shot_5", {}).get(weakest_element)
+        if shot_5_line:
+            lines_list.append(shot_5_line)
         else:
-            print(f"DEBUG: weakest_line nicht gefunden fuer '{weakest_element}'")
+            print(f"DEBUG: shot_5_line nicht gefunden fuer '{weakest_element}'")
     return lines_list
     
 
