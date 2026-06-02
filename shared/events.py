@@ -27,43 +27,31 @@ class Hand(str, Enum):
 
 
 class Scene(str, Enum):
+    #Shortened Statemachine
+
     # DEBUG / HAND DETECTION
-    SCENE_DEBUG_HAND_DETECTION = "scene_debug_hand_detection"
     SCENE_DEBUG_SHOT_1_HAND_ABSENT = "scene_debug_shot_1_hand_absent"
-    SCENE_DEBUG_SHOT_2_HAND_MOVING = "scene_debug_shot_2_hand_moving"
-    SCENE_DEBUG_SHOT_3_HAND_TILTED = "scene_debug_shot_3_hand_tilted"
-    SCENE_DEBUG_SHOT_4_HAND_OUTSIDE_FRAME = "scene_debug_shot_4_hand_not_fully_in_view"
-    SCENE_DEBUG_SHOT_5_HAND_WRONG_SIDE = "scene_debug_shot_5_hand_wrong_side"
-    # START / IDLE
+    SCENE_DEBUG_SHOT_2_HAND_TILTED = "scene_debug_shot_3_hand_tilted"
+    SCENE_DEBUG_SHOT_3_HAND_WRONG_SIDE = "scene_debug_shot_5_hand_wrong_side"
+    # OTHER SCENES
     SCENE_0_IDLE = "scene_0_idle"
-    # WELCOME
-    SCENE_1_AWAITING_HAND = "scene_1_awaiting_hand"
-    SCENE_1_SHOT_2_YES_HAND_FOUND = "scene_1_shot_2_yes_hand_found"
-    # INTRO
-    SCENE_2_SHOT_1_HAND_STAYS_FOCUSED = "scene_2_shot_1_hand_stays_focused"
-    # SCAN
-    SCENE_3_SCANNING_HAND = "scanning_hand"
-    SCENE_3_SHOT_1_CORRECT_HAND = "scene_3_shot_1_correct_hand"
-    SCENE_3_SHOT_4_SCAN_DONE = "scene_3_shot_4_scan_done"
-    # TRANSFORM
-    SCENE_4_TRANSFORM = "scene_4_transform"
-    # STORY
-    SCENE_5_WITCH_ORIGIN_STORY = "scene_5_witch_origin_story"
-    # READING
-    SCENE_6_VISUAL_IMAGE_HAND = "scene_6_visual_image_hand"
-    SCENE_6_SHOT_1_POINT_OUT_DETAILS = "scene_6_shot_1_point_out_details"
-    SCENE_6_SHOT_2_INTERACTIVE_TASK = "scene_6_shot_2_interactive_task"
-    SCENE_6_SHOT_2_1_TASK_DONE = "scene_6_shot_2_1_task_done"
-    SCENE_6_SHOT_2_2_TASK_IGNORED = "scene_6_shot_2_2_task_ignored"
-    SCENE_6_SHOT_3_ASSIGN_ELEMENTS = "scene_6_shot_3_assign_elements"
-    SCENE_6_SHOT_4_ELEMENT_ANALYSIS = "scene_6_shot_4_element_analysis"
-    SCENE_6_SHOT_5_INNER_BALANCE = "scene_6_shot_5_inner_balance"
-    # END
-    SCENE_7_LAST_WORDS = "scene_7_last_words"
-    SCENE_7_SHOT_1_RETURN_TO_IDLE = "scene_7_shot_1_return_to_idle"
-    SCENE_7_SHOT_2_DISAPPEAR = "scene_7_shot_2_disappear"
-    # RESTART
+    SCENE_6_OUTRO = "scene_6_outro"
     SCENE_RESTART = "scene_restart"
+    # SCENE 1 - Welcome / instructions
+    SCENE_1_START = "scene_1_start"
+    # SCENE 2 - Hand inside stone
+    SCENE_2_AWAITING_HAND = "scene_2_awaiting_hand"
+    SCENE_2_HAND_FOUND = "scene_2_hand_found"
+    # SCENE 3 - Handscan
+    SCENE_3_HANDSCAN_IN_PROCESS = "scene_3_handscan_in_process"
+    SCENE_3_HANDSCAN_DONE = "scene_3_handscan_done"
+    # SCENE 4 - Transformation
+    SCENE_4_TRANSFORMATION = "scene_4_transformation"
+    # SCENE 5 - Hand reading
+    SCENE_5_HANDREAD_VISUALISATION = "scene_5_handread_visualisation"
+    SCENE_5_SHOT_1_CORE_ELEMENT = "scene_5_shot_1_core_element"
+    SCENE_5_SHOT_2_WEAK_ELEMENT = "scene_5_shot_2_weak_element"
+    SCENE_5_SHOT_3_ADVICE = "scene_5_shot_3_advice"
 
 
 # Events

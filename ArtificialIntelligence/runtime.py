@@ -23,7 +23,9 @@ from shared.events import (
     ErrorEvent,
     EventDoneEvent,
     HandEvent,
+    HandTrigger,
     PersonEvent,
+    PersonTrigger,
     Scene,
     SceneCommandEvent,
     WitchEvent,
@@ -32,9 +34,8 @@ from shared.events import (
 logger = logging.getLogger("ai")
 
 POST_SCAN_NO_WAIT_STATES = frozenset({
-    Scene.SCENE_3_SHOT_4_SCAN_DONE.value,
-    Scene.SCENE_4_TRANSFORM.value,
-    Scene.SCENE_5_WITCH_ORIGIN_STORY.value,
+    Scene.SCENE_3_HANDSCAN_DONE.value,
+    Scene.SCENE_4_TRANSFORMATION.value,
 })
 
 
@@ -51,6 +52,7 @@ class WitchRuntime:
         self._state_machine = state_machine
         self._hand_event: HandEvent | None = None
         self._pending_scene_changes: list[StateChange] = []
+        self.manual_mode = False
 
         self._ip_channel = EventChannel(
             ws_server=ws_server,
@@ -87,6 +89,10 @@ class WitchRuntime:
         event = self._ip_channel.decode(message)
         if event is None:
             return
+        
+        if isinstance(event, HandEvent):
+            if self.manual_mode:
+                return
 
         if isinstance(event, HandEvent):
             logger.info("Broadcasting hand event: %s", event.trigger)
@@ -103,6 +109,8 @@ class WitchRuntime:
                         trigger=change.trigger,
                     ),
                 )
+                if self.manual_mode:
+                    asyncio.create_task(self._simulate_event_done())
             await self._ip_channel.broadcast(event)
 
     async def _handle_hand_event(self, event: HandEvent) -> None:
@@ -115,6 +123,11 @@ class WitchRuntime:
 
         if self._state_machine.state in SCENES_THAT_START_ANALYSIS:
             await self._trigger_analysis([])
+
+    async def _handle_person_event(self, event: PersonEvent) -> None:
+        self._person_event = event
+        changes = self._state_machine.person_event(event)
+        await self._broadcast_scene_changes(changes)
 
     async def _advance_post_scan_without_3d_events(self) -> list[StateChange]:
         changes: list[StateChange] = []
@@ -198,6 +211,49 @@ class WitchRuntime:
                 )
             self._pending_scene_changes = []
 
+
+    async def _simulate_event_done(self):
+        await asyncio.sleep(3)
+
+        changes = self._state_machine.event_done(self._state_machine.state)
+        await self._broadcast_scene_changes(changes)
+
+        if self._state_machine.state in SCENES_THAT_DELIVER_FORTUNE:
+            await self._trigger_analysis([])
+
+    async def simulate_hand_event(self, event:str) -> str:
+        try:
+            trigger_enum = HandTrigger(event)
+        except ValueError:
+            raise ValueError(f"Ungültiger HandTrigger: {event}")
+
+        event = HandEvent(
+            trigger=trigger_enum,
+            origin="ManualSimulation",
+            hand=None,
+            lengths={},
+            vector=[]
+        )
+
+        await self._handle_hand_event(event)
+
+        return self._state_machine.state
+    
+    async def simulate_person_event(self, event:str) -> str:
+        try:
+            trigger_enum = PersonTrigger(event)
+        except ValueError:
+            raise ValueError(f"Ungültiger PersonTrigger: {event}")
+
+        event = PersonEvent(
+            trigger=trigger_enum,
+            origin="ManualSimulation",
+        )
+
+        await self._handle_person_event(event)
+
+        return self._state_machine.state
+
     @property
     def state(self) -> str:
         return self._state_machine.state
@@ -229,4 +285,4 @@ class WitchRuntime:
                 self._pending_scene_changes = []
                 logger.info("Reset: cancelling speech pipeline")
                 self._speech_pipeline.cancel_sync()
-        return self._state_machine.state
+        return self._state_machine.state 
