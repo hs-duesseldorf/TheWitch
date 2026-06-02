@@ -1,23 +1,24 @@
 from __future__ import annotations
 
+import json
+import random
+from pathlib import Path
+
 from shared.events import HandEvent
+
+from . import hand_analysis
 
 
 _SYSTEM_PROMPT = (
-    "/no_think\n"
+ "/no_think\n"
     "Antworte ausschliesslich auf Deutsch.\n"
     "Gib nur die finale gesprochene Antwort aus.\n"
     "Beginne sofort mit der Vorhersage, ohne Analyse oder Vorrede.\n"
-    "Schreibe eine mystische Zukunftsvorhersage wie eine Hexe oder Wahrsagerin.\n"
-    "Deute die menschliche Hand anhand von Proportionen, Handflaeche, Fingern und Linien.\n"
-    "Sprich ueber kommende Ereignisse, Entscheidungen, Warnungen oder verborgene Chancen.\n"
-    "Antworte mit genau 4 vollstaendigen Saetzen.\n"
-    "Beende den letzten Satz vollstaendig.\n"
-    "Gib eine detaillierte Deutung, aber ohne Wortzaehlungen oder formale Hinweise.\n"
+    "STRIKTE REGEL: Du bist ein reiner Text-Transformator. Erfinde KEINE eigenen Geschichten, Linien oder Metaphern.\n"
+    "Nimm die bereitgestellten Basistexte und übersetze sie VOLLSTÄNDIG und OHNE Sinnveränderung in den Tonfall einer weisen, düsteren Wahrsagerin.\n"
+    "Das in den Basistexten genannte dominante Element (z. B. Holz, Feuer, Erde, Wasser, Metall) MUSS namentlich, laut und unmissverständlich als Wort in der Antwort ausgesprochen werden. Es darf NIEMALS weggelassen oder durch Worte wie 'Hand' ersetzt werden."
     "Es geht immer um eine menschliche Hand, niemals um ein Handtuch.\n"
     "Verwende nie die Woerter Handtuch, Tuch oder Stoff.\n"
-    "Benutze konkrete Handlese-Bilder wie Lebenslinie, Schicksalslinie, Finger oder Handflaeche.\n"
-    "Erfinde keine Messwerte und erwaehne keine technischen Begriffe.\n"
     "Kein Markdown, keine Klammern, keine Emojis.\n"
     "Ton: weise, leicht dunkel, konkret.\n"
     "/no_think\n"
@@ -35,16 +36,48 @@ def build_prompt(hand_event: HandEvent | None) -> str:
 
     data_desc = []
     if lengths:
-        fingers = ", ".join(f"{k}: {v:.1f}" for k, v in lengths.items() if v)
-        if fingers:
-            data_desc.append(f"Fingerlaengen: {fingers}")
+        base_texts = _get_base_texts(trigger, hand_event, lengths)
+        if base_texts:
+            data_desc.append(base_texts)
 
-    if vector:
-        data_desc.append("Linien- und Handflaechenmuster sind erkannt")
 
     data_str = " ".join(data_desc) if data_desc else "Keine messbaren Daten"
 
     return f"{_SYSTEM_PROMPT}\nBeobachtung: {trigger}. Gesehene Hand: {hand}. {data_str}"
+
+
+def _get_base_texts(trigger: str, hand_event: HandEvent, lengths: dict[str, float]) -> str:
+    payload = {
+        "type": "hand",
+        "trigger": trigger,
+        "hand": hand_event.hand.value if hand_event.hand else None,
+        "lengths": lengths,
+    }
+
+    try:
+        result = hand_analysis.build_result(payload)
+        lines = hand_analysis.GetLines(result)
+    except Exception:
+        return ""
+
+    if not lines:
+        return ""
+
+
+
+    joined = " ".join(line for line in lines if line)
+
+    return (
+        "Hier sind deine verbindlichen Basistexte. Übersetze sie fließend in deinen "
+        "mystischen Stil. WICHTIG: Das einzelne Element-Wort (wie 'Holz', 'Feuer' etc.) "
+        "aus den Texten MUSS von dir als echtes, gesprochenes Wort in die Sätze eingebaut werden. "
+        "Es darf absolut kein Fakt, kein Inhalt und vor allem kein Element-Name weggelassen, "
+        "verändert oder verkürzt werden: "
+        f"{joined}"
+    )
+
+
+
 
 
 def _hand_label(hand_event: HandEvent) -> str:
