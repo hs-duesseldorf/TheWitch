@@ -123,10 +123,6 @@ HAND_TRIGGER_BY_STATE: dict[str, dict[str, str]] = {
         "ready": "exit_debug",
         "present": "exit_debug",
     },
-    SC1_START: {
-        "ready": "instructions_stone_done",
-        "present": "instructions_stone_done",
-    },
     SC2_AWAITING_HAND: {
         "absent": "ip_hand_absent",
         "handback": "ip_hand_wrong_side",
@@ -140,6 +136,14 @@ HAND_TRIGGER_BY_STATE: dict[str, dict[str, str]] = {
         "tilted": "ip_hand_tilted",
         "ready": "ip_hand_correct",
         "present": "ip_hand_correct",
+    },
+    SC3_HANDSCAN_IN_PROCESS: {
+        "ready": "hand_scanning",
+        "present": "hand_scanning",
+    },
+    SC3_HANDSCAN_DONE: {
+        "ready": "scan_complete",
+        "present": "scan_complete",
     },
 }
 
@@ -176,6 +180,7 @@ class WitchStateMachine:
         self.previous_trigger = None
         self._transition_handlers: dict[str, list[Callable[[StateChange], Awaitable[None]]]] = {}
         self._state: str = INITIAL
+        self.manual_mode = False
         self._machine = GraphMachine(
             model=self,
             states=STATES,
@@ -222,7 +227,7 @@ class WitchStateMachine:
 
     def hand_event(self, event: HandEvent) -> list[StateChange]:
         condition = hand_condition(event)
-        max_changes = 1 if condition == "absent" else 8
+        max_changes = 1 if self.manual_mode == True or condition == "absent" else 8
         changes: list[StateChange] = []
         seen_states = {self.state}
 
