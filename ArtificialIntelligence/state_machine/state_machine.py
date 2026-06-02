@@ -84,7 +84,7 @@ TRANSITIONS = [
     _transition("advice_done", SC5_3_ADVICE, OUTRO),
     # End
     _transition("ip_person_left", OUTRO, RESTART),
-    _transition("reset", ANY_SOURCE, INITIAL),
+    _transition("reset", ANY_SOURCE, SC1_START),
 ]
 
 TRANSITION_IDS = list(dict.fromkeys(item["trigger"] for item in TRANSITIONS))
@@ -136,6 +136,10 @@ HAND_TRIGGER_BY_STATE: dict[str, dict[str, str]] = {
         "tilted": "ip_hand_tilted",
         "ready": "ip_hand_correct",
         "present": "ip_hand_correct",
+    },
+    SC1_START: {
+        "ready": "instructions_stone_done",
+        "present": "instructions_stone_done",
     },
     SC3_HANDSCAN_IN_PROCESS: {
         "ready": "hand_scanning",
