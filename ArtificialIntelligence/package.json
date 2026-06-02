@@ -1,29 +1,41 @@
-
-
 {
-  "shot_1" : {
-    "erde": "Deine Finger bleiben nah beieinander. Kaum Spannung nach außen.Du gehst selten ins Risiko, wenn du keinen Grund siehst.Und du brauchst oft einen sehr guten Grund.",
-    "holz": "Deine Finger sind lang und oft unter Spannung. Das zeigt deinen endlosen Wunsch, zu wachsen und deinen Horizont zu erweitern. Stillstand erträgst du schwer.",
-    "feuer": "Deine Haut wirkt lebhaft und warm. Das zeigt: Deine Emotionen kommen schnell an die Oberfläche. Und du hast wenig Toleranz für Respektlosigkeit.",
-    "wasser": "Deine Hand wirkt geschmeidig, die Finger passen sich leicht an. Das verleiht dir die ultimative Anpassungsfähigkeit, dich nahtlos in jede Umgebung einzufügen."
+  "scenes": {
+    "scene_1_start": "Setz dich. Lege deine Hand in den Stein und lass sie offen vor mir ruhen.",
+    "scene_2_awaiting_hand": "Ich sehe deine Hand noch nicht klar. Lege sie mit der Innenfläche nach oben in den Stein.",
+    "scene_2_hand_found": "Gut. Ich habe sie erfasst. Halte jetzt still und bewege keinen Finger.",
+    "scene_3_handscan_in_process": "Bleib genau so. Ich lese bereits, was in deinen Linien verborgen liegt.",
+    "scene_3_handscan_done": "Es ist vollbracht. Du darfst die Hand nun langsam aus dem Stein nehmen.",
+    "scene_4_transformation": "Was verborgen war, tritt nun an die Oberfläche.",
+    "scene_6_outro": "Für diesen Augenblick ist alles gesagt. Geh weiter mit wachem Blick.",
+    "scene_restart": "Kehre zurück, wenn du erneut eine Antwort suchst.",
+    "scene_debug_shot_1_hand_absent": "Ich sehe deine Hand nicht. Lege sie vollständig in den Stein.",
+    "scene_debug_shot_2_hand_tilted": "Drehe die Hand flach. Die Innenfläche muss ruhig nach oben zeigen.",
+    "scene_debug_shot_3_hand_wrong_side": "Nicht den Handrücken. Zeig mir die offene Innenfläche."
   },
-  "shot_3" : {
-    "erde": "Erde.Du hältst Dinge zusammen. Auch wenn sie eigentlich auseinanderfallen sollten",
-    "holz": "Holz. Du beschreitest furchtlos neue Wege[cite: 19]. Auch wenn du dich dabei oft jeder Kontrolle entziehen willst.",
-    "feuer": "Feuer. Wie ein Lagerfeuer, das in der Dunkelheit brennt, stichst du heraus. Du bist niemand, der Geheimnisse für sich behält.",
-    "wasser": "Wasser. Du besitzt eine scharfe Intuition, die den Kern der Dinge durchdringt. Wie Feuchtigkeit, die in Risse sickert."
-  },
-  "shot_4" :{
-    "erde": "Andere verlassen sich schnell auf dich. Du wirkst stabil.Aber du denkst lange. Sehr lange. Ist es die Sorgfalt oder das Zögern?",
-    "holz": "Deine Kraft zu planen und dich zu entfalten ist immens. Doch es fällt dir schwer, die Dinge zu einem fruchtbaren Abschluss zu bringen.",
-    "feuer": "Deine Tatkraft ist intensiv. Dennoch neigst du zum Burnout, genau wie ein Feuer, dem der Brennstoff ausgeht.",
-    "wasser": "Du saugst Wissen mühelos auf, um die Muster der Welt zu verstehen. Doch ähnlich wie die Tiefe des Ozeans neigst du dazu, deine wahren Gedanken bis ganz zum Schluss zu verbergen."
-  },
-  "shot_5" : {
-    "erde": "Um deine fehlende Erd-Stabilität zu erden, trage oft warme Beige- oder Brauntöne und berühre Keramikbecher. Wandere an Wochenenden oder gehe barfuß auf feldwegen, um dein berggleiches, friedliches Zentrum zu finden.",
-    "holz": "Um deine fehlende Holzenergie zu beleben, umgieb deinen Alltag mit lebendigen grünen Gegenständen und Zimmerpflanzen. Spaziere an Wochenenden durch üppige Parks, um die frische Vitalität aufzunehmen, die deinen Antrieb neu startet.",
-    "feuer": "Um deine fehlende Feuerenergie zu entfachen, zünde täglich Duftkerzen an und setze auf rote oder orangefarbene Akzente. Genieße an sonnigen Tagen die Sonne auf einer Café-Terrasse, um deine Leidenschaft aufzuladen.",
-    "wasser": "Um deine fehlende Wasserweisheit einzuladen, trage tiefe Schwarz- oder Marinetöne und trinke aus transparenten Bechern. Wenn dein Geist überlastet ist, schlendere bei Sonnenuntergang an einem flussufer entlang, um Unruhe aufzulösen."
+  "hand_analysis": {
+    "shot_1": {
+      "erde": "Deine Finger bleiben nah beieinander. Kaum Spannung nach außen.Du gehst selten ins Risiko, wenn du keinen Grund siehst.Und du brauchst oft einen sehr guten Grund.",
+      "holz": "Deine Finger sind lang und oft unter Spannung. Das zeigt deinen endlosen Wunsch, zu wachsen und deinen Horizont zu erweitern. Stillstand erträgst du schwer.",
+      "feuer": "Deine Haut wirkt lebhaft und warm. Das zeigt: Deine Emotionen kommen schnell an die Oberfläche. Und du hast wenig Toleranz für Respektlosigkeit.",
+      "wasser": "Deine Hand wirkt geschmeidig, die Finger passen sich leicht an. Das verleiht dir die ultimative Anpassungsfähigkeit, dich nahtlos in jede Umgebung einzufügen."
+    },
+    "shot_3": {
+      "erde": "Erde.Du hältst Dinge zusammen. Auch wenn sie eigentlich auseinanderfallen sollten",
+      "holz": "Holz. Du beschreitest furchtlos neue Wege[cite: 19]. Auch wenn du dich dabei oft jeder Kontrolle entziehen willst.",
+      "feuer": "Feuer. Wie ein Lagerfeuer, das in der Dunkelheit brennt, stichst du heraus. Du bist niemand, der Geheimnisse für sich behält.",
+      "wasser": "Wasser. Du besitzt eine scharfe Intuition, die den Kern der Dinge durchdringt. Wie Feuchtigkeit, die in Risse sickert."
+    },
+    "shot_4": {
+      "erde": "Andere verlassen sich schnell auf dich. Du wirkst stabil.Aber du denkst lange. Sehr lange. Ist es die Sorgfalt oder das Zögern?",
+      "holz": "Deine Kraft zu planen und dich zu entfalten ist immens. Doch es fällt dir schwer, die Dinge zu einem fruchtbaren Abschluss zu bringen.",
+      "feuer": "Deine Tatkraft ist intensiv. Dennoch neigst du zum Burnout, genau wie ein Feuer, dem der Brennstoff ausgeht.",
+      "wasser": "Du saugst Wissen mühelos auf, um die Muster der Welt zu verstehen. Doch ähnlich wie die Tiefe des Ozeans neigst du dazu, deine wahren Gedanken bis ganz zum Schluss zu verbergen."
+    },
+    "shot_5": {
+      "erde": "Um deine fehlende Erd-Stabilität zu erden, trage oft warme Beige- oder Brauntöne und berühre Keramikbecher. Wandere an Wochenenden oder gehe barfuß auf feldwegen, um dein berggleiches, friedliches Zentrum zu finden.",
+      "holz": "Um deine fehlende Holzenergie zu beleben, umgieb deinen Alltag mit lebendigen grünen Gegenständen und Zimmerpflanzen. Spaziere an Wochenenden durch üppige Parks, um die frische Vitalität aufzunehmen, die deinen Antrieb neu startet.",
+      "feuer": "Um deine fehlende Feuerenergie zu entfachen, zünde täglich Duftkerzen an und setze auf rote oder orangefarbene Akzente. Genieße an sonnigen Tagen die Sonne auf einer Café-Terrasse, um deine Leidenschaft aufzuladen.",
+      "wasser": "Um deine fehlende Wasserweisheit einzuladen, trage tiefe Schwarz- oder Marinetöne und trinke aus transparenten Bechern. Wenn dein Geist überlastet ist, schlendere bei Sonnenuntergang an einem flussufer entlang, um Unruhe aufzulösen."
+    }
   }
 }
- 

@@ -96,7 +96,7 @@ class TTSClient:
                     async with session.post(
                         url,
                         json=self._speech_request(text, seed=seed),
-                        timeout=aiohttp.ClientTimeout(total=None),
+                        timeout=aiohttp.ClientTimeout(total=None, sock_read=15),
                     ) as resp:
                         if resp.status >= 400:
                             body = await resp.text()
