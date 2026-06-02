@@ -8,57 +8,33 @@ from transitions.extensions import GraphMachine
 
 from shared.events import HandEvent, HandTrigger, PersonEvent, PersonTrigger, Scene
 
-
-DEBUG = Scene.SCENE_DEBUG_HAND_DETECTION.value
 DEBUG_HAND_ABSENT = Scene.SCENE_DEBUG_SHOT_1_HAND_ABSENT.value
-DEBUG_HAND_MOVING = Scene.SCENE_DEBUG_SHOT_2_HAND_MOVING.value
-DEBUG_HAND_TILTED = Scene.SCENE_DEBUG_SHOT_3_HAND_TILTED.value
-DEBUG_HAND_OUTSIDE_FRAME = Scene.SCENE_DEBUG_SHOT_4_HAND_OUTSIDE_FRAME.value
-DEBUG_HAND_WRONG_SIDE = Scene.SCENE_DEBUG_SHOT_5_HAND_WRONG_SIDE.value
+DEBUG_HAND_TILTED = Scene.SCENE_DEBUG_SHOT_2_HAND_TILTED.value
+DEBUG_HAND_WRONG_SIDE = Scene.SCENE_DEBUG_SHOT_3_HAND_WRONG_SIDE.value
 
 IDLE = Scene.SCENE_0_IDLE.value
-
-SC1_AWAITING_HAND = Scene.SCENE_1_AWAITING_HAND.value
-SC1_2_YES_HAND_FOUND = Scene.SCENE_1_SHOT_2_YES_HAND_FOUND.value
-
-SC2_1_HAND_STAYS_FOCUSED = Scene.SCENE_2_SHOT_1_HAND_STAYS_FOCUSED.value
-
-SC3_SCANNING_HAND = Scene.SCENE_3_SCANNING_HAND.value
-SC3_1_CORRECT_HAND = Scene.SCENE_3_SHOT_1_CORRECT_HAND.value
-SC3_4_SCAN_DONE = Scene.SCENE_3_SHOT_4_SCAN_DONE.value
-
-SC4_TRANSFORM = Scene.SCENE_4_TRANSFORM.value
-
-SC5_WITCH_ORIGIN_STORY = Scene.SCENE_5_WITCH_ORIGIN_STORY.value
-
-SC6_VISUAL_IMAGE_HAND = Scene.SCENE_6_VISUAL_IMAGE_HAND.value
-SC6_1_POINT_OUT_DETAILS = Scene.SCENE_6_SHOT_1_POINT_OUT_DETAILS.value
-SC6_2_INTERACTIVE_TASK = Scene.SCENE_6_SHOT_2_INTERACTIVE_TASK.value
-SC6_2_1_TASK_DONE = Scene.SCENE_6_SHOT_2_1_TASK_DONE.value
-SC6_2_2_TASK_IGNORED = Scene.SCENE_6_SHOT_2_2_TASK_IGNORED.value
-SC6_3_ASSIGN_ELEMENTS = Scene.SCENE_6_SHOT_3_ASSIGN_ELEMENTS.value
-SC6_4_ELEMENT_ANALYSIS = Scene.SCENE_6_SHOT_4_ELEMENT_ANALYSIS.value
-SC6_5_INNER_BALANCE = Scene.SCENE_6_SHOT_5_INNER_BALANCE.value
-
-SC7_LAST_WORDS = Scene.SCENE_7_LAST_WORDS.value
-SC7_1_RETURN_TO_IDLE = Scene.SCENE_7_SHOT_1_RETURN_TO_IDLE.value
-SC7_2_DISAPPEAR = Scene.SCENE_7_SHOT_2_DISAPPEAR.value
-
+OUTRO = Scene.SCENE_6_OUTRO.value
 RESTART = Scene.SCENE_RESTART.value
+
+SC1_START = Scene.SCENE_1_START.value
+SC2_AWAITING_HAND = Scene.SCENE_2_AWAITING_HAND.value
+SC2_HAND_FOUND = Scene.SCENE_2_HAND_FOUND.value
+SC3_HANDSCAN_IN_PROCESS = Scene.SCENE_3_HANDSCAN_IN_PROCESS.value
+SC3_HANDSCAN_DONE = Scene.SCENE_3_HANDSCAN_DONE.value
+SC4_TRANSFORMATION = Scene.SCENE_4_TRANSFORMATION.value
+SC5_HANDREAD_VISUALISATION = Scene.SCENE_5_HANDREAD_VISUALISATION.value
+SC5_1_CORE_ELEMENT = Scene.SCENE_5_SHOT_1_CORE_ELEMENT.value
+SC5_2_WEAK_ELEMENT = Scene.SCENE_5_SHOT_2_WEAK_ELEMENT.value
+SC5_3_ADVICE = Scene.SCENE_5_SHOT_3_ADVICE.value
 
 STATES = [scene.value for scene in Scene]
 
 INITIAL = IDLE
 ANY_SOURCE = "*"
 
-DEBUG_STATES = {
-    DEBUG,
-    DEBUG_HAND_ABSENT,
-    DEBUG_HAND_MOVING,
-    DEBUG_HAND_TILTED,
-    DEBUG_HAND_OUTSIDE_FRAME,
-    DEBUG_HAND_WRONG_SIDE,
-}
+DEBUG_STATES = [DEBUG_HAND_ABSENT, 
+                DEBUG_HAND_TILTED, 
+                DEBUG_HAND_WRONG_SIDE]
 
 @dataclass(frozen=True)
 class StateChange:
@@ -81,234 +57,115 @@ TRANSITIONS = [
     # Camera / hand input.
 
     # Debug
-    _transition("enter_debug", [SC1_AWAITING_HAND, 
-                               SC1_2_YES_HAND_FOUND, 
-                               SC2_1_HAND_STAYS_FOCUSED,
-                               SC3_SCANNING_HAND, 
-                               SC3_1_CORRECT_HAND,
-                               SC6_VISUAL_IMAGE_HAND, # TEMPORÄR ZUM VORFÜHREN
-                               ], DEBUG, before="store_previous_transition"),
-    _transition("ip_hand_absent",[DEBUG, 
-                              DEBUG_HAND_MOVING, 
-                              DEBUG_HAND_TILTED, 
-                              DEBUG_HAND_OUTSIDE_FRAME, 
-                              DEBUG_HAND_WRONG_SIDE], DEBUG_HAND_ABSENT),
-    _transition("ip_hand_moving", [DEBUG, 
-                              DEBUG_HAND_ABSENT, 
-                              DEBUG_HAND_TILTED, 
-                              DEBUG_HAND_OUTSIDE_FRAME, 
-                              DEBUG_HAND_WRONG_SIDE], DEBUG_HAND_MOVING),
-    _transition("ip_hand_tilted", [DEBUG, 
-                              DEBUG_HAND_ABSENT, 
-                              DEBUG_HAND_MOVING,
-                              DEBUG_HAND_OUTSIDE_FRAME, 
-                              DEBUG_HAND_WRONG_SIDE], DEBUG_HAND_TILTED),
-    _transition("ip_hand_outside_frame", [DEBUG, 
-                              DEBUG_HAND_ABSENT, 
-                              DEBUG_HAND_MOVING, 
-                              DEBUG_HAND_TILTED,
-                              DEBUG_HAND_WRONG_SIDE], DEBUG_HAND_OUTSIDE_FRAME),
-    _transition("ip_hand_wrong_side", [DEBUG, 
-                              DEBUG_HAND_ABSENT, 
-                              DEBUG_HAND_MOVING, 
-                              DEBUG_HAND_TILTED, 
-                              DEBUG_HAND_OUTSIDE_FRAME], DEBUG_HAND_WRONG_SIDE),
-    _transition("exit_debug", [DEBUG, 
-                              DEBUG_HAND_ABSENT, 
-                              DEBUG_HAND_MOVING, 
-                              DEBUG_HAND_TILTED, 
-                              DEBUG_HAND_OUTSIDE_FRAME, 
-                              DEBUG_HAND_WRONG_SIDE], 
-                              IDLE, after="return_to_previous_transition"),
-    
+    _transition("ip_hand_absent",[ DEBUG_HAND_TILTED,DEBUG_HAND_WRONG_SIDE, SC2_AWAITING_HAND, SC2_HAND_FOUND], 
+                                DEBUG_HAND_ABSENT, before="store_previous_transition"),
+    _transition("ip_hand_tilted",[ DEBUG_HAND_ABSENT,DEBUG_HAND_WRONG_SIDE, SC2_AWAITING_HAND, SC2_HAND_FOUND], 
+                                DEBUG_HAND_TILTED, before="store_previous_transition"),
+    _transition("ip_hand_wrong_side",[ DEBUG_HAND_ABSENT,DEBUG_HAND_TILTED, SC2_AWAITING_HAND, SC2_HAND_FOUND], 
+                                DEBUG_HAND_WRONG_SIDE, before="store_previous_transition"),
+    _transition("exit_debug", [DEBUG_HAND_ABSENT, DEBUG_HAND_TILTED, DEBUG_HAND_WRONG_SIDE], 
+                                None, before="return_to_previous_transition"),
     # Scene 0
-    _transition("ip_person_seated", IDLE, SC1_AWAITING_HAND), 
+    _transition("ip_person_seated", IDLE, SC1_START), 
     # Scene 1
-    _transition("ip_hand_present", SC1_AWAITING_HAND, SC1_2_YES_HAND_FOUND),
-    _transition("hand_found", SC1_2_YES_HAND_FOUND, SC2_1_HAND_STAYS_FOCUSED),
+    _transition("instructions_stone_done", SC1_START, SC2_AWAITING_HAND),
     # Scene 2
-    _transition("hand_stays_still", SC2_1_HAND_STAYS_FOCUSED, SC3_SCANNING_HAND),
+    _transition("ip_hand_present", SC2_AWAITING_HAND, SC2_HAND_FOUND),
     # Scene 3
-    _transition("ip_hand_correct", SC3_SCANNING_HAND, SC3_1_CORRECT_HAND),
-    _transition("hand_scanning", SC3_1_CORRECT_HAND, SC3_4_SCAN_DONE),
-    _transition("ip_scan_complete", SC3_4_SCAN_DONE, SC4_TRANSFORM),
-    # Scene 4+5
-    _transition("transformation_done", SC4_TRANSFORM, SC5_WITCH_ORIGIN_STORY),
-    _transition("originstory_done", SC5_WITCH_ORIGIN_STORY, SC6_VISUAL_IMAGE_HAND),
-    # Scene 6
-    _transition("hand_visual_done", SC6_VISUAL_IMAGE_HAND, SC6_1_POINT_OUT_DETAILS),
-    _transition("reading_hand_details_done", SC6_1_POINT_OUT_DETAILS, SC6_2_INTERACTIVE_TASK),
-    _transition("ip_hand_present", SC6_2_INTERACTIVE_TASK, SC6_2_1_TASK_DONE),
-    _transition("ip_hand_absent", SC6_2_INTERACTIVE_TASK, SC6_2_2_TASK_IGNORED),
-    _transition("task_done_or_skipped", [SC6_1_POINT_OUT_DETAILS, SC6_2_1_TASK_DONE, SC6_2_2_TASK_IGNORED], SC6_3_ASSIGN_ELEMENTS),
-    _transition("reading_assign_element_done", SC6_3_ASSIGN_ELEMENTS, SC6_4_ELEMENT_ANALYSIS),
-    _transition("reading_analysis_done", SC6_4_ELEMENT_ANALYSIS, SC6_5_INNER_BALANCE),
-    _transition("reading_balance_done", SC6_5_INNER_BALANCE, SC7_LAST_WORDS),
-    # Scene 7
-    _transition("detransfrom_end", SC7_LAST_WORDS, SC7_1_RETURN_TO_IDLE),
-    _transition("disappear_end", SC7_LAST_WORDS, SC7_2_DISAPPEAR),
-    _transition("end_done", [SC7_1_RETURN_TO_IDLE, SC7_2_DISAPPEAR], RESTART),
+    _transition("ip_hand_correct", SC2_HAND_FOUND, SC3_HANDSCAN_IN_PROCESS),
+    _transition("hand_scanning", SC3_HANDSCAN_IN_PROCESS, SC3_HANDSCAN_DONE),
+    _transition("scan_complete", SC3_HANDSCAN_DONE, SC4_TRANSFORMATION),
+    # Scene 4
+    _transition("transformation_done", SC4_TRANSFORMATION, SC5_HANDREAD_VISUALISATION),
+    # Scene 5
+    _transition("hand_visual_done", SC5_HANDREAD_VISUALISATION, SC5_1_CORE_ELEMENT),
+    _transition("core_element_done", SC5_1_CORE_ELEMENT, SC5_2_WEAK_ELEMENT),
+    _transition("weak_element_done", SC5_2_WEAK_ELEMENT, SC5_3_ADVICE),
+    _transition("advice_done", SC5_3_ADVICE, OUTRO),
     # End
-    _transition("reset", ANY_SOURCE, IDLE),
-
-    _transition("debug_vorzeige_temp", SC6_VISUAL_IMAGE_HAND, SC6_VISUAL_IMAGE_HAND),
+    _transition("ip_person_left", OUTRO, RESTART),
+    _transition("reset", ANY_SOURCE, INITIAL),
 ]
 
 TRANSITION_IDS = list(dict.fromkeys(item["trigger"] for item in TRANSITIONS))
 
 ANIMATION_TRIGGER_BY_STATE: dict[str, str] = {
-    SC3_4_SCAN_DONE: "ip_scan_complete",
-    SC4_TRANSFORM: "transformation_done",
-    SC5_WITCH_ORIGIN_STORY: "originstory_done",
-    SC6_VISUAL_IMAGE_HAND: "hand_visual_done",
-    SC6_1_POINT_OUT_DETAILS: "reading_hand_details_done",
-    SC6_2_1_TASK_DONE: "task_done_or_skipped",
-    SC6_2_2_TASK_IGNORED: "task_done_or_skipped",
-    SC6_3_ASSIGN_ELEMENTS: "reading_assign_element_done",
-    SC6_4_ELEMENT_ANALYSIS: "reading_analysis_done",
-    SC6_5_INNER_BALANCE: "reading_balance_done",
-    SC7_1_RETURN_TO_IDLE: "end_done",
-    SC7_2_DISAPPEAR: "end_done",
+    SC1_START: "instructions_stone_done",
+    SC4_TRANSFORMATION: "transformation_done",
+    SC5_HANDREAD_VISUALISATION: "hand_visual_done",
+    SC5_1_CORE_ELEMENT: "core_element_done",
+    SC5_2_WEAK_ELEMENT: "weak_element_done",
+    SC5_3_ADVICE: "advice_done",
     RESTART: "reset",
 }
 
+PERSON_TRIGGER_BY_STATE: dict[str, str] = {
+    IDLE: "ip_person_seated",
+    OUTRO: "ip_person_left",
+}
 
 HAND_TRIGGER_BY_STATE: dict[str, dict[str, str]] = {
-    IDLE: {
-        "present": "ip_person_seated",
-        "wrong": "ip_person_seated",
-        "ready": "ip_person_seated",
-    },
-    SC1_AWAITING_HAND: {
-        "absent": "enter_debug",
-        "present": "ip_hand_present",
-        "wrong": "ip_hand_present",
-        "ready": "ip_hand_present",
-    },
-    SC1_2_YES_HAND_FOUND: {
-        "absent": "enter_debug",
-        "present": "hand_found",
-        "wrong": "hand_found",
-        "ready": "hand_found",
-    },
-    SC2_1_HAND_STAYS_FOCUSED: {
-        "absent": "enter_debug",
-        "present": "hand_stays_still",
-        "wrong": "hand_stays_still",
-        "ready": "hand_stays_still",
-    },
-    SC3_SCANNING_HAND: {
-        "absent": "enter_debug",
-        "present": "enter_debug",
-        "wrong": "enter_debug",
-        "ready": "ip_hand_correct",
-    },
-    SC3_1_CORRECT_HAND: {
-        "absent": "enter_debug",
-        "present": "enter_debug",
-        "wrong": "enter_debug",
-        "ready": "hand_scanning",
-    },
-    SC3_4_SCAN_DONE: {
-        "ready": "ip_scan_complete",
-    },
-    SC6_2_INTERACTIVE_TASK: {
-        "absent": "enter_debug",
-        "ready": "ip_hand_present",
-    },
-    DEBUG: {
-        "absent": "ip_hand_absent",
-        "tilted": "ip_hand_tilted",
-        "wrong_side": "ip_hand_wrong_side",
-        "outside_frame": "ip_hand_outside_frame",
-        "present": "exit_debug",
-        "ready": "exit_debug",
-    },
     DEBUG_HAND_ABSENT: {
+        "handback": "ip_hand_wrong_side",
         "tilted": "ip_hand_tilted",
-        "wrong_side": "ip_hand_wrong_side",
-        "outside_frame": "ip_hand_outside_frame",
-        "present": "exit_debug",
         "ready": "exit_debug",
-    },
-    DEBUG_HAND_MOVING: {
         "present": "exit_debug",
-        "ready": "exit_debug",
-    },
+    }, 
     DEBUG_HAND_TILTED: {
         "absent": "ip_hand_absent",
-        "wrong_side": "ip_hand_wrong_side",
-        "outside_frame": "ip_hand_outside_frame",
-        "present": "exit_debug",
+        "handback": "ip_hand_wrong_side",
         "ready": "exit_debug",
-    },
-    DEBUG_HAND_OUTSIDE_FRAME: {
-        "absent": "ip_hand_absent",
-        "tilted": "ip_hand_tilted",
-        "wrong_side": "ip_hand_wrong_side",
         "present": "exit_debug",
-        "ready": "exit_debug",
-    },
+    }, 
     DEBUG_HAND_WRONG_SIDE: {
         "absent": "ip_hand_absent",
         "tilted": "ip_hand_tilted",
-        "outside_frame": "ip_hand_outside_frame",
-        "present": "exit_debug",
         "ready": "exit_debug",
+        "present": "exit_debug",
     },
-    # TEMPORÄR, NUR ZUM VORZEIGEN
-    SC6_VISUAL_IMAGE_HAND: {
-        "wrong": "enter_debug",
-        "absent": "enter_debug",
-        "ready": "debug_vorzeige_temp",
-    }
+    SC1_START: {
+        "ready": "instructions_stone_done",
+        "present": "instructions_stone_done",
+    },
+    SC2_AWAITING_HAND: {
+        "absent": "ip_hand_absent",
+        "handback": "ip_hand_wrong_side",
+        "tilted": "ip_hand_tilted",
+        "ready": "ip_hand_present",
+        "present": "ip_hand_present",
+    },
+    SC2_HAND_FOUND: {
+        "absent": "ip_hand_absent",
+        "handback": "ip_hand_wrong_side",
+        "tilted": "ip_hand_tilted",
+        "ready": "ip_hand_correct",
+        "present": "ip_hand_correct",
+    },
 }
 
-SCENES_THAT_START_ANALYSIS = frozenset({SC3_4_SCAN_DONE, SC6_VISUAL_IMAGE_HAND})
-SCENES_THAT_DELIVER_FORTUNE = frozenset({SC6_VISUAL_IMAGE_HAND})
+SCENES_THAT_START_ANALYSIS = frozenset({SC3_HANDSCAN_DONE, SC5_HANDREAD_VISUALISATION})
+SCENES_THAT_DELIVER_FORTUNE = frozenset({SC5_HANDREAD_VISUALISATION})
 
 STATE_DESCRIPTIONS: dict[str, str] = {
-    DEBUG: "Szene wird immer aufgerufen, wenn Hand in relevanten Szenen nicht richtig erkannt wird",
     DEBUG_HAND_ABSENT: "Debug, wenn Hand überhaupt nicht anwesend ist",
-    DEBUG_HAND_MOVING: "Debug, wenn Hand sich bewegt", # GERADE NICHT IMPLEMENTIERT!!
     DEBUG_HAND_TILTED: "Debug, wenn Hand nicht gerade, mit der Innenfläche nach oben, gehalten wird",
-    DEBUG_HAND_OUTSIDE_FRAME: "Debug, wenn Hand nicht vollständig von der Kamera zu erfassen ist",
     DEBUG_HAND_WRONG_SIDE: "Debug, wenn die Hand Rückenseite gezeigt wird",
 
     IDLE: "Szene 0: Wahrsagerin reagiert nicht, Besucher betritt den Raum",
-
-    SC1_AWAITING_HAND: "Szene 1: Besucher hat sich hingesetzt, Ausstellung startet",
-    #SC1_1_NO_HAND_FOUND: "Szene 1 Shot 1: Aufforderung der Witch, Hand in den Stein zu legen",
-    SC1_2_YES_HAND_FOUND: "Szene 1 Shot 2: Hand liegt im Stein und ist (grob) für die Kamera erkennbar",
-
-    SC2_1_HAND_STAYS_FOCUSED: "Szene 2 Shot 1: Hand bleibt ruhig unter der Kamera",
-    #SC2_2_HAND_WITHDRAWN: "Szene 2 Shot 2: Hand wurde zurückgezogen, Aufforderung sie zurück zu legen",
-    #SC2_3_STILL_NO_HAND: "Szene 2 Shot 3: Hand bleibt fern, erneute, strengere Aufforderung sie zurück zu legen",
-
-    SC3_SCANNING_HAND: "Szene 3: Hand wird erkannt, warten auf stabiles Bild",
-    SC3_1_CORRECT_HAND: "Szene 3 Shot 1: Hand liegt still, stabil und gut erkenntlich",
-    #SC3_2_HAND_NOT_READABLE: "Szene 3 Shot 2: Hand ist nicht vollständig auf der Kamera erkennbar",
-    #SC3_3_HAND_FAST_MOVEMENTS: "Szene 3 Shot 3: Hand bewegt sich, Scan dauert lange",
-    SC3_4_SCAN_DONE: "Szene 3 Shot 4: Hand wurde gescannt, Witch sagt, Hand kann raus",
-
-    SC4_TRANSFORM: "Szene 4: Witch transformiert sich für die Analyse der Hand",
-
-    SC5_WITCH_ORIGIN_STORY: "Szene 5: Witch erklärt ihre Geschichte, leutet Analyse ein",
-
-    SC6_VISUAL_IMAGE_HAND: "Szene 6: Visuelle Darstellung der Hand auf dem Bildschirm",
-    SC6_1_POINT_OUT_DETAILS: "Szene 6 Shot 1: Details der Hand werden erklärt",
-    SC6_2_INTERACTIVE_TASK: "Szene 6 Shot 2: Kleine, interaktive mögliche Zwischenaufgabe der Witch an den Besucher, Hand wieder in Stein",
-    SC6_2_1_TASK_DONE: "Szene 6 Shot 2_1: Aufgabe erledigt, Hand kann zurückgenommen werden",
-    SC6_2_2_TASK_IGNORED: "Szene 6 Shot 2_2: Aufgabe ignoriert, Witch macht weiter",
-    SC6_3_ASSIGN_ELEMENTS: "Szene 6 Shot 3: Zuordnung zu den passenden Elementen, Erklärung dieser",
-    SC6_4_ELEMENT_ANALYSIS: "Szene 6 Shot 4: Erläuterung der Stärken und Schattenseiten",
-    SC6_5_INNER_BALANCE: "Szene 6 Shot 5: Erläuterung des inneren Gleichgewichts durch die restlichen Elemente",
-
-    SC7_LAST_WORDS: "Szene 7: Schlussworte der Witch",
-    SC7_1_RETURN_TO_IDLE: "Szene 7 Shot 1: Witch verwandelt sich zurück, sieht aus wie beim Start",
-    SC7_2_DISAPPEAR: "Szene 7 Shot 2: Witch verschwindet in einer Wolke, Bildschirm bleibt leer",
-
+    OUTRO: "Szene 6: Wahrsagerin transformiert sich zurück und hat \"nichts mehr zu sagen\"",
     RESTART: "Szene 0: Besucher hat den Raum verlassen, Neustart des Ablaufs, warten auf neuen Besucher",
+
+    SC1_START: "Szene 1: Besucher hat sich hingesetzt, Ausstellung startet, Anweisungen werden geliefert",
+    SC2_AWAITING_HAND: "Szene 2: Hand liegt im Stein und ist (grob) für die Kamera erkennbar",
+    SC2_HAND_FOUND: "Szene 2: Hand bleibt ruhig unter der Kamera",
+    SC3_HANDSCAN_IN_PROCESS: "Szene 3: Hand ist erkannt und stabil, analyse startet",
+    SC3_HANDSCAN_DONE: "Szene 3: Hand wurde analysiert, Witch sagt, Hand kann raus",
+    SC4_TRANSFORMATION: "Szene 4: Witch transformiert sich für die Analyse der Hand",
+
+    SC5_HANDREAD_VISUALISATION: "Szene 5: Visuelle Darstellung der Hand auf dem Bildschirm",
+    SC5_1_CORE_ELEMENT: "Szene 5 Shot 1: Stärkstes Element wird erklärt",
+    SC5_2_WEAK_ELEMENT: "Szene 5 Shot 2: Schwächstes Element wird erklärt",
+    SC5_3_ADVICE: "Szene 5 Shot 3: Tipps und Tricks fürs Leben",
 
 }
 
@@ -328,22 +185,19 @@ class WitchStateMachine:
             ignore_invalid_triggers=True,
             graph_engine="mermaid",
             title="The Witch State Machine",
+            send_event = True,
         )
 
-    def store_previous_transition(self, event=None):
-        if event:
-            self.previous_state = event.transition.source
-            self.previous_trigger = event.event.name
+    def store_previous_transition(self, event_data):
+        source = event_data.transition.source
+        if source not in DEBUG_STATES:
+            self.previous_state = source
+            self.previous_trigger = event_data.event.name
 
-    def return_to_previous_transition(self):
+    def return_to_previous_transition(self, event_data):
         if self.previous_state:
-            self._machine.set_state(self.previous_state, model=self)
-
-    # Triggers Debug anew with the Triggerevent we entered Debug with
-    # -> Immediate jump into Debug-Subscenes
-    def on_enter_scene_debug_hand_detection(self):
-        debug_trigger = self.debug_hand_condition(self.last_hand_event)
-        getattr(self, debug_trigger)()
+            event_data.transition.dest = self.previous_state
+            event_data.result = True
 
     
     @property
@@ -367,8 +221,7 @@ class WitchStateMachine:
         return self._machine
 
     def hand_event(self, event: HandEvent) -> list[StateChange]:
-        # Gives out detailed or general events depending on if we are in a DEBUG State or not
-        condition = self.hand_condition_by_state(event)
+        condition = hand_condition(event)
         max_changes = 1 if condition == "absent" else 8
         changes: list[StateChange] = []
         seen_states = {self.state}
@@ -379,6 +232,11 @@ class WitchStateMachine:
             if change is None:
                 break
             changes.append(change)
+        # THIS IS FOR MANUAL MODE TO NOT LEAVE THE NEW STATE IMMEDIATELY
+        # Gonna have to look if once the states are properly working it will resume the old state or just skip it
+        # on debug return
+            #if trigger == "exit_debug":
+            #    break
             if self.state in seen_states:
                 break
             seen_states.add(self.state)
@@ -386,9 +244,10 @@ class WitchStateMachine:
         return changes
 
     def person_event(self, event: PersonEvent) -> list[StateChange]:
-        if event.trigger is not PersonTrigger.DETECTED:
-            return []
-        change = self.advance("ip_person_seated")
+        if event.trigger is PersonTrigger.DETECTED:
+            change = self.advance("ip_person_seated")
+        if event.trigger is PersonTrigger.ABSENT:
+            change = self.advance("ip_person_left")
         return [change] if change else []
 
     def event_done(self, scene: str | None = None) -> list[StateChange]:
@@ -423,34 +282,17 @@ class WitchStateMachine:
         mermaid = self._machine.get_graph().source.replace("direction LR", "direction TB")
         path.write_text(f"```mermaid\n{mermaid.strip()}\n```\n", encoding="utf-8")
         return path
-        
-    def hand_condition_by_state(self, event: HandEvent) -> str:
-        if self.state in DEBUG_STATES:
-            return hand_condition_debug(event)
-        return hand_condition(event)
-
 
 
 def hand_condition(event: HandEvent) -> str:
-    if event.trigger is HandTrigger.ABSENT:
+    if event.trigger in {HandTrigger.ABSENT,  HandTrigger.NOT_FULLY_IN_VIEW}:
         return "absent"
-    if event.trigger in {HandTrigger.WRONG_SIDE, HandTrigger.NOT_FULLY_IN_VIEW, HandTrigger.TILTED}:
-        return "wrong"
+    if event.trigger is HandTrigger.WRONG_SIDE:
+        return "handback"
+    if event.trigger is HandTrigger.TILTED:
+        return "tilted"
     return "ready" if event.vector else "present"
 
-def hand_condition_debug(event: HandEvent) -> str:
-    match event.trigger:
-        case HandTrigger.ABSENT: 
-            return "absent"
-        case HandTrigger.WRONG_SIDE:
-            return "wrong_side"
-        case HandTrigger.NOT_FULLY_IN_VIEW:
-            return "outside_frame"
-        case HandTrigger.TILTED:
-            return "tilted"
-        #case HandTrigger.MOVING:
-        #    return "moving"
-    return "ready" if event.vector else "present"
 
 if __name__ == "__main__":
     machine = WitchStateMachine()
