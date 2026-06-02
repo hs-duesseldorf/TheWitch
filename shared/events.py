@@ -80,6 +80,7 @@ class SceneCommandEvent(Event, tag="scene_command"):
     animation: str | None = None
     effects: dict[str, Any] = msgspec.field(default_factory=dict)
     trigger: str | None = None
+    text: str | None = None
 
 
 class EventDoneEvent(Event, tag="event_done"):
@@ -92,17 +93,21 @@ class AnalysisStartedEvent(Event, tag="analysis_started"):
 
 class AnalysisResultEvent(Event, tag="analysis_result"):
     text: str
-
-
-class FortuneEvent(Event, tag="fortune"):
-    text: str
-    sample_rate: int | None = None
+    scene: Scene | None = None
 
 
 class ErrorEvent(Event, tag="error"):
     message: str
 
 
+IPEvent: TypeAlias = HandEvent | PersonEvent
+AI3DEvent: TypeAlias = (
+    SceneCommandEvent
+    | EventDoneEvent
+    | AnalysisStartedEvent
+    | AnalysisResultEvent
+    | ErrorEvent
+)
 WitchEvent: TypeAlias = (
     HandEvent
     | PersonEvent
@@ -110,6 +115,5 @@ WitchEvent: TypeAlias = (
     | EventDoneEvent
     | AnalysisStartedEvent
     | AnalysisResultEvent
-    | FortuneEvent
     | ErrorEvent
 )
