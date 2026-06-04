@@ -47,23 +47,59 @@ def _configured_audio_device(devices: list[dict[str, Any]]) -> int | None:
     logger.warning("WITCH_AUDIO_DEVICE=%r did not match any output device", configured)
     return None
 
+def normalize_tts_text(text: str) -> str:
+    # Remove invisible Unicode characters that break streaming
+    text = re.sub(r"[\u200b\u200c\u200d\u2060\uFEFF]", "", text)
+    # Remove control chars except newline & tab
+    text = re.sub(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]", " ", text)
+    # Normalize line endings
+    text = text.replace("\r\n", "\n").replace("\r", "\n")
 
-def _normalize_tts_text(text: str) -> str:
-    lines = []
-    for line in text.splitlines():
-        line = line.strip()
-        if not line:
+    cleaned_lines = []
+    for line in text.split("\n"):
+        raw = line.rstrip()
+        # Preserve empty lines (important for prosody)
+        if raw.strip() == "":
+            cleaned_lines.append("")
             continue
-        line = re.sub(r"^[-*\u2022]+\s*", "", line)
-        line = re.sub(r"^\d+[.)]\s*", "", line)
-        lines.append(line)
+        cleaned_lines.append(raw)
 
-    normalized = " ".join(lines) if lines else text
-    normalized = re.sub(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]", " ", normalized)
-    normalized = re.sub(r"\s+", " ", normalized).strip()
-    if normalized and normalized[-1] not in ".!?":
-        normalized = f"{normalized}."
-    return normalized
+    # Collapse excessive spaces inside lines
+    normalized = "\n".join(cleaned_lines)
+    normalized = re.sub(r"[ \t]{2,}", " ", normalized)
+    return normalized.strip()
+
+def insert_soft_breaks(text: str) -> str:
+    # Insert a newline after long comma clauses to avoid chunk boundaries on commas
+    return re.sub(
+        r",\s+(?=[A-ZÄÖÜ])",   # comma followed by capital letter
+        ",\n",
+        text
+    )
+
+def segment_for_streaming(text: str, max_len=220):
+    parts = []
+    current = ""
+    # Split on sentence boundaries
+    sentences = re.split(r"(?<=[.!?])\s+", text)
+
+    # Turns a Text into multiple smaller chunks with full sentences to avoid mid text breaks
+    for sentence in sentences:
+        if len(current) + len(sentence) > max_len:
+            parts.append(current.strip())
+            current = sentence
+        else:
+            current += " " + sentence
+
+    if current.strip():
+        parts.append(current.strip())
+    return parts
+
+def prepare_tts_streaming_text(text: str):
+    cleaned = normalize_tts_text(text)
+    softened = insert_soft_breaks(cleaned)
+    segments = segment_for_streaming(softened)
+    return segments
 
 
 def _linux_output_score(name: str) -> int:
@@ -559,18 +595,20 @@ class SpeechPipeline:
                         self._stage = "done"
                         return
 
-                    tts_text = _normalize_tts_text(debug_text)
-                    if not tts_text:
-                        raise RuntimeError("TTS text became empty after normalization")
-                    if tts_text != debug_text:
-                        logger.info(
-                            "Normalized TTS text: llm_chars=%d tts_chars=%d",
-                            len(debug_text),
-                            len(tts_text),
-                        )
+                    # Prepare text for streaming TTS: normalize + soft breaks + segmentation
+                    segments = prepare_tts_streaming_text(debug_text)
+                    segments = [s for s in segments if s.strip()]
+
+                    if not segments:
+                        raise RuntimeError("TTS text became empty after normalization/segmentation")
+
+                    logger.info(
+                        "TTS segments prepared: count=%d total_chars=%d",
+                        len(segments),
+                        sum(len(s) for s in segments),
+                    )
 
                     self._stage = "tts_stream"
-                    logger.info("TTS full: %s", tts_text[:80])
 
                     try:
                         player.begin()
@@ -589,16 +627,41 @@ class SpeechPipeline:
 
                     frame_count = 0
                     byte_count = 0
-                    async for frame in self._tts.stream_synthesize(tts_text, seed=self._tts_seed):
-                        frame_count += 1
-                        byte_count += len(frame.audio)
 
-                        if use_direct:
-                            player.put(
-                                frame.audio,
-                                format=frame.format,
-                                sample_rate=frame.sample_rate,
-                            )
+                    for idx, tts_text in enumerate(segments, start=1):
+                        logger.info(
+                            "TTS segment %d/%d: chars=%d preview=%r",
+                            idx,
+                            len(segments),
+                            len(tts_text),
+                            tts_text[:80],
+                        )
+
+                        async for frame in self._tts.stream_synthesize(tts_text, seed=self._tts_seed):
+                            frame_count += 1
+                            byte_count += len(frame.audio)
+
+                            if use_direct:
+                                player.put(
+                                    frame.audio,
+                                    format=frame.format,
+                                    sample_rate=frame.sample_rate,
+                                )
+
+                    logger.info(
+                        "TTS complete: frames=%d bytes=%d input_chars=%d segments=%d",
+                        frame_count,
+                        byte_count,
+                        sum(len(s) for s in segments),
+                        len(segments),
+                    )
+
+                    if frame_count == 0:
+                        raise RuntimeError("TTS returned no audio frames")
+
+                    if use_direct:
+                        player.finish()
+                        await player.drain()
 
                     logger.info(
                         "TTS complete: frames=%d bytes=%d input_chars=%d",
