@@ -158,6 +158,7 @@ class TTSClient:
             "speed": 1.0,
             "temperature": 0.5,
             "repetition_penalty": 1.2,
+            "seed": seed,
         }
 
         if self.task_type == "CustomVoice":
