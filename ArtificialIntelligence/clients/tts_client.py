@@ -156,7 +156,7 @@ class TTSClient:
             "task_type": self.task_type,
             "stream": self.stream,
             "speed": 1.0,
-            "temperature": 0.5,
+            "temperature": 0.1,
             "repetition_penalty": 1.2,
             "seed": seed,
         }
