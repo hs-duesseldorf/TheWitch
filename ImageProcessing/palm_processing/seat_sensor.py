@@ -66,8 +66,9 @@ class SeatPresenceMonitor:
         self.worker = None
 
     def _run(self) -> None:
-        if os.getenv("WITCH_SEAT_SENSOR_OVERRIDE") == "true":
-            self._publish_person_seated()
+        if os.getenv("WITCH_SEAT_SENSOR_OVERRIDE", "").strip().lower() == "true":
+            self.event_client.send_message(PersonEvent(trigger=PersonTrigger.ABSENT))
+            self.event_client.send_message(PersonEvent(trigger=PersonTrigger.DETECTED))
             return
 
         try:
@@ -105,20 +106,22 @@ class SeatPresenceMonitor:
 
                 if not seated and seated_hits >= required_hits:
                     seated = True
-                    self._publish_person_seated()
+                    self.event_client.send_message(
+                        PersonEvent(
+                            trigger=PersonTrigger.DETECTED,
+                        )
+                    )
                 elif seated and free_hits >= required_hits:
                     seated = False
+                    self.event_client.send_message(
+                        PersonEvent(
+                            trigger=PersonTrigger.ABSENT,
+                        )
+                    )
 
             elapsed = time.monotonic() - started
             if self.stop_event.wait(max(0.0, poll_s - elapsed)):
                 break
-
-    def _publish_person_seated(self) -> None:
-        self.event_client.send_message(
-            PersonEvent(
-                trigger=PersonTrigger.DETECTED,
-            )
-        )
 
     def _publish_error(self, message: str) -> None:
         self.event_client.send_message(
