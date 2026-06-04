@@ -77,23 +77,30 @@ def insert_soft_breaks(text: str) -> str:
         text
     )
 
-def segment_for_streaming(text: str, max_len=220):
+def segment_for_streaming(text: str, target_len=160, max_len=200):
     parts = []
     current = ""
-    # Split on sentence boundaries
+
     sentences = re.split(r"(?<=[.!?])\s+", text)
 
     # Turns a Text into multiple smaller chunks with full sentences to avoid mid text breaks
+    # Flushes on max_length reached and on target_max - keeps sentence length very consistent
     for sentence in sentences:
         if len(current) + len(sentence) > max_len:
-            parts.append(current.strip())
+            if current.strip():
+                parts.append(current.strip())
             current = sentence
         else:
             current += " " + sentence
+        if len(current) >= target_len:
+            parts.append(current.strip())
+            current = ""
 
     if current.strip():
         parts.append(current.strip())
+
     return parts
+
 
 def prepare_tts_streaming_text(text: str):
     cleaned = normalize_tts_text(text)

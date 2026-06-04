@@ -19,9 +19,7 @@ PCM_CHUNK_SECONDS = 0.1
 DEFAULT_LANGUAGE = "German"
 DEFAULT_VOICE = "vivian"
 DEFAULT_INSTRUCTIONS = (
-    "A mystical fortune teller from the mountains. She speaks German with a very strong Korean accent, her voice "
-    "ancient yet youthful, carrying whispers of incense and distant valleys. Warm, calm, with quiet "
-    "wisdom and subtle mystery. Stable pitch and tone throughout."
+    ""
 )
 
 REQUEST_ATTEMPTS = 5
