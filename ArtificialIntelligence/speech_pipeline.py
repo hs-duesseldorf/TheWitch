@@ -48,6 +48,7 @@ def _configured_audio_device(devices: list[dict[str, Any]]) -> int | None:
     logger.warning("WITCH_AUDIO_DEVICE=%r did not match any output device", configured)
     return None
 
+#############################this is different in marcel branch#############################
 def normalize_tts_text(text: str) -> str:
     # Remove invisible Unicode characters that break streaming
     text = re.sub(r"[\u200b\u200c\u200d\u2060\uFEFF]", "", text)
@@ -558,96 +559,6 @@ class SpeechPipeline:
                     logger.info("Speech LLM result: chars=%d", len(text))
                     if not text:
                         raise RuntimeError("LLM returned empty response")
-                    if self._done_callback:
-                        await self._done_callback(debug_text)
-
-                    if len(debug_text) < 10:
-                        logger.warning("Text too short for TTS (%d chars), skipping", len(debug_text))
-                        self._stage = "done"
-                        return
-
-                    # Prepare text for streaming TTS: normalize + soft breaks + segmentation
-                    segments = prepare_tts_streaming_text(debug_text)
-                    segments = [s for s in segments if s.strip()]
-
-                    if not segments:
-                        raise RuntimeError("TTS text became empty after normalization/segmentation")
-
-                    logger.info(
-                        "TTS segments prepared: count=%d total_chars=%d",
-                        len(segments),
-                        sum(len(s) for s in segments),
-                    )
-
-                    self._stage = "tts_stream"
-
-                    try:
-                        player.begin()
-                        use_direct = player.is_active()
-                        if use_direct:
-                            logger.info(
-                                "Audio output active; prebuffering %.2fs",
-                                player.prebuffer_seconds,
-                            )
-                    except Exception as e:
-                        logger.warning("Audio player failed: %s", e)
-                        use_direct = False
-
-                    if not use_direct:
-                        logger.info("No local audio device")
-
-                    frame_count = 0
-                    byte_count = 0
-
-                    for idx, tts_text in enumerate(segments, start=1):
-                        logger.info(
-                            "TTS segment %d/%d: chars=%d preview=%r",
-                            idx,
-                            len(segments),
-                            len(tts_text),
-                            tts_text[:80],
-                        )
-
-                        async for frame in self._tts.stream_synthesize(tts_text, seed=self._tts_seed):
-                            frame_count += 1
-                            byte_count += len(frame.audio)
-
-                            if use_direct:
-                                player.put(
-                                    frame.audio,
-                                    format=frame.format,
-                                    sample_rate=frame.sample_rate,
-                                )
-
-                    logger.info(
-                        "TTS complete: frames=%d bytes=%d input_chars=%d segments=%d",
-                        frame_count,
-                        byte_count,
-                        sum(len(s) for s in segments),
-                        len(segments),
-                    )
-
-                    if frame_count == 0:
-                        raise RuntimeError("TTS returned no audio frames")
-
-                    if use_direct:
-                        player.finish()
-                        await player.drain()
-
-                    logger.info(
-                        "TTS complete: frames=%d bytes=%d input_chars=%d",
-                        frame_count,
-                        byte_count,
-                        len(tts_text),
-                    )
-
-                    if frame_count == 0:
-                        raise RuntimeError("TTS returned no audio frames")
-
-                    if use_direct:
-                        player.finish()
-                        await player.drain()
-
                     self._stage = "done"
                     return text
 
@@ -674,18 +585,29 @@ class SpeechPipeline:
             return
 
         player = self._player
-        tts_text = _normalize_tts_text(text)
-        if not tts_text:
-            raise RuntimeError("TTS text became empty after normalization")
-        if tts_text != text:
+
+        segments = prepare_tts_streaming_text(text)
+        segments = [segment for segment in segments if segment.strip()]
+
+        if not segments:
+            raise RuntimeError("TTS text became empty after normalization/segmentation")
+
+        tts_char_count = sum(len(segment) for segment in segments)
+        if tts_char_count != len(text):
             logger.info(
-                "Normalized TTS text: llm_chars=%d tts_chars=%d",
+                "Prepared TTS streaming text: llm_chars=%d tts_chars=%d segments=%d",
                 len(text),
-                len(tts_text),
+                tts_char_count,
+                len(segments),
+            )
+        else:
+            logger.info(
+                "TTS segments prepared: count=%d total_chars=%d",
+                len(segments),
+                tts_char_count,
             )
 
         self._stage = "tts_stream"
-        logger.info("TTS full: %s", tts_text[:80])
 
         loop = asyncio.get_running_loop()
         audio_start_future: asyncio.Future[None] | None = None
@@ -727,25 +649,36 @@ class SpeechPipeline:
 
             frame_count = 0
             byte_count = 0
-            async for frame in self._tts.stream_synthesize(tts_text, seed=self._tts_seed):
-                frame_count += 1
-                byte_count += len(frame.audio)
 
-                if not use_direct:
-                    mark_audio_started()
+            for idx, tts_text in enumerate(segments, start=1):
+                logger.info(
+                    "TTS segment %d/%d: chars=%d preview=%r",
+                    idx,
+                    len(segments),
+                    len(tts_text),
+                    tts_text[:80],
+                )
 
-                if use_direct:
-                    player.put(
-                        frame.audio,
-                        format=frame.format,
-                        sample_rate=frame.sample_rate,
-                    )
+                async for frame in self._tts.stream_synthesize(tts_text, seed=self._tts_seed):
+                    frame_count += 1
+                    byte_count += len(frame.audio)
+
+                    if not use_direct:
+                        mark_audio_started()
+
+                    if use_direct:
+                        player.put(
+                            frame.audio,
+                            format=frame.format,
+                            sample_rate=frame.sample_rate,
+                        )
 
             logger.info(
-                "TTS complete: frames=%d bytes=%d input_chars=%d",
+                "TTS complete: frames=%d bytes=%d input_chars=%d segments=%d",
                 frame_count,
                 byte_count,
-                len(tts_text),
+                tts_char_count,
+                len(segments),
             )
 
             if frame_count == 0:
@@ -762,3 +695,4 @@ class SpeechPipeline:
             self._stage = "done"
         finally:
             self._stage = "idle"
+            
