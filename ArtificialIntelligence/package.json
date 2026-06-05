@@ -8,7 +8,6 @@
     "scene_3_handscan_done": "Es ist vollbracht. Du darfst die Hand nun langsam aus dem Stein nehmen.",
     "scene_4_transformation": "Was verborgen war, tritt nun an die Oberfläche.",
     "scene_6_outro": "Für diesen Augenblick ist alles gesagt. Geh weiter mit wachem Blick.",
-    "scene_restart": "Kehre zurück, wenn du erneut eine Antwort suchst.",
     "scene_debug_shot_1_hand_absent": "Ich sehe deine Hand nicht. Lege sie vollständig in den Stein.",
     "scene_debug_shot_2_hand_tilted": "Drehe die Hand flach. Die Innenfläche muss ruhig nach oben zeigen.",
     "scene_debug_shot_3_hand_wrong_side": "Nicht den Handrücken. Zeig mir die offene Innenfläche."

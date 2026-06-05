@@ -37,7 +37,6 @@ class Scene(str, Enum):
     # OTHER SCENES
     SCENE_0_IDLE = "scene_0_idle"
     SCENE_6_OUTRO = "scene_6_outro"
-    SCENE_RESTART = "scene_restart"
     # SCENE 1 - Welcome / instructions
     SCENE_1_START = "scene_1_start"
     SCENE_1_SEATED = "scene_1_seated"
