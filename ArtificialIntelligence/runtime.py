@@ -209,7 +209,7 @@ class WitchRuntime:
             self._gaslight_hand_name = None
             self._desired_hand = None
 
-            if self._state_machine.state in PERSON_LOCKED_STATES:
+            if self._state_machine.state in PERSON_LOCKED_STATES and event.trigger is not PersonTrigger.ABSENT:
                 logger.info(
                     "Ignoring person event during locked flow: state=%s trigger=%s",
                     self._state_machine.state,
@@ -546,17 +546,6 @@ class WitchRuntime:
                 await self._emit_scene_changes(changes)
                 await self._on_state_changed()
                 await self._start_speech_for_current_scene(restart=True)
-                if (
-                    self._state_machine.state == Scene.SCENE_0_IDLE.value
-                    and os.environ.get("WITCH_SEAT_SENSOR_OVERRIDE", "").strip().lower()
-                    == "true"
-                ):
-                    logger.info(
-                        "Reset after outro: seat sensor override active, re-emitting person seated event"
-                    )
-                    await self._process_ip_event(
-                        PersonEvent(trigger=PersonTrigger.DETECTED)
-                    )
                 return
 
         await self._replay_latest_hand_event()
@@ -654,14 +643,4 @@ class WitchRuntime:
                 await self._emit_scene_events_on_audio_start(Scene.SCENE_0_IDLE, None)
                 await self._on_state_changed()
                 await self._cancel_speech()
-                if (
-                    os.environ.get("WITCH_SEAT_SENSOR_OVERRIDE", "").strip().lower()
-                    == "true"
-                ):
-                    logger.info(
-                        "Reset: seat sensor override active, re-emitting person seated event"
-                    )
-                    await self._process_ip_event(
-                        PersonEvent(trigger=PersonTrigger.DETECTED)
-                    )
         return self._state_machine.state

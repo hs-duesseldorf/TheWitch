@@ -16,6 +16,7 @@ OUTRO = Scene.SCENE_6_OUTRO.value
 RESTART = Scene.SCENE_RESTART.value
 
 SC1_START = Scene.SCENE_1_START.value
+SC1_SEATED = Scene.SCENE_1_SEATED.value
 SC2_AWAITING_HAND = Scene.SCENE_2_AWAITING_HAND.value
 SC2_HAND_FOUND = Scene.SCENE_2_HAND_FOUND.value
 SC3_HANDSCAN_IN_PROCESS = Scene.SCENE_3_HANDSCAN_IN_PROCESS.value
@@ -35,7 +36,8 @@ DEBUG_STATES = [DEBUG_HAND_ABSENT,
                 DEBUG_HAND_TILTED, 
                 DEBUG_HAND_WRONG_SIDE]
 PERSON_EVENT_TRIGGER = {
-    PersonTrigger.DETECTED: "ip_person_seated",
+    PersonTrigger.DETECTED: "ip_person_detected",
+    PersonTrigger.SEATED: "ip_person_seated",
     PersonTrigger.ABSENT: "ip_person_left",
 }
 
@@ -68,11 +70,13 @@ TRANSITIONS = [
                                 DEBUG_HAND_WRONG_SIDE, before="store_previous_transition"),
     _transition("exit_debug", [DEBUG_HAND_ABSENT, DEBUG_HAND_TILTED, DEBUG_HAND_WRONG_SIDE], 
                                 None, before="return_to_previous_transition"),
-    # Scene 0
-    _transition("ip_person_seated", IDLE, SC1_START), 
+    # Scene 0 / person arrival
+    _transition("ip_person_detected", IDLE, SC1_START),
     # Scene 1
-    _transition("instructions_stone_done", SC1_START, SC2_AWAITING_HAND),
+    _transition("ip_person_seated", SC1_START, SC1_SEATED),
     # Scene 2
+    _transition("ip_hand_absent", SC1_SEATED, SC2_AWAITING_HAND),
+    _transition("ip_hand_present", SC1_SEATED, SC2_HAND_FOUND),
     _transition("ip_hand_present", SC2_AWAITING_HAND, SC2_HAND_FOUND),
     _transition("restart_hand_prompt", SC2_HAND_FOUND, SC2_AWAITING_HAND),
     # Scene 3
@@ -87,6 +91,23 @@ TRANSITIONS = [
     _transition("weak_element_done", SC5_2_WEAK_ELEMENT, SC5_3_ADVICE),
     _transition("advice_done", SC5_3_ADVICE, OUTRO),
     # End
+    _transition(
+        "ip_person_left",
+        [
+            SC1_START,
+            SC1_SEATED,
+            SC2_AWAITING_HAND,
+            SC2_HAND_FOUND,
+            SC3_HANDSCAN_IN_PROCESS,
+            SC3_HANDSCAN_DONE,
+            SC4_TRANSFORMATION,
+            SC5_HANDREAD_VISUALISATION,
+            SC5_1_CORE_ELEMENT,
+            SC5_2_WEAK_ELEMENT,
+            SC5_3_ADVICE,
+        ],
+        OUTRO,
+    ),
     _transition("ip_person_left", OUTRO, RESTART),
     _transition("reset", ANY_SOURCE, IDLE),
 ]
@@ -94,7 +115,6 @@ TRANSITIONS = [
 TRANSITION_IDS = list(dict.fromkeys(item["trigger"] for item in TRANSITIONS))
 
 ANIMATION_TRIGGER_BY_STATE: dict[str, str] = {
-    SC1_START: "instructions_stone_done",
     SC3_HANDSCAN_IN_PROCESS: "hand_scanning",
     SC3_HANDSCAN_DONE: "scan_complete",
     SC4_TRANSFORMATION: "transformation_done",
@@ -108,6 +128,7 @@ ANIMATION_TRIGGER_BY_STATE: dict[str, str] = {
 
 AUTO_ADVANCE_STATES = frozenset(ANIMATION_TRIGGER_BY_STATE)
 HAND_REPLAY_STATES = frozenset({
+    Scene.SCENE_1_SEATED.value,
     Scene.SCENE_2_AWAITING_HAND.value,
     Scene.SCENE_2_HAND_FOUND.value,
 })
@@ -150,6 +171,11 @@ HAND_TRIGGER_BY_STATE: dict[str, dict[str, str]] = {
         "ready": "exit_debug",
         "present": "exit_debug",
     },
+    SC1_SEATED: {
+        "absent": "ip_hand_absent",
+        "ready": "ip_hand_present",
+        "present": "ip_hand_present",
+    },
     SC2_AWAITING_HAND: {
         "absent": "ip_hand_absent",
         "handback": "ip_hand_wrong_side",
@@ -175,7 +201,8 @@ STATE_DESCRIPTIONS: dict[str, str] = {
     OUTRO: "Szene 6: Wahrsagerin transformiert sich zurück und hat \"nichts mehr zu sagen\"",
     RESTART: "Szene 0: Besucher hat den Raum verlassen, Neustart des Ablaufs, warten auf neuen Besucher",
 
-    SC1_START: "Szene 1: Besucher hat sich hingesetzt, Ausstellung startet, Anweisungen werden geliefert",
+    SC1_START: "Szene 1: Besucher wurde im Raum erkannt, Begrüßung wird geliefert",
+    SC1_SEATED: "Szene 1: Besucher hat sich hingesetzt, kurze Sitzbestätigung und Anweisung werden geliefert",
     SC2_AWAITING_HAND: "Szene 2: Hand liegt im Stein und ist (grob) für die Kamera erkennbar",
     SC2_HAND_FOUND: "Szene 2: Hand bleibt ruhig unter der Kamera",
     SC3_HANDSCAN_IN_PROCESS: "Szene 3: Hand ist erkannt und stabil, analyse startet",
@@ -232,21 +259,8 @@ class WitchStateMachine:
 
     def hand_event(self, event: HandEvent) -> list[StateChange]:
         condition = hand_condition(event)
-        max_changes = 1 if self.manual_mode or condition == "absent" else 8
-        changes: list[StateChange] = []
-        seen_states = {self.state}
-
-        for _ in range(max_changes):
-            trigger = HAND_TRIGGER_BY_STATE.get(self.state, {}).get(condition)
-            change = self.advance(trigger)
-            if change is None:
-                break
-            changes.append(change)
-            if self.state in seen_states:
-                break
-            seen_states.add(self.state)
-
-        return changes
+        change = self.advance(HAND_TRIGGER_BY_STATE.get(self.state, {}).get(condition))
+        return [change] if change else []
 
     def person_event(self, event: PersonEvent) -> list[StateChange]:
         change = self.advance(PERSON_EVENT_TRIGGER.get(event.trigger))
