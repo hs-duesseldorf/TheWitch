@@ -18,6 +18,7 @@ class HandTrigger(str, Enum):
 
 class PersonTrigger(str, Enum):
     DETECTED = "person_detected"
+    SEATED = "person_seated"
     ABSENT = "person_absent"
 
 
@@ -39,6 +40,7 @@ class Scene(str, Enum):
     SCENE_RESTART = "scene_restart"
     # SCENE 1 - Welcome / instructions
     SCENE_1_START = "scene_1_start"
+    SCENE_1_SEATED = "scene_1_seated"
     # SCENE 2 - Hand inside stone
     SCENE_2_AWAITING_HAND = "scene_2_awaiting_hand"
     SCENE_2_HAND_FOUND = "scene_2_hand_found"

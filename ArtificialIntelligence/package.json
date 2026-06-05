@@ -1,6 +1,7 @@
 {
   "scenes": {
-    "scene_1_start": "Setz dich. Lege deine Hand in den Stein und lass sie offen vor mir ruhen.",
+    "scene_1_start": "Ich spüre, dass du näher kommst. Tritt ein und nimm vor mir Platz.",
+    "scene_1_seated": "Gut. Bleib sitzen. Lege deine Hand in den Stein und lass sie offen vor mir ruhen.",
     "scene_2_awaiting_hand": "Ich sehe deine Hand noch nicht klar. Lege sie mit der Innenfläche nach oben in den Stein.",
     "scene_2_hand_found": "Gut. Ich habe sie erfasst. Halte jetzt still und bewege keinen Finger.",
     "scene_3_handscan_in_process": "Bleib genau so. Ich lese bereits, was in deinen Linien verborgen liegt.",
