@@ -128,7 +128,7 @@ class LLMClient:
                 logger.warning("LLM warmup failed on attempt %d; retrying", attempt)
                 time.sleep(RETRY_DELAY_SECONDS * min(attempt, 10))
 
-    def generate_text(self, prompt: str) -> str:
+    def generate_fortune(self, prompt: str) -> str:
         return self.generate(prompt)
 
     async def async_generate(self, prompt: str) -> str:
@@ -168,14 +168,8 @@ class LLMClient:
         )
         return text
 
-    async def async_generate_text(self, prompt: str) -> str:
-        return await self.async_generate(prompt)
-
-    def generate_fortune(self, prompt: str) -> str:
-        return self.generate_text(prompt)
-
     async def async_generate_fortune(self, prompt: str) -> str:
-        return await self.async_generate_text(prompt)
+        return await self.async_generate(prompt)
 
     def _messages(self, prompt: str):
         return [{"role": "user", "content": prompt}]

@@ -155,8 +155,8 @@ ws://localhost:8081/ws/ai-3d
 ws://<AI-machine-LAN-IP>:8081/ws/ai-3d
 ```
 
-`/ws/ai-3d` carries `scene_command`, `analysis_started`, `analysis_result`, and `error` events.
-Unreal can acknowledge the currently pending AI event with `{"type":"event_done"}`.
+`/ws/ai-3d` carries `scene_command`, `analysis_started`, `fortune`, and `error` events.
+On connect or reconnect, the AI immediately re-sends the current scene so Unreal does not have to wait for a new transition before recovering.
 
 ## Useful Commands
 

@@ -35,19 +35,10 @@ def set_runtime(ws_server, state_machine, runtime):
     _state_machine = state_machine
 
 
-def _state_response(state: str):
-    return {"state": state}
-
-
-def _manual_mode_response(enabled: bool):
-    return {"manual_mode": enabled}
-
-
 @app.get("/")
 @app.get("/debug_ui.html")
 def get_ui():
     return FileResponse(html_path, media_type="text/html")
-
 @app.get("/debug_ui_manual.html")
 def get_manual_ui():
     return FileResponse(html_path_manual)
@@ -75,39 +66,49 @@ def get_config():
 
 
 @app.post("/api/reset")
-async def reset_state():
-    return _state_response(await _runtime.trigger_state_event("reset"))
+def reset_state():
+    result = _runtime.trigger_state_event("reset")
+    return {"state": result}
 
 
 @app.post("/api/trigger/{event}")
-async def trigger_event(event: str):
-    return _state_response(await _runtime.trigger_state_event(event))
+def trigger_event(event: str):
+    result = _runtime.trigger_state_event(event)
+    return {"state": result}
 
 @app.post("/api/sim_hand_event/{event}")
 async def simulate_hand_event(event: str):
-    return _state_response(await _runtime.simulate_hand_event(event))
+    result = await _runtime.simulate_hand_event(event)
+    return {"state": result}
 
 @app.post("/api/sim_person_event/{event}")
 async def simulate_person_event(event: str):
-    return _state_response(await _runtime.simulate_person_event(event))
+    result = await _runtime.simulate_person_event(event)
+    return {"state": result}
 
 @app.post("/api/sim_animation_event")
 async def simulate_event_done():
-    return _state_response(await _runtime.acknowledge_unreal_event())
+    result = await _runtime._simulate_event_done()
+    return {"state": result}
 
 @app.post("/api/state/{state}")
 def set_state(state: str):
-    return _state_response(_runtime.force_state(state))
+    result = _runtime.force_state(state)
+    return {"state": result}
 
 # MANUAL MODE
 
 @app.post("/api/manual_mode/on")
 def manual_on():
-    return _manual_mode_response(_runtime.set_manual_mode(True))
+    _runtime.manual_mode = True
+    _state_machine.manual_mode = True
+    return {"manual_mode": True}
 
 @app.post("/api/manual_mode/off")
 def manual_off():
-    return _manual_mode_response(_runtime.set_manual_mode(False))
+    _runtime.manual_mode = False
+    _state_machine.manual_mode = False
+    return {"manual_mode": False}
 
 
 def run():
