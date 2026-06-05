@@ -8,6 +8,7 @@ import queue
 import re
 import threading
 import time
+from contextlib import suppress
 from typing import Any, Awaitable, Callable
 
 import numpy as np
@@ -20,11 +21,11 @@ except Exception:
     HAS_SOUNDDEVICE = False
     sd = None
 
-from shared.events import AnalysisStartedEvent, ErrorEvent, Scene
 logger = logging.getLogger(__name__)
 
 SR = 48000
 UNDERRUN_LOG_INTERVAL_SECONDS = 2.0
+DRAIN_TIMEOUT = 30.0
 
 
 def _configured_audio_device(devices: list[dict[str, Any]]) -> int | None:
@@ -197,12 +198,6 @@ def find_audio_devices() -> list[int | None]:
             unique.append(device)
     return unique
 
-AnalysisCallbacks = Callable[
-    [AnalysisStartedEvent | ErrorEvent],
-    Awaitable[None],
-]
-
-
 class StreamingAudioPlayer:
     def __init__(self, sample_rate: int = 24000):
         self._sample_rate = sample_rate
@@ -218,6 +213,8 @@ class StreamingAudioPlayer:
         self._speaker_delay_frames = int(SR * self._speaker_delay_seconds)
         self._pcm_remainder = b""
         self._outputs: list[dict[str, Any]] = []
+        self._playback_start_callback: Callable[[], None] | None = None
+        self._playback_start_notified = False
 
     def start(self) -> None:
         if not HAS_SOUNDDEVICE:
@@ -300,8 +297,10 @@ class StreamingAudioPlayer:
     def prebuffer_seconds(self) -> float:
         return self._prebuffer_seconds
 
-    def begin(self) -> None:
+    def begin(self, on_playback_start: Callable[[], None] | None = None) -> None:
         self.start()
+        self._playback_start_callback = on_playback_start
+        self._playback_start_notified = False
         for output in self._outputs:
             self._clear_output(output, producer_done=False)
             
@@ -352,7 +351,8 @@ class StreamingAudioPlayer:
                         break
 
                     with output["lock"]:
-                        output["playback_started"] = self._prebuffer_frames <= 0
+                        if not output["playback_started"]:
+                            output["playback_started"] = self._prebuffer_frames <= 0
                         output["underruns"] += 1
                         underruns = output["underruns"]
                         now = time.perf_counter()
@@ -390,9 +390,20 @@ class StreamingAudioPlayer:
             else:
                 pending = np.empty((0, 2), dtype=np.float32)
 
+        if written > 0:
+            self._notify_playback_started()
+
         with output["lock"]:
             if generation == output["generation"]:
                 output["pending"] = pending
+
+    def _notify_playback_started(self) -> None:
+        if self._playback_start_notified:
+            return
+        callback = self._playback_start_callback
+        self._playback_start_notified = True
+        if callback is not None:
+            callback()
 
     def _enqueue(self, output: dict[str, Any], data: np.ndarray) -> None:
         chunks: queue.Queue[np.ndarray | None] = output["queue"]
@@ -441,7 +452,7 @@ class StreamingAudioPlayer:
             for output in self._outputs:
                 self._enqueue(output, data)
         except Exception as e:
-            logger.warning("Audio playback chunk failed: %s", e)
+            logger.warning("Audio playback chunk failed (format=%s, sample_rate=%s, len=%d): %s", format, sample_rate, len(audio_chunk), e)
 
     def finish(self) -> None:
         for output in self._outputs:
@@ -449,10 +460,11 @@ class StreamingAudioPlayer:
                 output["producer_done"] = True
                 output["playback_started"] = True
 
-    async def drain(self) -> None:
+    async def drain(self, *, timeout: float = DRAIN_TIMEOUT) -> None:
         if not self._outputs:
             return
 
+        deadline = time.perf_counter() + timeout
         while True:
             done = True
             for output in self._outputs:
@@ -468,6 +480,12 @@ class StreamingAudioPlayer:
             if done:
                 await asyncio.sleep(0.1)
                 return
+
+            if time.perf_counter() >= deadline:
+                logger.error("Audio drain timed out after %.1fs; clearing player", timeout)
+                self.clear()
+                return
+
             await asyncio.sleep(0.05)
 
     def _clear_output(self, output: dict[str, Any], *, producer_done: bool) -> None:
@@ -490,9 +508,8 @@ class StreamingAudioPlayer:
         for output in self._outputs:
             self._clear_output(output, producer_done=True)
         self._pcm_remainder = b""
-
-
-AnalysisDoneCallbacks = Callable[[str], Awaitable[None]]
+        self._playback_start_callback = None
+        self._playback_start_notified = False
 
 
 class SpeechPipeline:
@@ -500,16 +517,10 @@ class SpeechPipeline:
         self,
         llm: Any,
         tts: Any,
-        broadcast_callback: AnalysisCallbacks,
-        done_callback: AnalysisDoneCallbacks | None = None,
         tts_seed: int = 42,
     ):
         self._llm = llm
         self._tts = tts
-        self._broadcast_callback = broadcast_callback
-        self._done_callback = done_callback
-        self._current_task: asyncio.Task | None = None
-        self._current_loop: asyncio.AbstractEventLoop | None = None
         self._player = StreamingAudioPlayer()
         self._stage = "idle"
         self._tts_seed = tts_seed
@@ -518,81 +529,34 @@ class SpeechPipeline:
     def stage(self) -> str:
         return self._stage
 
-    def is_running(self) -> bool:
-        return self._current_task is not None and not self._current_task.done()
-
     def stop_player(self) -> None:
         logger.info("Clearing player")
-        try:
+        with suppress(Exception):
             self._player.clear()
-        except Exception:
-            pass
         logger.info("Player cleared")
-
-    async def run_analysis(self, prompt: str, scene: Scene) -> None:
-        if self._current_task is not None and not self._current_task.done():
-            logger.debug("Analysis already running, ignoring")
-            return
-
-        try:
-            loop = asyncio.get_running_loop()
-        except RuntimeError:
-            return
-
-        self._stage = "queued"
-        self._current_task = None
-        self._current_loop = loop
-        self._current_task = loop.create_task(self._execute(prompt, scene))
-
-    async def cancel(self) -> None:
-        logger.info("cancel() called")
-        self.stop_player()
-        if self._current_task and not self._current_task.done():
-            self._current_task.cancel()
-            try:
-                await self._current_task
-            except asyncio.CancelledError:
-                pass
-            except Exception:
-                pass
-        self._current_task = None
-        self._stage = "idle"
-        logger.info("Cancel complete")
-
-    def cancel_sync(self) -> None:
-        logger.info("cancel_sync() called at stage=%s", self._stage)
-        if self._current_task and not self._current_task.done():
-            if self._current_loop and self._current_loop.is_running():
-                self._current_loop.call_soon_threadsafe(self._current_task.cancel)
-            else:
-                self._current_task.cancel()
-        self.stop_player()
-        logger.info("Cancel sync complete")
 
     INITIAL_RETRY_DELAY = 2.0
     MAX_RETRY_DELAY = 60.0
 
-    async def _generate_fortune(self, prompt: str) -> str:
-        async_generate = getattr(self._llm, "async_generate_fortune", None)
+    async def _generate_text(self, prompt: str) -> str:
+        async_generate = getattr(self._llm, "async_generate_text", None)
         if async_generate is not None:
             return await async_generate(prompt)
+        generate = getattr(self._llm, "generate_text", None)
+        if generate is not None:
+            return await asyncio.to_thread(generate, prompt)
         return await asyncio.to_thread(self._llm.generate_fortune, prompt)
 
-    async def _execute(self, prompt: str, scene: Scene) -> None:
-        player = self._player
+    async def generate_text(self, prompt: str) -> str:
         delay = self.INITIAL_RETRY_DELAY
 
         try:
             while True:
                 try:
                     self._stage = "llm"
-                    await self._broadcast_callback(
-                        AnalysisStartedEvent(scene=scene),
-                    )
-
-                    debug_text = (await self._generate_fortune(prompt)).strip()
-                    logger.info("Analysis LLM result: chars=%d", len(debug_text))
-                    if not debug_text:
+                    text = (await self._generate_text(prompt)).strip()
+                    logger.info("Speech LLM result: chars=%d", len(text))
+                    if not text:
                         raise RuntimeError("LLM returned empty response")
                     if self._done_callback:
                         await self._done_callback(debug_text)
@@ -685,18 +649,116 @@ class SpeechPipeline:
                         await player.drain()
 
                     self._stage = "done"
-                    self._current_task = None
-                    return
+                    return text
 
                 except asyncio.CancelledError:
-                    logger.info("Analysis task cancelled at stage=%s", self._stage)
+                    logger.info("Speech text generation cancelled at stage=%s", self._stage)
                     raise
                 except Exception as e:
-                    player.clear()
-                    logger.warning(f"Analysis failed, retrying in %ss: %s", delay, e)
+                    logger.warning("Speech text generation failed, retrying in %ss: %s", delay, e)
                     await asyncio.sleep(delay)
                     delay = min(delay * 2, self.MAX_RETRY_DELAY)
         finally:
-            self._current_task = None
-            self._current_loop = None
+            self._stage = "idle"
+
+    async def play_text(
+        self,
+        text: str,
+        *,
+        on_audio_start: Callable[[], Awaitable[None] | None] | None = None,
+    ) -> None:
+        if len(text) < 10:
+            logger.warning("Text too short for TTS (%d chars), skipping", len(text))
+            self._stage = "done"
+            self._stage = "idle"
+            return
+
+        player = self._player
+        tts_text = _normalize_tts_text(text)
+        if not tts_text:
+            raise RuntimeError("TTS text became empty after normalization")
+        if tts_text != text:
+            logger.info(
+                "Normalized TTS text: llm_chars=%d tts_chars=%d",
+                len(text),
+                len(tts_text),
+            )
+
+        self._stage = "tts_stream"
+        logger.info("TTS full: %s", tts_text[:80])
+
+        loop = asyncio.get_running_loop()
+        audio_start_future: asyncio.Future[None] | None = None
+        audio_start_task: asyncio.Task[None] | None = None
+
+        if on_audio_start is not None:
+            audio_start_future = loop.create_future()
+
+            async def _wait_and_emit_audio_start() -> None:
+                await audio_start_future
+                maybe_result = on_audio_start()
+                if maybe_result is not None:
+                    await maybe_result
+
+            audio_start_task = loop.create_task(_wait_and_emit_audio_start())
+
+            def mark_audio_started() -> None:
+                if audio_start_future is None or audio_start_future.done():
+                    return
+                loop.call_soon_threadsafe(audio_start_future.set_result, None)
+        else:
+            mark_audio_started = lambda: None
+
+        try:
+            try:
+                player.begin(on_playback_start=mark_audio_started)
+                use_direct = player.is_active()
+                if use_direct:
+                    logger.info(
+                        "Audio output active; prebuffering %.2fs",
+                        player.prebuffer_seconds,
+                    )
+            except Exception as e:
+                logger.warning("Audio player failed: %s", e)
+                use_direct = False
+
+            if not use_direct:
+                logger.info("No local audio device")
+
+            frame_count = 0
+            byte_count = 0
+            async for frame in self._tts.stream_synthesize(tts_text, seed=self._tts_seed):
+                frame_count += 1
+                byte_count += len(frame.audio)
+
+                if not use_direct:
+                    mark_audio_started()
+
+                if use_direct:
+                    player.put(
+                        frame.audio,
+                        format=frame.format,
+                        sample_rate=frame.sample_rate,
+                    )
+
+            logger.info(
+                "TTS complete: frames=%d bytes=%d input_chars=%d",
+                frame_count,
+                byte_count,
+                len(tts_text),
+            )
+
+            if frame_count == 0:
+                raise RuntimeError("TTS returned no audio frames")
+
+            mark_audio_started()
+            if use_direct:
+                player.finish()
+                await player.drain()
+
+            if audio_start_task is not None:
+                await audio_start_task
+
+            self._stage = "done"
+        finally:
             self._stage = "idle"

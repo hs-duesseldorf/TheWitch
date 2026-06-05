@@ -239,9 +239,9 @@
             };
 
             async function init() {
-                await updateState();
                 const { ws_port } = await json("/api/config");
                 const wsBase = `${location.protocol === "https:" ? "wss" : "ws"}://${location.hostname}:${ws_port}`;
+                await updateState();
                 stream("camera", `${wsBase}/ws/ai-3d-video`);
                 stream("roi", `${wsBase}/ws/ai-3d-roi`);
                 socket(`${wsBase}/ws/ip-ai`, (ev) => {

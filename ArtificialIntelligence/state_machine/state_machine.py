@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Awaitable, Callable
 
 from transitions.extensions import GraphMachine
 
@@ -35,6 +34,10 @@ ANY_SOURCE = "*"
 DEBUG_STATES = [DEBUG_HAND_ABSENT, 
                 DEBUG_HAND_TILTED, 
                 DEBUG_HAND_WRONG_SIDE]
+PERSON_EVENT_TRIGGER = {
+    PersonTrigger.DETECTED: "ip_person_seated",
+    PersonTrigger.ABSENT: "ip_person_left",
+}
 
 @dataclass(frozen=True)
 class StateChange:
@@ -71,6 +74,7 @@ TRANSITIONS = [
     _transition("instructions_stone_done", SC1_START, SC2_AWAITING_HAND),
     # Scene 2
     _transition("ip_hand_present", SC2_AWAITING_HAND, SC2_HAND_FOUND),
+    _transition("restart_hand_prompt", SC2_HAND_FOUND, SC2_AWAITING_HAND),
     # Scene 3
     _transition("ip_hand_correct", SC2_HAND_FOUND, SC3_HANDSCAN_IN_PROCESS),
     _transition("hand_scanning", SC3_HANDSCAN_IN_PROCESS, SC3_HANDSCAN_DONE),
@@ -84,25 +88,48 @@ TRANSITIONS = [
     _transition("advice_done", SC5_3_ADVICE, OUTRO),
     # End
     _transition("ip_person_left", OUTRO, RESTART),
-    _transition("reset", ANY_SOURCE, SC1_START),
+    _transition("reset", ANY_SOURCE, IDLE),
 ]
 
 TRANSITION_IDS = list(dict.fromkeys(item["trigger"] for item in TRANSITIONS))
 
 ANIMATION_TRIGGER_BY_STATE: dict[str, str] = {
     SC1_START: "instructions_stone_done",
+    SC3_HANDSCAN_IN_PROCESS: "hand_scanning",
+    SC3_HANDSCAN_DONE: "scan_complete",
     SC4_TRANSFORMATION: "transformation_done",
     SC5_HANDREAD_VISUALISATION: "hand_visual_done",
     SC5_1_CORE_ELEMENT: "core_element_done",
     SC5_2_WEAK_ELEMENT: "weak_element_done",
     SC5_3_ADVICE: "advice_done",
+    OUTRO: "reset",
     RESTART: "reset",
 }
 
-PERSON_TRIGGER_BY_STATE: dict[str, str] = {
-    IDLE: "ip_person_seated",
-    OUTRO: "ip_person_left",
-}
+AUTO_ADVANCE_STATES = frozenset(ANIMATION_TRIGGER_BY_STATE)
+HAND_REPLAY_STATES = frozenset({
+    Scene.SCENE_2_AWAITING_HAND.value,
+    Scene.SCENE_2_HAND_FOUND.value,
+})
+ANALYSIS_SCENES = frozenset({
+    Scene.SCENE_5_HANDREAD_VISUALISATION,
+    Scene.SCENE_5_SHOT_1_CORE_ELEMENT,
+    Scene.SCENE_5_SHOT_2_WEAK_ELEMENT,
+    Scene.SCENE_5_SHOT_3_ADVICE,
+})
+HAND_LOCKED_STATES = frozenset({
+    Scene.SCENE_3_HANDSCAN_IN_PROCESS.value,
+    Scene.SCENE_3_HANDSCAN_DONE.value,
+    Scene.SCENE_4_TRANSFORMATION.value,
+    Scene.SCENE_5_HANDREAD_VISUALISATION.value,
+    Scene.SCENE_5_SHOT_1_CORE_ELEMENT.value,
+    Scene.SCENE_5_SHOT_2_WEAK_ELEMENT.value,
+    Scene.SCENE_5_SHOT_3_ADVICE.value,
+    Scene.SCENE_6_OUTRO.value,
+    Scene.SCENE_RESTART.value,
+})
+PERSON_LOCKED_STATES = HAND_LOCKED_STATES
+WAIT_FOR_UNREAL_STATES = frozenset()
 
 HAND_TRIGGER_BY_STATE: dict[str, dict[str, str]] = {
     DEBUG_HAND_ABSENT: {
@@ -137,22 +164,7 @@ HAND_TRIGGER_BY_STATE: dict[str, dict[str, str]] = {
         "ready": "ip_hand_correct",
         "present": "ip_hand_correct",
     },
-    SC1_START: {
-        "ready": "instructions_stone_done",
-        "present": "instructions_stone_done",
-    },
-    SC3_HANDSCAN_IN_PROCESS: {
-        "ready": "hand_scanning",
-        "present": "hand_scanning",
-    },
-    SC3_HANDSCAN_DONE: {
-        "ready": "scan_complete",
-        "present": "scan_complete",
-    },
 }
-
-SCENES_THAT_START_ANALYSIS = frozenset({SC3_HANDSCAN_DONE, SC5_HANDREAD_VISUALISATION})
-SCENES_THAT_DELIVER_FORTUNE = frozenset({SC5_HANDREAD_VISUALISATION})
 
 STATE_DESCRIPTIONS: dict[str, str] = {
     DEBUG_HAND_ABSENT: "Debug, wenn Hand überhaupt nicht anwesend ist",
@@ -181,8 +193,6 @@ STATE_DESCRIPTIONS: dict[str, str] = {
 class WitchStateMachine:
     def __init__(self) -> None:
         self.previous_state = None
-        self.previous_trigger = None
-        self._transition_handlers: dict[str, list[Callable[[StateChange], Awaitable[None]]]] = {}
         self._state: str = INITIAL
         self.manual_mode = False
         self._machine = GraphMachine(
@@ -201,7 +211,6 @@ class WitchStateMachine:
         source = event_data.transition.source
         if source not in DEBUG_STATES:
             self.previous_state = source
-            self.previous_trigger = event_data.event.name
 
     def return_to_previous_transition(self, event_data):
         if self.previous_state:
@@ -217,21 +226,13 @@ class WitchStateMachine:
     def state(self, value: str) -> None:
         self._state = value
 
-    def register_transition_handler(self, trigger: str, handler: Callable[[StateChange], Awaitable[None]]) -> None:
-        if trigger not in self._transition_handlers:
-            self._transition_handlers[trigger] = []
-        self._transition_handlers[trigger].append(handler)
-
-    def get_transition_handlers(self, trigger: str) -> list[Callable[[StateChange], Awaitable[None]]]:
-        return self._transition_handlers.get(trigger, [])
-
     @property
     def machine(self):
         return self._machine
 
     def hand_event(self, event: HandEvent) -> list[StateChange]:
         condition = hand_condition(event)
-        max_changes = 1 if self.manual_mode == True or condition == "absent" else 8
+        max_changes = 1 if self.manual_mode or condition == "absent" else 8
         changes: list[StateChange] = []
         seen_states = {self.state}
 
@@ -241,11 +242,6 @@ class WitchStateMachine:
             if change is None:
                 break
             changes.append(change)
-        # THIS IS FOR MANUAL MODE TO NOT LEAVE THE NEW STATE IMMEDIATELY
-        # Gonna have to look if once the states are properly working it will resume the old state or just skip it
-        # on debug return
-            #if trigger == "exit_debug":
-            #    break
             if self.state in seen_states:
                 break
             seen_states.add(self.state)
@@ -253,10 +249,7 @@ class WitchStateMachine:
         return changes
 
     def person_event(self, event: PersonEvent) -> list[StateChange]:
-        if event.trigger is PersonTrigger.DETECTED:
-            change = self.advance("ip_person_seated")
-        if event.trigger is PersonTrigger.ABSENT:
-            change = self.advance("ip_person_left")
+        change = self.advance(PERSON_EVENT_TRIGGER.get(event.trigger))
         return [change] if change else []
 
     def event_done(self, scene: str | None = None) -> list[StateChange]:
