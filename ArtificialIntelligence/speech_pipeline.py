@@ -25,7 +25,7 @@ logger = logging.getLogger(__name__)
 
 SR = 48000
 UNDERRUN_LOG_INTERVAL_SECONDS = 2.0
-DRAIN_TIMEOUT = 30.0
+DRAIN_TIMEOUT = 90.0
 
 
 def _configured_audio_device(devices: list[dict[str, Any]]) -> int | None:
