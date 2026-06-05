@@ -25,6 +25,7 @@ class SeatSensorConfig:
     hold_time_s: int = 10
     report_frequency_hz: int = 80
     response_speed: int = 10
+    warmup_s: int = 30
 
 
 @dataclass(frozen=True, slots=True)
@@ -271,6 +272,7 @@ class SeatPresenceMonitor:
         hold_time_s = int(os.getenv("WITCH_LD2410S_HOLD_TIME_S", str(self.config.hold_time_s)))
         report_frequency_hz = int(os.getenv("WITCH_LD2410S_REPORT_FREQUENCY_HZ", str(self.config.report_frequency_hz)))
         response_speed = int(os.getenv("WITCH_LD2410S_RESPONSE_SPEED", str(self.config.response_speed)))
+        warmup_s = max(0.0, float(os.getenv("WITCH_LD2410S_WARMUP_S", str(self.config.warmup_s))))
 
         try:
             logger.info("Opening seat sensor on %s at %s baud", port, baud)
@@ -306,10 +308,14 @@ class SeatPresenceMonitor:
         candidate_hits = 0
         last_reading_at = 0.0
         last_distance_mm: int | None = None
+        warmup_until = time.monotonic() + warmup_s
+        if warmup_s > 0:
+            logger.info("Ignoring seat sensor readings for %.1f seconds during warmup", warmup_s)
 
         try:
             while not self.stop_event.is_set():
                 started = time.monotonic()
+                now = started
                 try:
                     reading = sensor.read_presence()
                 except Exception as exc:
@@ -320,54 +326,83 @@ class SeatPresenceMonitor:
 
                 if reading is not None:
                     now = time.monotonic()
-                    last_reading_at = now
-                    distance_mm = self._calibrated_distance_mm(
-                        reading.distance_mm,
-                        scale=distance_scale,
-                        offset_mm=distance_offset_mm,
-                    )
-                    reading = PresenceReading(
-                        present=reading.present,
-                        distance_mm=distance_mm,
-                        target_state=reading.target_state,
-                        raw_frame=reading.raw_frame,
-                    )
-                    if debug_raw:
+                    if now < warmup_until:
                         logger.info(
-                            "LD2410S raw=%s target_state=%s present=%s distance_mm=%s",
-                            reading.raw_frame.hex(" ") if reading.raw_frame else "-",
-                            reading.target_state,
+                            "Seat sensor warmup ignored: present=%s distance_mm=%s target_state=%s",
                             reading.present,
                             reading.distance_mm,
+                            reading.target_state,
                         )
-                    last_distance_mm = reading.distance_mm
-
-                    next_zone = self._ld2410s_zone(
-                        reading,
-                        seated_max_mm=seated_max_mm,
-                        present_max_mm=present_max_mm,
-                    )
-
-                    if next_zone == candidate_zone:
-                        candidate_hits += 1
+                        zone = PersonZone.ABSENT
+                        candidate_zone = PersonZone.ABSENT
+                        candidate_hits = 0
+                        last_reading_at = 0.0
+                        last_distance_mm = None
+                        reading = None
                     else:
-                        candidate_zone = next_zone
-                        candidate_hits = 1
+                        distance_mm = self._calibrated_distance_mm(
+                            reading.distance_mm,
+                            scale=distance_scale,
+                            offset_mm=distance_offset_mm,
+                        )
+                        reading = PresenceReading(
+                            present=reading.present,
+                            distance_mm=distance_mm,
+                            target_state=reading.target_state,
+                            raw_frame=reading.raw_frame,
+                        )
+                        if debug_raw:
+                            logger.info(
+                                "LD2410S raw=%s target_state=%s present=%s distance_mm=%s",
+                                reading.raw_frame.hex(" ") if reading.raw_frame else "-",
+                                reading.target_state,
+                                reading.present,
+                                reading.distance_mm,
+                            )
+                        last_distance_mm = reading.distance_mm
+                        if reading.distance_mm is None:
+                            logger.info(
+                                "Ignoring seat sensor reading without distance: present=%s target_state=%s",
+                                reading.present,
+                                reading.target_state,
+                            )
+                            reading = None
+                        else:
+                            last_reading_at = now
+                            next_zone = self._ld2410s_zone(
+                                reading,
+                                seated_max_mm=seated_max_mm,
+                                present_max_mm=present_max_mm,
+                            )
+                            next_zone = self._normalized_next_zone(zone, next_zone)
+                            if next_zone == candidate_zone:
+                                candidate_hits += 1
+                            else:
+                                candidate_zone = next_zone
+                                candidate_hits = 1
+                            logger.info(
+                                "Seat sensor reading: present=%s distance_mm=%s zone=%s current_zone=%s candidate_hits=%s",
+                                reading.present,
+                                reading.distance_mm,
+                                next_zone.value,
+                                zone.value,
+                                candidate_hits,
+                            )
 
-                    if candidate_zone != zone and candidate_hits >= required_hits:
-                        previous_zone = zone
-                        zone = candidate_zone
-                        if previous_zone is PersonZone.ABSENT and zone is PersonZone.SEATED:
-                            self._publish_zone(PersonZone.PRESENT, last_distance_mm)
-                        self._publish_zone(zone, last_distance_mm if zone is not PersonZone.ABSENT else None)
+                            if candidate_zone != zone and candidate_hits >= required_hits:
+                                previous_zone = zone
+                                zone = candidate_zone
+                                self._publish_transition(previous_zone, zone, last_distance_mm)
 
                 now = time.monotonic()
                 if zone is not PersonZone.ABSENT and last_reading_at > 0 and now - last_reading_at >= stale_s:
-                    zone = PersonZone.ABSENT
-                    candidate_zone = PersonZone.ABSENT
+                    previous_zone = zone
+                    zone = self._normalized_next_zone(zone, PersonZone.ABSENT)
+                    candidate_zone = zone
                     candidate_hits = 0
                     last_distance_mm = None
-                    self._publish_zone(zone, None)
+                    last_reading_at = now if zone is not PersonZone.ABSENT else 0.0
+                    self._publish_transition(previous_zone, zone, None)
 
                 if reading is None:
                     elapsed = time.monotonic() - started
@@ -386,7 +421,7 @@ class SeatPresenceMonitor:
         if not reading.present:
             return PersonZone.ABSENT
         if reading.distance_mm is None:
-            return PersonZone.PRESENT
+            return PersonZone.ABSENT
         if reading.distance_mm <= seated_max_mm:
             return PersonZone.SEATED
         if reading.distance_mm <= present_max_mm:
@@ -431,6 +466,29 @@ class SeatPresenceMonitor:
         else:
             logger.info("Seat sensor person absent")
             self._publish_person_absent()
+
+    def _publish_transition(
+        self,
+        previous_zone: PersonZone,
+        zone: PersonZone,
+        distance_mm: int | None,
+    ) -> None:
+        if previous_zone is zone:
+            return
+        if previous_zone is PersonZone.ABSENT and zone is PersonZone.SEATED:
+            self._publish_zone(PersonZone.PRESENT, distance_mm)
+            self._publish_zone(PersonZone.SEATED, distance_mm)
+            return
+        self._publish_zone(zone, distance_mm if zone is not PersonZone.ABSENT else None)
+
+    def _normalized_next_zone(
+        self,
+        current_zone: PersonZone,
+        next_zone: PersonZone,
+    ) -> PersonZone:
+        if current_zone is PersonZone.SEATED and next_zone is PersonZone.ABSENT:
+            return PersonZone.PRESENT
+        return next_zone
 
     def _calibrated_distance_mm(self, distance_mm: int | None, *, scale: float, offset_mm: int) -> int | None:
         if distance_mm is None:

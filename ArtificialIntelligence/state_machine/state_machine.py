@@ -13,7 +13,6 @@ DEBUG_HAND_WRONG_SIDE = Scene.SCENE_DEBUG_SHOT_3_HAND_WRONG_SIDE.value
 
 IDLE = Scene.SCENE_0_IDLE.value
 OUTRO = Scene.SCENE_6_OUTRO.value
-RESTART = Scene.SCENE_RESTART.value
 
 SC1_START = Scene.SCENE_1_START.value
 SC1_SEATED = Scene.SCENE_1_SEATED.value
@@ -108,7 +107,7 @@ TRANSITIONS = [
         ],
         OUTRO,
     ),
-    _transition("ip_person_left", OUTRO, RESTART),
+    _transition("ip_person_left", OUTRO, IDLE),
     _transition("reset", ANY_SOURCE, IDLE),
 ]
 
@@ -123,7 +122,6 @@ ANIMATION_TRIGGER_BY_STATE: dict[str, str] = {
     SC5_2_WEAK_ELEMENT: "weak_element_done",
     SC5_3_ADVICE: "advice_done",
     OUTRO: "reset",
-    RESTART: "reset",
 }
 
 AUTO_ADVANCE_STATES = frozenset(ANIMATION_TRIGGER_BY_STATE)
@@ -147,7 +145,6 @@ HAND_LOCKED_STATES = frozenset({
     Scene.SCENE_5_SHOT_2_WEAK_ELEMENT.value,
     Scene.SCENE_5_SHOT_3_ADVICE.value,
     Scene.SCENE_6_OUTRO.value,
-    Scene.SCENE_RESTART.value,
 })
 PERSON_LOCKED_STATES = HAND_LOCKED_STATES
 WAIT_FOR_UNREAL_STATES = frozenset()
@@ -199,8 +196,6 @@ STATE_DESCRIPTIONS: dict[str, str] = {
 
     IDLE: "Szene 0: Wahrsagerin reagiert nicht, Besucher betritt den Raum",
     OUTRO: "Szene 6: Wahrsagerin transformiert sich zurück und hat \"nichts mehr zu sagen\"",
-    RESTART: "Szene 0: Besucher hat den Raum verlassen, Neustart des Ablaufs, warten auf neuen Besucher",
-
     SC1_START: "Szene 1: Besucher wurde im Raum erkannt, Begrüßung wird geliefert",
     SC1_SEATED: "Szene 1: Besucher hat sich hingesetzt, kurze Sitzbestätigung und Anweisung werden geliefert",
     SC2_AWAITING_HAND: "Szene 2: Hand liegt im Stein und ist (grob) für die Kamera erkennbar",
