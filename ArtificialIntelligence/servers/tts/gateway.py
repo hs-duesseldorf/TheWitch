@@ -18,18 +18,15 @@ class SpeechRequest(BaseModel):
 
 
 def _configured_max_new_tokens() -> int | None:
-    configured = os.environ.get("TTS_MAX_NEW_TOKENS", "").strip()
+    configured = os.environ["TTS_MAX_NEW_TOKENS"].strip()
     if not configured or configured.lower() in {"0", "none", "unlimited"}:
         return None
     return int(configured)
 
 
 def _speech_payload(text: str) -> dict[str, object]:
-    temperature_str = os.environ.get("WITCH_TTS_TEMPERATURE", "0.1").strip()
-    try:
-        temperature = float(temperature_str)
-    except ValueError:
-        temperature = 0.1
+    temperature = float(os.environ["WITCH_TTS_TEMPERATURE"])
+    repetition_penalty = float(os.environ["WITCH_TTS_REPETITION_PENALTY"])
 
     payload: dict[str, object] = {
         "input": text,
@@ -39,7 +36,7 @@ def _speech_payload(text: str) -> dict[str, object]:
         "response_format": "pcm",
         "stream": True,
         "temperature": temperature,
-        "repetition_penalty": 1.2,
+        "repetition_penalty": repetition_penalty,
     }
     max_new_tokens = _configured_max_new_tokens()
     if max_new_tokens is not None:

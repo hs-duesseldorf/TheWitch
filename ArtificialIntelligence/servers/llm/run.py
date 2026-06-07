@@ -15,7 +15,10 @@ from dotenv import load_dotenv
 
 SERVER_DIR = Path(__file__).resolve().parent
 ROOT = SERVER_DIR.parents[2]
-DEFAULT_OLLAMA_MODEL = "hf.co/unsloth/Qwen3-4B-GGUF:Qwen3-4B-Q4_K_M.gguf"
+OLLAMA_BIND_HOST = "0.0.0.0"
+OLLAMA_KEEP_ALIVE = "24h"
+OLLAMA_NUM_PARALLEL = "1"
+OLLAMA_FLASH_ATTENTION = "1"
 
 
 def log(message: str) -> None:
@@ -118,24 +121,19 @@ def run() -> None:
 
     ollama = ollama_bin()
 
-    port = os.environ.get("WITCH_LLM_PORT", "10032")
-    host = os.environ.get("OLLAMA_BIND_HOST", "0.0.0.0")
-    ollama_host = f"{host}:{port}"
+    port = os.environ["WITCH_LLM_PORT"]
+    ollama_host = f"{OLLAMA_BIND_HOST}:{port}"
 
-    model = (
-        os.environ.get("WITCH_OLLAMA_MODEL", "").strip()
-        or os.environ.get("OLLAMA_MODEL", "").strip()
-        or DEFAULT_OLLAMA_MODEL
-    )
+    model = os.environ["WITCH_OLLAMA_MODEL"].strip()
 
     env = os.environ.copy()
     env.update(
         {
             "OLLAMA_HOST": ollama_host,
-            "OLLAMA_KEEP_ALIVE": os.environ.get("OLLAMA_KEEP_ALIVE", "24h"),
-            "OLLAMA_NUM_PARALLEL": os.environ.get("OLLAMA_NUM_PARALLEL", "1"),
-            "OLLAMA_FLASH_ATTENTION": os.environ.get("OLLAMA_FLASH_ATTENTION", "1"),
-            "OLLAMA_CONTEXT_LENGTH": os.environ.get("WITCH_LLM_NUM_CTX", "2048"),
+            "OLLAMA_KEEP_ALIVE": OLLAMA_KEEP_ALIVE,
+            "OLLAMA_NUM_PARALLEL": OLLAMA_NUM_PARALLEL,
+            "OLLAMA_FLASH_ATTENTION": OLLAMA_FLASH_ATTENTION,
+            "OLLAMA_CONTEXT_LENGTH": os.environ["LLM_MAX_MODEL_LEN"],
         }
     )
 
