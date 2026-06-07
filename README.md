@@ -85,7 +85,7 @@ to stop running services.
 Inside `TheWitch` folder:
 
 ```bash
-./witch-compose up llm tts
+./witch-compose llm tts
 ```
 
 This starts:
@@ -102,13 +102,13 @@ On your own computer, only run:
 ### Mac/Linux
 
 ```bash
-./witch-compose up ai ip
+./witch-compose ai ip
 ```
 
 ### Windows (Terminal, NOT PowerShell)
 
 ```powershell
-witch-compose.cmd up ai ip
+witch-compose.cmd ai ip
 ```
 
 This starts:
@@ -204,4 +204,41 @@ WITCH_SEAT_SENSOR_OVERRIDE=true
 
 ## Custom TTS Voice
 
-Qwen3-TTS uses the built-in `vivian` CustomVoice speaker by default.
+The public TTS endpoint accepts only the text input. Model selection, voice, language, fallback voice description, fixed reference text, and streaming settings are configured server-side in `.env`.
+
+The anchored Base voice is stored as an offline-precomputed ICL profile:
+
+```bash
+ArtificialIntelligence/servers/tts/custom_voices/witch.safetensors
+```
+
+At startup, the TTS host:
+
+- Starts the Qwen3-TTS Base model on a private internal port.
+- Loads the precomputed `witch` profile containing its speaker embedding and reference codec tokens.
+- Exposes a text-only gateway on `WITCH_TTS_PORT`.
+- Uses the stored voice for every request without loading or sending reference audio.
+
+If no complete precomputed profile or reference recording exists, the host uses the VoiceDesign model with `WITCH_TTS_VOICE_DESCRIPTION`.
+
+To create a new anchored voice, first stop the normal `tts` service and configure `WITCH_TTS_VOICE_DESCRIPTION`, `WITCH_TTS_ANCHOR_TEXT`, and `WITCH_TTS_ANCHOR_TEMPO` in `.env`. `WITCH_TTS_ANCHOR_TEMPO=0.82` makes the reference delivery slower while preserving pitch; the live TTS stream does not use audio speed adjustment.
+
+Generate the reference recording with VoiceDesign:
+
+```bash
+./witch-compose tts-design
+```
+
+This creates and validates:
+
+```text
+ArtificialIntelligence/servers/tts/custom_voices/voice_anchor.wav
+```
+
+Then start the normal TTS service:
+
+```bash
+./witch-compose tts
+```
+
+At startup, `tts` extracts the speaker embedding and reference codec tokens from the recording, writes `custom_voice_manifest.json` and `witch.safetensors`, and starts the anchored Base voice.

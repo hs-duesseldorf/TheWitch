@@ -18,6 +18,7 @@ ROOT = Path(__file__).resolve().parents[1]
 ENV_FILE = ROOT / ".env"
 REQUIRED_PYTHON_VERSION = (3, 12)
 UV_PYTHON = "3.12"
+UV_CACHE_DIR = ROOT / ".uv-cache"
 
 
 @dataclass
@@ -49,7 +50,13 @@ SERVICES = {
     ),
     "tts": Service(
         name="tts",
-        command=("python", "ArtificialIntelligence/servers/tts/run.py"),
+        command=("python", "-m", "ArtificialIntelligence.servers.tts.run"),
+        venv=ROOT / "ArtificialIntelligence" / "servers" / "tts" / ".venv",
+        requirements=ROOT / "ArtificialIntelligence" / "servers" / "tts" / "requirements.txt",
+    ),
+    "tts-design": Service(
+        name="tts-design",
+        command=("python", "-m", "ArtificialIntelligence.servers.tts.design_voice"),
         venv=ROOT / "ArtificialIntelligence" / "servers" / "tts" / ".venv",
         requirements=ROOT / "ArtificialIntelligence" / "servers" / "tts" / "requirements.txt",
     ),
@@ -184,8 +191,7 @@ def terminate(processes: Iterable[subprocess.Popen[str]]) -> None:
 
 
 def expand_services(names: list[str]) -> list[Service]:
-    selected = names[1:] if names and names[0] == "up" else names
-    selected = selected or list(DEFAULT_SERVICES)
+    selected = names or list(DEFAULT_SERVICES)
     unknown = [n for n in selected if n not in SERVICES]
     if unknown:
         raise SystemExit(f"Unknown service(s): {', '.join(unknown)}")
@@ -231,16 +237,24 @@ def kill_services(services: list[Service]) -> int:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Local venv-based runner for The Witch services.")
-    parser.add_argument("command", nargs="*", help="services: ai, ip, llm, tts (default: all)")
+    parser.add_argument(
+        "command",
+        nargs="*",
+        help="services: ai, ip, llm, tts, tts-design",
+    )
     parser.add_argument("--build", action="store_true", help="create venvs and install requirements before starting")
     args = parser.parse_args()
+    os.environ.setdefault("UV_CACHE_DIR", str(UV_CACHE_DIR))
 
     if args.command and args.command[0] == "kill":
         names = args.command[1:] if len(args.command) > 1 else []
         services = expand_services(names)
         return kill_services(services)
 
-    services = expand_services(args.command)
+    if args.command and args.command[0] == "tts-design":
+        services = [SERVICES["tts-design"]]
+    else:
+        services = expand_services(args.command)
     uv = uv_bin()
 
     if args.build:
@@ -250,8 +264,7 @@ def main() -> int:
     else:
         for service in services:
             if service.venv is not None:
-                if not (service.venv / ".requirements.stamp").exists():
-                    ensure_service(service, uv)
+                ensure_service(service, uv)
 
     env = merged_env()
     apply_local_service_env(env, services)

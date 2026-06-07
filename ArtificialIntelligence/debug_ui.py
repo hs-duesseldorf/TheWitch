@@ -61,7 +61,9 @@ def get_state():
 @app.get("/api/state-machine-graph")
 def get_state_machine_graph():
     try:
-        graph = _state_machine.machine.get_graph(_state_machine.state).source.replace("direction LR", "direction TB")
+        graph = _state_machine.machine.get_graph(
+            _state_machine.state
+        ).source.replace("direction LR", "direction TB")
     except Exception as e:
         logger.warning("Failed to generate state machine graph: %s", e)
         graph = "graph TD\n  error[Graph unavailable]"

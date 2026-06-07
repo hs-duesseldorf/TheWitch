@@ -2,7 +2,7 @@ import json
 import logging
 from functools import lru_cache
 from pathlib import Path
-from typing import Dict, Any
+from typing import Any, Dict
 
 from shared.events import HandEvent, Scene
 
@@ -12,32 +12,36 @@ PACKAGE_PATH = Path(__file__).resolve().parent / "package.json"
 
 _HAND_ANALYSIS_SYSTEM_PROMPT = (
     "/no_think\n"
-    "Antworte ausschliesslich auf Deutsch.\n"
+    "Antworte ausschließlich auf Deutsch.\n"
     "Gib nur die finale gesprochene Antwort aus.\n"
     "Beginne sofort mit der Vorhersage, ohne Analyse oder Vorrede.\n"
-    "STRIKTE REGEL: Du bist ein reiner Text-Transformator. Erfinde KEINE eigenen Geschichten, Linien oder Metaphern.\n"
-    "Nimm die bereitgestellten Basistexte und übersetze sie VOLLSTÄNDIG und OHNE Sinnveränderung in den Tonfall einer weisen, düsteren Wahrsagerin.\n"
-    "Das in den Basistexten genannte dominante Element (z. B. Holz, Feuer, Erde, Wasser, Metall) MUSS namentlich, laut und unmissverständlich als Wort in der Antwort ausgesprochen werden. Es darf NIEMALS weggelassen oder durch Worte wie 'Hand' ersetzt werden."
+    "STRIKTE REGEL: Du bist ein reiner Text-Transformator. Erfinde keine eigenen Geschichten, Linien oder Metaphern.\n"
+    "Übertrage die bereitgestellten Basistexte vollständig und ohne Sinnveränderung in den Tonfall einer weisen, düsteren Wahrsagerin.\n"
+    "Das in den Basistexten genannte dominante Element, zum Beispiel Holz, Feuer, Erde, Wasser oder Metall, muss namentlich und unmissverständlich ausgesprochen werden. Es darf niemals weggelassen oder durch ein anderes Wort ersetzt werden.\n"
     "Es geht immer um eine menschliche Hand, niemals um ein Handtuch.\n"
-    "Verwende nie die Woerter Handtuch, Tuch oder Stoff.\n"
+    "Verwende nie die Wörter Handtuch, Tuch oder Stoff.\n"
     "Kein Markdown, keine Klammern, keine Emojis.\n"
     "Ton: weise, leicht dunkel, konkret.\n"
-    "WICHTIG: Jede Antwort muss sich in Satzbau, Wortwahl und Formulierung von vorherigen unterscheiden. "
-    "Vermeide Wiederholungen derselben Phrasen. Nutze Synonyme und variiere die Satzstruktur.\n"
+    "Formuliere ausschließlich vollständige, natürlich klingende und grammatikalisch korrekte deutsche Sätze.\n"
+    "Prüfe vor der Ausgabe Grammatik, Satzbau, Wortstellung, Bezüge und Zeichensetzung. Gib niemals holprige, mehrdeutige oder unvollständige Sätze aus.\n"
+    "Variiere jede Antwort in Wortwahl, Rhythmus und Satzstruktur, aber niemals auf Kosten von korrektem, natürlichem Deutsch oder klarer Bedeutung.\n"
+    "Vermeide Wiederholungen derselben Phrasen und nutze passende Synonyme.\n"
     "/no_think\n"
 )
 _SCENE_VARIATION_SYSTEM_PROMPT = (
     "/no_think\n"
-    "Antworte ausschliesslich auf Deutsch.\n"
-    "Gib nur die finale gesprochene Antwort aus.\n"
+    "Antworte ausschließlich auf Deutsch.\n"
+    "Gib nur die finale gesprochene Antwort aus: kein Markdown, keine Formatierung und keine Erklärungen.\n"
     "Du bist ein reiner Text-Transformator.\n"
     "Formuliere den Basetext als kurze, natürlich gesprochene Zeile einer weisen, düsteren Wahrsagerin um.\n"
     "Bewahre alle konkreten Anweisungen, Handlungen und Fakten.\n"
     "Erfinde keine neuen Informationen.\n"
-    "Kein Markdown, keine Klammern, keine Emojis.\n"
-    "Ton: ruhig, praezise, leicht dunkel, klar sprechbar.\n"
-    "WICHTIG: Jede Antwort muss sich in Satzbau, Wortwahl und Rhythmus von vorherigen unterscheiden. "
-    "Keine Wiederholung derselben Formulierung. Variiere Phrasen und Satzstruktur.\n"
+    "Kein Markdown, keine Klammern, keine Emojis, keine Sternchen, keine Backticks.\n"
+    "Ton: ruhig, präzise, leicht dunkel und klar sprechbar.\n"
+    "Formuliere ausschließlich vollständige, natürlich klingende und grammatikalisch korrekte deutsche Sätze.\n"
+    "Prüfe vor der Ausgabe Grammatik, Satzbau, Wortstellung, Bezüge und Zeichensetzung. Gib niemals holprige, mehrdeutige oder unvollständige Sätze aus.\n"
+    "Variiere jede Antwort in Wortwahl, Rhythmus und Satzstruktur, aber niemals auf Kosten von korrektem, natürlichem Deutsch oder klarer Bedeutung.\n"
+    "Vermeide Wiederholungen derselben Formulierung und nutze passende Synonyme.\n"
     "/no_think\n"
 )
 
@@ -130,14 +134,14 @@ def compute_raw_scores(features: Dict[str, Any]) -> Dict[str, float]:
     base = 10.0
 
     # Erde: Quadratisch (+) und kurze Finger (-)
-    erde   = base + palm_centered - finger_centered
-    
+    erde = base + palm_centered - finger_centered
+
     # Feuer: Rechteckig (-) und kurze Finger (-)
-    feuer  = base - palm_centered - finger_centered
-    
+    feuer = base - palm_centered - finger_centered
+
     # Holz: Quadratisch (+) und lange Finger (+)
-    holz   = base + palm_centered + finger_centered
-    
+    holz = base + palm_centered + finger_centered
+
     # Wasser: Rechteckig (-) und lange Finger (+)
     wasser = base - palm_centered + finger_centered
 
@@ -154,16 +158,13 @@ def normalize_scores(raw_scores: Dict[str, float]) -> Dict[str, float]:
     mean = sum(values) / len(values)
 
     variance = sum((v - mean) ** 2 for v in values) / len(values)
-    std = variance ** 0.5
+    std = variance**0.5
 
     # Falls alle Werte fast gleich sind
     if std < 1e-6:
         return {k: 0.0 for k in raw_scores}
 
-    normalized = {
-        k: clamp((v - mean) / std, -2.0, 2.0)
-        for k, v in raw_scores.items()
-    }
+    normalized = {k: clamp((v - mean) / std, -2.0, 2.0) for k, v in raw_scores.items()}
     return normalized
 
 
@@ -178,44 +179,48 @@ def determine_base_states(scores: Dict[str, float]) -> Dict[str, str]:
             states[element] = "in_balance"
     return states
 
+
 def determine_dominant_element(scores: Dict[str, float]) -> str:
     return max(scores.items(), key=lambda item: item[1])[0]
+
 
 def determine_weakest_element(scores: Dict[str, float]) -> str:
     return min(scores.items(), key=lambda item: item[1])[0]
 
+
 def element_ratio(raw_scores: Dict[str, Any]) -> Dict[str, Any]:
-    return {k: round((v / sum(raw_scores.values())) * 100, 2) for k, v in raw_scores.items()}
+    return {
+        k: round((v / sum(raw_scores.values())) * 100, 2) for k, v in raw_scores.items()
+    }
 
 
-
-def build_result(input_payload: Dict[str, Any], average_payload: Dict[str, Any] | None = None) -> Dict[str, Any]:
+def build_result(
+    input_payload: Dict[str, Any], average_payload: Dict[str, Any] | None = None
+) -> Dict[str, Any]:
     normalized = normalize_input(input_payload)
     features = normalized["features"]
     meta = normalized["meta"]
 
     raw_scores = compute_raw_scores(features)
     normalized_scores = normalize_scores(raw_scores)
-    final_states= determine_base_states(element_ratio(raw_scores))
+    final_states = determine_base_states(element_ratio(raw_scores))
 
     dominant_element = determine_dominant_element(normalized_scores)
     weakest_element = determine_weakest_element(normalized_scores)
 
-
     return {
         "request_id": meta.get("request_id"),
         "handedness": meta.get("handedness"),
-        "element_scores_raw": {
-            k: round2(v) for k, v in raw_scores.items()
-        },
+        "element_scores_raw": {k: round2(v) for k, v in raw_scores.items()},
         "element_scores_normalized": {
             k: round2(v) for k, v in normalized_scores.items()
         },
-        "element_ratio" : element_ratio(raw_scores),
+        "element_ratio": element_ratio(raw_scores),
         "element_states": final_states,
         "dominant_element": dominant_element,
         "weakest_element": weakest_element,
     }
+
 
 @lru_cache(maxsize=1)
 def load_content_package() -> Dict[str, Any]:
@@ -230,10 +235,9 @@ def GetLines(result: Dict[str, Any]) -> list[str]:
     lines_list = []
     package = load_content_package()
     lines = package.get("hand_analysis", package)
-    
+
     dominant_element = result.get("dominant_element")
     weakest_element = result.get("weakest_element")
-
 
     if dominant_element:
         shot_1_line = lines.get("shot_1", {}).get(dominant_element)
@@ -241,13 +245,13 @@ def GetLines(result: Dict[str, Any]) -> list[str]:
             lines_list.append(shot_1_line)
         else:
             logger.debug("shot_1_line nicht gefunden fuer %r", dominant_element)
-        
+
         shot_3_line = lines.get("shot_3", {}).get(dominant_element)
         if shot_3_line:
             lines_list.append(shot_3_line)
         else:
             logger.debug("shot_3_line nicht gefunden fuer %r", dominant_element)
-        
+
         shot_4_line = lines.get("shot_4", {}).get(dominant_element)
         if shot_4_line:
             lines_list.append(shot_4_line)
@@ -285,62 +289,6 @@ def build_hand_analysis_prompt(hand_event: HandEvent | None) -> str:
     )
 
 
-def build_analysis_scene_prompt(
-    scene: Scene | str,
-    hand_event: HandEvent | None,
-) -> str | None:
-    scene_name = scene.value if isinstance(scene, Scene) else scene
-    result = analyze_hand_event(hand_event)
-    if result is None:
-        return None
-
-    if scene_name == Scene.SCENE_5_HANDREAD_VISUALISATION.value:
-        dominant = _element_name(result, "dominant_element")
-        weakest = _element_name(result, "weakest_element")
-        if not dominant or not weakest:
-            return None
-        base_text = (
-            f"Das staerkste Element deiner Hand ist {dominant}. "
-            f"Das schwaechste Element ist {weakest}. "
-            "Jetzt offenbart sich, was zwischen beiden in dir wirkt."
-        )
-        return _build_analysis_transform_prompt(scene_name, base_text)
-
-    if scene_name == Scene.SCENE_5_SHOT_1_CORE_ELEMENT.value:
-        dominant = _element_name(result, "dominant_element")
-        if not dominant:
-            return None
-        base_text = _join_sentences(
-            _package_line("shot_1", dominant),
-            _package_line("shot_3", dominant),
-            _package_line("shot_4", dominant),
-        )
-        if not base_text:
-            return None
-        return _build_analysis_transform_prompt(scene_name, base_text)
-
-    if scene_name == Scene.SCENE_5_SHOT_2_WEAK_ELEMENT.value:
-        weakest = _element_name(result, "weakest_element")
-        if not weakest:
-            return None
-        base_text = (
-            f"Das schwaechste Element deiner Hand ist {weakest}. "
-            "Gerade dort spuerst du, was dir fehlt und wonach dein Gleichgewicht verlangt."
-        )
-        return _build_analysis_transform_prompt(scene_name, base_text)
-
-    if scene_name == Scene.SCENE_5_SHOT_3_ADVICE.value:
-        weakest = _element_name(result, "weakest_element")
-        if not weakest:
-            return None
-        base_text = _package_line("shot_5", weakest)
-        if not base_text:
-            return None
-        return _build_analysis_transform_prompt(scene_name, base_text)
-
-    return build_hand_analysis_prompt(hand_event)
-
-
 def build_scene_prompt(
     scene: Scene | str,
     *,
@@ -351,8 +299,9 @@ def build_scene_prompt(
     parts = [
         _SCENE_VARIATION_SYSTEM_PROMPT,
         f"Szene: {scene_name}.",
-        "Hier ist dein verbindlicher Basetext. Variiere Tonfall, Rhythmus, Satzbau und Wortwahl staerker.",
-        "Die Bedeutung und jede konkrete Handlungsanweisung muessen erhalten bleiben.",
+        "Hier ist dein verbindlicher Basetext. Variiere Tonfall, Rhythmus, Satzbau und Wortwahl deutlich.",
+        "Die Bedeutung und jede konkrete Handlungsanweisung müssen erhalten bleiben.",
+        "Die Neuformulierung muss natürlich klingen und aus grammatikalisch korrekten, vollständigen deutschen Sätzen bestehen.",
         "Jede Neuformulierung muss sich deutlich von vorherigen unterscheiden. Vermeide identische Phrasen.",
         f"Basetext: {base_text.strip()}",
     ]
@@ -381,7 +330,9 @@ def analyze_hand_event(hand_event: HandEvent | None) -> dict[str, Any] | None:
         return build_result(
             {
                 "type": "hand",
-                "trigger": hand_event.trigger.value if hand_event.trigger else "unknown",
+                "trigger": hand_event.trigger.value
+                if hand_event.trigger
+                else "unknown",
                 "hand": hand_event.hand.value if hand_event.hand else None,
                 "lengths": hand_event.lengths,
             }
@@ -418,7 +369,7 @@ def _get_base_texts(
         "aus den Texten MUSS von dir als echtes, gesprochenes Wort in die Sätze eingebaut werden. "
         "Es darf absolut kein Fakt, kein Inhalt und vor allem kein Element-Name weggelassen, "
         "verändert oder verkürzt werden. "
-        "Variiere Satzstruktur und Wortwahl stark. Jede Antwort muss einzigartig klingen: "
+        "Variiere Satzstruktur und Wortwahl deutlich, aber achte immer auf natürliches, grammatikalisch korrektes Deutsch. Jede Antwort muss eigenständig klingen: "
         f"{joined}"
     )
 
@@ -428,9 +379,10 @@ def _build_analysis_transform_prompt(scene_name: str, base_text: str) -> str:
         [
             _HAND_ANALYSIS_SYSTEM_PROMPT,
             f"Szene: {scene_name}.",
-            "Hier ist dein verbindlicher Basetext. Uebertrage ihn in einen neuen Satzbau mit anderer Wortwahl.",
-            "Jeder Fakt und jeder genannte Element-Name muessen erhalten bleiben.",
-            "WICHTIG: Keine zwei Antworten duerfen gleich klingen. Variiere Phrasen, Synonyme und Satzstruktur jedes Mal.",
+            "Hier ist dein verbindlicher Basetext. Übertrage ihn in einen neuen Satzbau mit anderer Wortwahl.",
+            "Jeder Fakt und jeder genannte Elementname müssen erhalten bleiben.",
+            "Formuliere natürliches, grammatikalisch korrektes Deutsch mit vollständigen und klar verständlichen Sätzen.",
+            "Keine zwei Antworten dürfen gleich klingen. Variiere Phrasen, passende Synonyme und Satzstruktur, ohne die sprachliche Qualität zu verschlechtern.",
             f"Basetext: {base_text.strip()}",
         ]
     )
@@ -440,7 +392,9 @@ def _package_line(section: str, element: str | None) -> str:
     if not element:
         return ""
     package = load_content_package()
-    return package.get("hand_analysis", package).get(section, {}).get(element, "").strip()
+    return (
+        package.get("hand_analysis", package).get(section, {}).get(element, "").strip()
+    )
 
 
 def _join_sentences(*parts: str) -> str:
@@ -502,7 +456,7 @@ def build_combined_analysis_prompt(
 
     base_text = "\n\n".join(parts)
     return _build_analysis_transform_prompt(
-        Scene.SCENE_5_HANDREAD_VISUALISATION.value,
+        Scene.SCENE6.value,
         base_text,
     )
 
@@ -511,7 +465,6 @@ build_prompt = build_hand_analysis_prompt
 
 
 if __name__ == "__main__":
-
     sample_input = {
         "request_id": "example-001",
         "session_id": "session-42",
@@ -520,32 +473,24 @@ if __name__ == "__main__":
         "palm_aspect_ratio": 0.48,
         "finger_length_ratio": 0.77,
         "index_to_ring_ratio": 0.49,
-        "finger_profile": {
-            "index": 0.67,
-            "middle": 0.77,
-            "ring": 0.68,
-            "little": 0.53
-      }
+        "finger_profile": {"index": 0.67, "middle": 0.77, "ring": 0.68, "little": 0.53},
     }
 
     sample2 = {
-    "request_id": "person-1-left",
-    "session_id": "session-42",
-    "handedness": "left",
-    "tracking_quality": 0.93,
-    "lengths": {
-        "palm_width": 0.064823,
-        "palm_height": 0.09616,
-        "thumb_length": 0.091336,
-        "index_length": 0.084551,
-        "middle_length": 0.097795,
-        "ring_length": 0.086348,
-        "pinky_length": 0.06959
+        "request_id": "person-1-left",
+        "session_id": "session-42",
+        "handedness": "left",
+        "tracking_quality": 0.93,
+        "lengths": {
+            "palm_width": 0.064823,
+            "palm_height": 0.09616,
+            "thumb_length": 0.091336,
+            "index_length": 0.084551,
+            "middle_length": 0.097795,
+            "ring_length": 0.086348,
+            "pinky_length": 0.06959,
+        },
     }
-}
-
-
-
 
     result = build_result(sample_input)
     Lines = GetLines(result)

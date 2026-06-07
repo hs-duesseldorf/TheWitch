@@ -8,7 +8,9 @@ import queue
 import re
 import threading
 import time
+import unicodedata
 from contextlib import suppress
+from dataclasses import dataclass
 from typing import Any, Awaitable, Callable
 
 import numpy as np
@@ -25,7 +27,39 @@ logger = logging.getLogger(__name__)
 
 SR = 48000
 UNDERRUN_LOG_INTERVAL_SECONDS = 2.0
-DRAIN_TIMEOUT = 30.0
+
+
+@dataclass(frozen=True)
+class AudioPlaybackConfig:
+    input_sample_rate: int = 24000
+    output_sample_rate: int = SR
+    prebuffer_seconds: float = 1.5
+    speaker_delay_seconds: float = 0.0
+
+
+@dataclass(frozen=True)
+class _QueuedAudio:
+    generation: int
+    data: np.ndarray
+
+
+@dataclass
+class _AudioOutput:
+    device: int | None
+    is_virtual_cable: bool
+    queue: queue.SimpleQueue[_QueuedAudio]
+    pending: np.ndarray
+    buffered_frames: int
+    playback_started: bool
+    producer_done: bool
+    underruns: int
+    last_underrun_log: float
+    generation: int
+    lock: threading.Lock
+    stream: Any | None = None
+    submitted_frames: int = 0
+    playback_started_at: float | None = None
+    playback_complete_at: float | None = None
 
 
 def _configured_audio_device(devices: list[dict[str, Any]]) -> int | None:
@@ -49,7 +83,30 @@ def _configured_audio_device(devices: list[dict[str, Any]]) -> int | None:
     return None
 
 
-def _normalize_tts_text(text: str) -> str:
+def normalize_llm_text(text: str) -> str:
+    text = unicodedata.normalize("NFKC", text)
+
+    # Handle literal escape sequences from LLM output
+    text = text.replace(r"\n", " ").replace(r"\r", " ").replace(r"\t", " ")
+    text = text.replace(r"\\", " ")
+
+    # Strip markdown formatting
+    text = re.sub(r"\*\*([^*]+)\*\*", r"\1", text)
+    text = re.sub(r"\*([^*]+)\*", r"\1", text)
+    text = re.sub(r"`([^`]+)`", r"\1", text)
+    text = re.sub(r"```[\s\S]*?```", "", text)
+    text = re.sub(r"^#+\s*", "", text, flags=re.MULTILINE)
+    text = re.sub(r"^\s*[-*+]\s+", "", text, flags=re.MULTILINE)
+    text = re.sub(r"^\s*\d+\.\s+", "", text, flags=re.MULTILINE)
+
+    text = (
+        text.replace("&", " und ")
+        .replace("%", " Prozent ")
+        .replace("€", " Euro ")
+        .replace("/", " ")
+        .replace("\\", " ")
+    )
+
     lines = []
     for line in text.splitlines():
         line = line.strip()
@@ -60,8 +117,13 @@ def _normalize_tts_text(text: str) -> str:
         lines.append(line)
 
     normalized = " ".join(lines) if lines else text
-    normalized = re.sub(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]", " ", normalized)
+    normalized = re.sub(r"[\[\](){}<>]", " ", normalized)
+    normalized = re.sub(r"[*_#`~|^@=+]", " ", normalized)
+    normalized = re.sub(r"[\"'“”„‘’«»]", "", normalized)
+    normalized = re.sub(r"[^0-9A-Za-zÄÖÜäöüß.,!?;:\-\s]", " ", normalized)
     normalized = re.sub(r"\s+", " ", normalized).strip()
+    normalized = re.sub(r"\s+([.,!?;:])", r"\1", normalized)
+    normalized = re.sub(r"([.,!?;:]){2,}", r"\1", normalized)
     if normalized and normalized[-1] not in ".!?":
         normalized = f"{normalized}."
     return normalized
@@ -119,17 +181,16 @@ def find_audio_devices() -> list[int | None]:
             for i, dev in output_devices:
                 if _is_virtual_cable(system, dev["name"]):
                     selected.append(i)
-                    
-            if not selected:
-                selected.extend(
-                    index
-                    for index, _ in sorted(
-                        output_devices,
-                        key=lambda item: _linux_output_score(item[1]["name"]),
-                        reverse=True,
-                    )
-                    if _linux_output_score(devices[index]["name"]) >= 0
+
+            selected.extend(
+                index
+                for index, _ in sorted(
+                    output_devices,
+                    key=lambda item: _linux_output_score(item[1]["name"]),
+                    reverse=True,
                 )
+                if _linux_output_score(devices[index]["name"]) >= 0
+            )
         else:
             best_match = None
             for i, dev in output_devices:
@@ -155,21 +216,21 @@ def find_audio_devices() -> list[int | None]:
             unique.append(device)
     return unique
 
+
 class StreamingAudioPlayer:
-    def __init__(self, sample_rate: int = 24000):
-        self._sample_rate = sample_rate
-        self._prebuffer_seconds = max(
-            0.0,
-            float(os.environ["WITCH_AUDIO_PREBUFFER_SECONDS"].strip()),
-        )
-        self._prebuffer_frames = int(SR * self._prebuffer_seconds)
-        self._speaker_delay_seconds = max(
-            0.0,
-            float(os.environ["WITCH_SPEAKER_DELAY_SECONDS"].strip()),
-        )
-        self._speaker_delay_frames = int(SR * self._speaker_delay_seconds)
+    def __init__(self, config: AudioPlaybackConfig | None = None):
+        self._config = config or AudioPlaybackConfig()
+        self._input_sample_rate = self._config.input_sample_rate
+        self._output_sample_rate = self._config.output_sample_rate
+        self._prebuffer_seconds = max(0.0, self._config.prebuffer_seconds)
+        self._prebuffer_frames = int(self._output_sample_rate * self._prebuffer_seconds)
+        self._speaker_delay_seconds = max(0.0, self._config.speaker_delay_seconds)
+        self._speaker_delay_frames = int(self._output_sample_rate * self._speaker_delay_seconds)
         self._pcm_remainder = b""
-        self._outputs: list[dict[str, Any]] = []
+        self._source_queue: queue.SimpleQueue[_QueuedAudio] = queue.SimpleQueue()
+        self._source_generation = 0
+        self._source_lock = threading.Lock()
+        self._outputs: list[_AudioOutput] = []
         self._playback_start_callback: Callable[[], None] | None = None
         self._playback_start_notified = False
 
@@ -187,6 +248,7 @@ class StreamingAudioPlayer:
             logger.warning("No audio device found")
             return
 
+        speaker_started = False
         for device in devices:
             try:
                 is_virtual_cable = False
@@ -198,23 +260,25 @@ class StreamingAudioPlayer:
                     except Exception:
                         pass
 
-                is_speaker = not is_virtual_cable
-                
-                output = {
-                    "device": device,
-                    "queue": queue.Queue(maxsize=0),
-                    "pending": np.empty((0, 2), dtype=np.float32),
-                    "buffered_frames": 0,
-                    "playback_started": self._prebuffer_frames <= 0,
-                    "producer_done": False,
-                    "underruns": 0,
-                    "last_underrun_log": 0.0,
-                    "generation": 0,
-                    "is_virtual_cable": is_virtual_cable,
-                    "lock": threading.Lock(),
-                }
+                if speaker_started and not is_virtual_cable:
+                    continue
+
+                output = _AudioOutput(
+                    device=device,
+                    is_virtual_cable=is_virtual_cable,
+                    queue=queue.SimpleQueue(),
+                    pending=np.empty((0, 2), dtype=np.float32),
+                    buffered_frames=0,
+                    playback_started=self._prebuffer_frames <= 0,
+                    producer_done=False,
+                    underruns=0,
+                    last_underrun_log=0.0,
+                    generation=0,
+                    lock=threading.Lock(),
+                    playback_complete_at=None,
+                )
                 stream = sd.OutputStream(
-                    samplerate=SR,
+                    samplerate=self._output_sample_rate,
                     channels=2,
                     device=device,
                     dtype="float32",
@@ -226,9 +290,11 @@ class StreamingAudioPlayer:
                         status,
                     ),
                 )
-                output["stream"] = stream
+                output.stream = stream
                 stream.start()
                 self._outputs.append(output)
+                if not is_virtual_cable:
+                    speaker_started = True
                 if device is None:
                     logger.info(
                         "Started audio stream on OS default output device; prebuffer=%.2fs",
@@ -245,7 +311,7 @@ class StreamingAudioPlayer:
                 logger.warning("Failed to start audio stream on %s: %s", label, e)
 
         if not self._outputs:
-            logger.warning("No audio output stream could be started")
+            raise RuntimeError("No audio output stream could be started")
 
     def is_active(self) -> bool:
         return len(self._outputs) > 0 and HAS_SOUNDDEVICE
@@ -258,19 +324,23 @@ class StreamingAudioPlayer:
         self.start()
         self._playback_start_callback = on_playback_start
         self._playback_start_notified = False
+        with self._source_lock:
+            self._source_generation += 1
+            generation = self._source_generation
+        self._clear_source_queue()
         for output in self._outputs:
-            self._clear_output(output, producer_done=False)
+            self._clear_output(output, producer_done=False, generation=generation)
             
         if self._speaker_delay_frames > 0:
             silence = np.zeros((self._speaker_delay_frames, 2), dtype=np.float32)
 
             for output in self._outputs:
-                if not output["is_virtual_cable"]:
-                    self._enqueue(output, silence)
+                if not output.is_virtual_cable:
+                    self._enqueue_output(output, silence, generation=generation)
 
     def _callback(
         self,
-        output: dict[str, Any],
+        output: _AudioOutput,
         outdata: np.ndarray,
         frames: int,
         callback_time: Any,
@@ -279,68 +349,70 @@ class StreamingAudioPlayer:
         outdata.fill(0)
         written = 0
         
-        with output["lock"]:
-            generation = output["generation"]
-            pending = output["pending"]
-        chunks: queue.Queue[np.ndarray | None] = output["queue"]
+        with output.lock:
+            generation = output.generation
+            pending = output.pending
+        chunks = output.queue
 
         while written < frames:
-            with output["lock"]:
-                if generation != output["generation"]:
+            with output.lock:
+                if generation != output.generation:
                     pending = np.empty((0, 2), dtype=np.float32)
                     break
-                playback_started = output["playback_started"]
-                buffered_frames = output["buffered_frames"]
-                if not playback_started and buffered_frames >= self._prebuffer_frames:
-                    output["playback_started"] = True
-                    playback_started = True
+                playback_started = output.playback_started
+                buffered_frames = output.buffered_frames
+                producer_done = output.producer_done
+                if not playback_started:
+                    if buffered_frames >= self._prebuffer_frames or producer_done:
+                        output.playback_started = True
+                        playback_started = True
 
             if not playback_started:
                 break
 
             if pending.shape[0] == 0:
                 try:
-                    chunk = chunks.get_nowait()
+                    item = chunks.get_nowait()
                 except queue.Empty:
-                    with output["lock"]:
-                        producer_done = output["producer_done"]
+                    with output.lock:
+                        producer_done = output.producer_done
                     if producer_done:
                         break
-
-                    with output["lock"]:
-                        if not output["playback_started"]:
-                            output["playback_started"] = self._prebuffer_frames <= 0
-                        output["underruns"] += 1
-                        underruns = output["underruns"]
+                    with output.lock:
+                        output.underruns += 1
+                        underruns = output.underruns
                         now = time.perf_counter()
                         should_log = (
-                            now - output["last_underrun_log"]
+                            now - output.last_underrun_log
                             >= UNDERRUN_LOG_INTERVAL_SECONDS
                         )
                         if should_log:
-                            output["last_underrun_log"] = now
+                            output.last_underrun_log = now
                     if should_log:
-                        device = output["device"]
+                        device = output.device
                         label = "OS default output device" if device is None else f"device {device}"
-                        logger.warning(
-                            "Audio underrun on %s; rebuffering %.2fs (count=%d)",
-                            label,
-                            self._prebuffer_seconds,
-                            underruns,
-                        )
+                        message = f"WARNING: Audio underrun detected on {label} (count={underruns})"
+                        print(message, flush=True)
+                        logger.warning(message)
                     break
-
-                if chunk is None:
-                    with output["lock"]:
-                        output["pending"] = np.empty((0, 2), dtype=np.float32)
-                    return
+                if item.generation != generation:
+                    continue
+                chunk = item.data
                 pending = chunk
+
+            with output.lock:
+                if generation != output.generation:
+                    pending = np.empty((0, 2), dtype=np.float32)
+                    break
 
             available = min(frames - written, pending.shape[0])
             outdata[written : written + available] = pending[:available]
             written += available
-            with output["lock"]:
-                output["buffered_frames"] = max(0, output["buffered_frames"] - available)
+            with output.lock:
+                output.buffered_frames = max(0, output.buffered_frames - available)
+                if output.playback_started_at is None:
+                    output.playback_started_at = time.perf_counter()
+                output.submitted_frames += available
 
             if available < pending.shape[0]:
                 pending = pending[available:]
@@ -350,9 +422,35 @@ class StreamingAudioPlayer:
         if written > 0:
             self._notify_playback_started()
 
-        with output["lock"]:
-            if generation == output["generation"]:
-                output["pending"] = pending
+        with output.lock:
+            if generation == output.generation:
+                output.pending = pending
+                if written > 0:
+                    output.playback_complete_at = self._playback_complete_at(
+                        output,
+                        callback_time,
+                        written,
+                    )
+
+    def _playback_complete_at(
+        self,
+        output: _AudioOutput,
+        callback_time: Any,
+        written: int,
+    ) -> float:
+        now = time.perf_counter()
+        try:
+            device_delay = max(
+                0.0,
+                float(callback_time.outputBufferDacTime)
+                - float(callback_time.currentTime),
+            )
+        except (AttributeError, TypeError, ValueError):
+            try:
+                device_delay = max(0.0, float(output.stream.latency))
+            except (AttributeError, TypeError, ValueError):
+                device_delay = 0.0
+        return now + device_delay + (written / self._output_sample_rate)
 
     def _notify_playback_started(self) -> None:
         if self._playback_start_notified:
@@ -362,99 +460,144 @@ class StreamingAudioPlayer:
         if callback is not None:
             callback()
 
-    def _enqueue(self, output: dict[str, Any], data: np.ndarray) -> None:
-        chunks: queue.Queue[np.ndarray | None] = output["queue"]
-        try:
-            with output["lock"]:
-                output["buffered_frames"] += int(data.shape[0])
-            chunks.put_nowait(data.copy())
-        except Exception:
-            chunks.put(data.copy(), block=True)
+    def _drain_source_queue(self) -> None:
+        while True:
+            try:
+                item = self._source_queue.get_nowait()
+            except queue.Empty:
+                return
+            with self._source_lock:
+                current_generation = self._source_generation
+            if item.generation != current_generation:
+                continue
+            for output in self._outputs:
+                self._enqueue_output(output, item.data, generation=item.generation)
+
+    def _enqueue_source(self, data: np.ndarray) -> None:
+        with self._source_lock:
+            generation = self._source_generation
+        self._source_queue.put(_QueuedAudio(generation=generation, data=data.copy()))
+        self._drain_source_queue()
+
+    def _enqueue_output(self, output: _AudioOutput, data: np.ndarray, *, generation: int) -> None:
+        chunks = output.queue
+        with output.lock:
+            if generation != output.generation:
+                return
+            output.buffered_frames += int(data.shape[0])
+            chunks.put(_QueuedAudio(generation=generation, data=data.copy()))
+
+    def _convert_chunk(
+        self,
+        audio_chunk: bytes,
+        *,
+        format: str,
+        sample_rate: int | None,
+    ) -> np.ndarray | None:
+        if format == "wav":
+            data, sample_rate = sf.read(
+                __import__("io").BytesIO(audio_chunk),
+                dtype="float32",
+            )
+        else:
+            pcm = self._pcm_remainder + audio_chunk
+            if len(pcm) < 2:
+                self._pcm_remainder = pcm
+                return None
+            if len(pcm) % 2:
+                self._pcm_remainder = pcm[-1:]
+                pcm = pcm[:-1]
+            else:
+                self._pcm_remainder = b""
+            data = np.frombuffer(pcm, dtype=np.int16).astype(np.float32) / 32768.0
+            sample_rate = sample_rate or self._input_sample_rate
+
+        if sample_rate != self._output_sample_rate:
+            from scipy.signal import resample_poly
+
+            data = resample_poly(data, self._output_sample_rate, sample_rate)
+
+        if len(data.shape) == 1:
+            data = np.column_stack((data, data))
+
+        if data.dtype != np.float32:
+            data = data.astype(np.float32)
+        if data.shape[1] > 2:
+            data = data[:, :2]
+        elif data.shape[1] == 1:
+            data = np.column_stack((data[:, 0], data[:, 0]))
+
+        return data
 
     def put(self, audio_chunk: bytes, *, format: str = "pcm", sample_rate: int | None = None) -> None:
         try:
-            if format == "wav":
-                data, sample_rate = sf.read(
-                    __import__("io").BytesIO(audio_chunk),
-                    dtype="float32",
-                )
-            else:
-                pcm = self._pcm_remainder + audio_chunk
-                if len(pcm) < 2:
-                    self._pcm_remainder = pcm
-                    return
-                if len(pcm) % 2:
-                    self._pcm_remainder = pcm[-1:]
-                    pcm = pcm[:-1]
-                else:
-                    self._pcm_remainder = b""
-                data = np.frombuffer(pcm, dtype=np.int16).astype(np.float32) / 32768.0
-                sample_rate = sample_rate or self._sample_rate
-
-            if sample_rate != SR:
-                from scipy.signal import resample_poly
-
-                data = resample_poly(data, SR, sample_rate)
-
-            if len(data.shape) == 1:
-                data = np.column_stack((data, data))
-
-            if data.dtype != np.float32:
-                data = data.astype(np.float32)
-            if data.shape[1] > 2:
-                data = data[:, :2]
-            elif data.shape[1] == 1:
-                data = np.column_stack((data[:, 0], data[:, 0]))
-
-            for output in self._outputs:
-                self._enqueue(output, data)
+            data = self._convert_chunk(audio_chunk, format=format, sample_rate=sample_rate)
+            if data is not None:
+                self._enqueue_source(data)
         except Exception as e:
-            logger.warning("Audio playback chunk failed (format=%s, sample_rate=%s, len=%d): %s", format, sample_rate, len(audio_chunk), e)
+            logger.warning(
+                "Audio playback chunk failed (format=%s, sample_rate=%s, len=%d): %s",
+                format,
+                sample_rate,
+                len(audio_chunk),
+                e,
+            )
 
     def finish(self) -> None:
+        self._drain_source_queue()
         for output in self._outputs:
-            with output["lock"]:
-                output["producer_done"] = True
-                output["playback_started"] = True
+            with output.lock:
+                output.producer_done = True
 
-    async def drain(self, *, timeout: float = DRAIN_TIMEOUT) -> None:
+    async def wait_for_playback(self) -> None:
+        """Wait until queued and device-buffered audio has finished playing."""
         if not self._outputs:
             return
 
-        deadline = time.perf_counter() + timeout
         while True:
-            done = True
+            now = time.perf_counter()
+            all_finished = True
             for output in self._outputs:
-                with output["lock"]:
-                    output_done = (
-                        output["producer_done"]
-                        and output["buffered_frames"] <= 0
-                        and output["pending"].shape[0] == 0
+                with output.lock:
+                    output_finished = (
+                        output.producer_done
+                        and output.buffered_frames <= 0
+                        and output.pending.shape[0] == 0
+                        and output.queue.empty()
+                        and (
+                            output.playback_complete_at is None
+                            or now >= output.playback_complete_at
+                        )
                     )
-                if not output_done or not output["queue"].empty():
-                    done = False
+                if not output_finished:
+                    all_finished = False
                     break
-            if done:
-                await asyncio.sleep(0.1)
+
+            if all_finished:
                 return
 
-            if time.perf_counter() >= deadline:
-                logger.error("Audio drain timed out after %.1fs; clearing player", timeout)
-                self.clear()
-                return
+            await asyncio.sleep(0.02)
 
-            await asyncio.sleep(0.05)
+    def _clear_source_queue(self) -> None:
+        while True:
+            try:
+                self._source_queue.get_nowait()
+            except queue.Empty:
+                break
 
-    def _clear_output(self, output: dict[str, Any], *, producer_done: bool) -> None:
-        with output["lock"]:
-            output["generation"] += 1
-            output["producer_done"] = producer_done
-            output["playback_started"] = (
+    def _clear_output(self, output: _AudioOutput, *, producer_done: bool, generation: int) -> None:
+        with output.lock:
+            output.generation = generation
+            output.producer_done = producer_done
+            output.playback_started = (
                 self._prebuffer_frames <= 0 if not producer_done else True
             )
-            output["buffered_frames"] = 0
-            output["pending"] = np.empty((0, 2), dtype=np.float32)
-        chunks: queue.Queue[np.ndarray | None] = output["queue"]
+            output.buffered_frames = 0
+            output.pending = np.empty((0, 2), dtype=np.float32)
+            output.submitted_frames = 0
+            output.playback_started_at = None
+            output.playback_complete_at = None
+        chunks = output.queue
         while True:
             try:
                 chunks.get_nowait()
@@ -462,8 +605,12 @@ class StreamingAudioPlayer:
                 break
 
     def clear(self) -> None:
+        with self._source_lock:
+            self._source_generation += 1
+            generation = self._source_generation
+        self._clear_source_queue()
         for output in self._outputs:
-            self._clear_output(output, producer_done=True)
+            self._clear_output(output, producer_done=True, generation=generation)
         self._pcm_remainder = b""
         self._playback_start_callback = None
         self._playback_start_notified = False
@@ -474,13 +621,13 @@ class SpeechPipeline:
         self,
         llm: Any,
         tts: Any,
-        tts_seed: int = 42,
+        audio_config: AudioPlaybackConfig | None = None,
     ):
         self._llm = llm
         self._tts = tts
-        self._player = StreamingAudioPlayer()
+        self._player = StreamingAudioPlayer(audio_config)
         self._stage = "idle"
-        self._tts_seed = tts_seed
+        self._player_started = False
 
     @property
     def stage(self) -> str:
@@ -541,18 +688,8 @@ class SpeechPipeline:
             return
 
         player = self._player
-        tts_text = _normalize_tts_text(text)
-        if not tts_text:
-            raise RuntimeError("TTS text became empty after normalization")
-        if tts_text != text:
-            logger.info(
-                "Normalized TTS text: llm_chars=%d tts_chars=%d",
-                len(text),
-                len(tts_text),
-            )
-
         self._stage = "tts_stream"
-        logger.info("TTS full: %s", tts_text[:80])
+        logger.info("TTS full: %s", text[:80])
 
         loop = asyncio.get_running_loop()
         audio_start_future: asyncio.Future[None] | None = None
@@ -590,11 +727,11 @@ class SpeechPipeline:
                 use_direct = False
 
             if not use_direct:
-                logger.info("No local audio device")
+                raise RuntimeError("No local audio output device is available")
 
             frame_count = 0
             byte_count = 0
-            async for frame in self._tts.stream_synthesize(tts_text, seed=self._tts_seed):
+            async for frame in self._tts.stream_synthesize(text):
                 frame_count += 1
                 byte_count += len(frame.audio)
 
@@ -612,7 +749,7 @@ class SpeechPipeline:
                 "TTS complete: frames=%d bytes=%d input_chars=%d",
                 frame_count,
                 byte_count,
-                len(tts_text),
+                len(text),
             )
 
             if frame_count == 0:
@@ -621,11 +758,15 @@ class SpeechPipeline:
             mark_audio_started()
             if use_direct:
                 player.finish()
-                await player.drain()
+                await player.wait_for_playback()
 
             if audio_start_task is not None:
                 await audio_start_task
 
             self._stage = "done"
         finally:
+            if audio_start_task is not None and not audio_start_task.done():
+                audio_start_task.cancel()
+                with suppress(asyncio.CancelledError):
+                    await audio_start_task
             self._stage = "idle"

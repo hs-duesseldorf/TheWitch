@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from enum import Enum
 import logging
 
-from .transport import WebSocketClient
+from .palm_processing.transport import WebSocketClient
 from shared.events import ErrorEvent, PersonEvent, PersonTrigger
 
 logger = logging.getLogger(__name__)
@@ -18,8 +18,6 @@ class SeatSensorConfig:
     ld2410s_baud: int = 115200
     serial_timeout_ms: int = 5
     poll_ms: int = 5
-    required_hits: int = 2
-    stale_ms: int = 500
     far_gate: int = 5
     near_gate: int = 0
     hold_time_s: int = 10
@@ -242,9 +240,13 @@ class SeatPresenceMonitor:
 
     def _run(self) -> None:
         if os.getenv("WITCH_SEAT_SENSOR_OVERRIDE", "false") == "true":
-            logger.info("Seat sensor override enabled; publishing detected and seated person")
-            self._publish_person_present(None)
-            self._publish_person_seated(None)
+            logger.info("Seat sensor override enabled")
+            logger.info("Seat sensor override: waiting 10s before publishing detected person")
+            if not self.stop_event.wait(10):
+                self._publish_person_present(None)
+            logger.info("Seat sensor override: waiting 10s before publishing seated person")
+            if not self.stop_event.wait(10):
+                self._publish_person_seated(None)
             return
 
         try:
@@ -261,8 +263,6 @@ class SeatPresenceMonitor:
             0.001,
         )
         poll_s = max(self.config.poll_ms / 1000.0, 0.001)
-        stale_s = max(float(os.getenv("WITCH_LD2410S_STALE_MS", str(self.config.stale_ms))) / 1000.0, poll_s)
-        required_hits = max(1, int(os.getenv("WITCH_LD2410S_REQUIRED_HITS", str(self.config.required_hits))))
         distance_scale = float(os.getenv("WITCH_LD2410S_DISTANCE_SCALE", "1.0"))
         distance_offset_mm = int(os.getenv("WITCH_LD2410S_DISTANCE_OFFSET_MM", "0"))
         debug_raw = os.getenv("WITCH_LD2410S_DEBUG_RAW", "false") == "true"
@@ -279,7 +279,6 @@ class SeatPresenceMonitor:
             sensor = LD2410SSerialSensor(port=port, baud=baud, timeout_s=serial_timeout_s)
         except Exception as exc:
             logger.warning("Seat sensor open failed: %s", exc)
-            self._publish_error(str(exc))
             return
 
         if configure_sensor:
@@ -303,11 +302,7 @@ class SeatPresenceMonitor:
             else:
                 logger.warning("LD2410S configuration failed; continuing with existing sensor settings")
 
-        zone = PersonZone.ABSENT
-        candidate_zone = PersonZone.ABSENT
-        candidate_hits = 0
-        last_reading_at = 0.0
-        last_distance_mm: int | None = None
+        last_zone = PersonZone.ABSENT
         warmup_until = time.monotonic() + warmup_s
         if warmup_s > 0:
             logger.info("Ignoring seat sensor readings for %.1f seconds during warmup", warmup_s)
@@ -315,7 +310,6 @@ class SeatPresenceMonitor:
         try:
             while not self.stop_event.is_set():
                 started = time.monotonic()
-                now = started
                 try:
                     reading = sensor.read_presence()
                 except Exception as exc:
@@ -325,31 +319,20 @@ class SeatPresenceMonitor:
                     continue
 
                 if reading is not None:
-                    now = time.monotonic()
-                    if now < warmup_until:
+                    if time.monotonic() < warmup_until:
                         logger.info(
                             "Seat sensor warmup ignored: present=%s distance_mm=%s target_state=%s",
                             reading.present,
                             reading.distance_mm,
                             reading.target_state,
                         )
-                        zone = PersonZone.ABSENT
-                        candidate_zone = PersonZone.ABSENT
-                        candidate_hits = 0
-                        last_reading_at = 0.0
-                        last_distance_mm = None
+                        last_zone = PersonZone.ABSENT
                         reading = None
                     else:
                         distance_mm = self._calibrated_distance_mm(
                             reading.distance_mm,
                             scale=distance_scale,
                             offset_mm=distance_offset_mm,
-                        )
-                        reading = PresenceReading(
-                            present=reading.present,
-                            distance_mm=distance_mm,
-                            target_state=reading.target_state,
-                            raw_frame=reading.raw_frame,
                         )
                         if debug_raw:
                             logger.info(
@@ -359,8 +342,7 @@ class SeatPresenceMonitor:
                                 reading.present,
                                 reading.distance_mm,
                             )
-                        last_distance_mm = reading.distance_mm
-                        if reading.distance_mm is None:
+                        if distance_mm is None:
                             logger.info(
                                 "Ignoring seat sensor reading without distance: present=%s target_state=%s",
                                 reading.present,
@@ -368,41 +350,24 @@ class SeatPresenceMonitor:
                             )
                             reading = None
                         else:
-                            last_reading_at = now
-                            next_zone = self._ld2410s_zone(
-                                reading,
+                            zone = self._ld2410s_zone(
+                                PresenceReading(
+                                    present=reading.present,
+                                    distance_mm=distance_mm,
+                                ),
                                 seated_max_mm=seated_max_mm,
                                 present_max_mm=present_max_mm,
                             )
-                            next_zone = self._normalized_next_zone(zone, next_zone)
-                            if next_zone == candidate_zone:
-                                candidate_hits += 1
-                            else:
-                                candidate_zone = next_zone
-                                candidate_hits = 1
-                            logger.info(
-                                "Seat sensor reading: present=%s distance_mm=%s zone=%s current_zone=%s candidate_hits=%s",
-                                reading.present,
-                                reading.distance_mm,
-                                next_zone.value,
-                                zone.value,
-                                candidate_hits,
-                            )
-
-                            if candidate_zone != zone and candidate_hits >= required_hits:
-                                previous_zone = zone
-                                zone = candidate_zone
-                                self._publish_transition(previous_zone, zone, last_distance_mm)
-
-                now = time.monotonic()
-                if zone is not PersonZone.ABSENT and last_reading_at > 0 and now - last_reading_at >= stale_s:
-                    previous_zone = zone
-                    zone = self._normalized_next_zone(zone, PersonZone.ABSENT)
-                    candidate_zone = zone
-                    candidate_hits = 0
-                    last_distance_mm = None
-                    last_reading_at = now if zone is not PersonZone.ABSENT else 0.0
-                    self._publish_transition(previous_zone, zone, None)
+                            if zone != last_zone:
+                                logger.info(
+                                    "Seat sensor: %s (distance_mm=%s)",
+                                    zone.value,
+                                    distance_mm,
+                                )
+                                if last_zone is PersonZone.ABSENT and zone is PersonZone.SEATED:
+                                    self._publish_zone(PersonZone.PRESENT, distance_mm)
+                                last_zone = zone
+                                self._publish_zone(zone, distance_mm)
 
                 if reading is None:
                     elapsed = time.monotonic() - started
@@ -466,29 +431,6 @@ class SeatPresenceMonitor:
         else:
             logger.info("Seat sensor person absent")
             self._publish_person_absent()
-
-    def _publish_transition(
-        self,
-        previous_zone: PersonZone,
-        zone: PersonZone,
-        distance_mm: int | None,
-    ) -> None:
-        if previous_zone is zone:
-            return
-        if previous_zone is PersonZone.ABSENT and zone is PersonZone.SEATED:
-            self._publish_zone(PersonZone.PRESENT, distance_mm)
-            self._publish_zone(PersonZone.SEATED, distance_mm)
-            return
-        self._publish_zone(zone, distance_mm if zone is not PersonZone.ABSENT else None)
-
-    def _normalized_next_zone(
-        self,
-        current_zone: PersonZone,
-        next_zone: PersonZone,
-    ) -> PersonZone:
-        if current_zone is PersonZone.SEATED and next_zone is PersonZone.ABSENT:
-            return PersonZone.PRESENT
-        return next_zone
 
     def _calibrated_distance_mm(self, distance_mm: int | None, *, scale: float, offset_mm: int) -> int | None:
         if distance_mm is None:
