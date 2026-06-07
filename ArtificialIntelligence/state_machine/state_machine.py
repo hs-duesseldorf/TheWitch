@@ -2,43 +2,25 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 from transitions.extensions import GraphMachine
 
 from shared.events import HandEvent, HandTrigger, PersonEvent, PersonTrigger, Scene
 
-DEBUG_HAND_ABSENT = Scene.SCENE_DEBUG_SHOT_1_HAND_ABSENT.value
-DEBUG_HAND_TILTED = Scene.SCENE_DEBUG_SHOT_2_HAND_TILTED.value
-DEBUG_HAND_WRONG_SIDE = Scene.SCENE_DEBUG_SHOT_3_HAND_WRONG_SIDE.value
 
-IDLE = Scene.SCENE_0_IDLE.value
-OUTRO = Scene.SCENE_6_OUTRO.value
+@dataclass(frozen=True)
+class StateDef:
+    state: Scene
+    description: str
+    auto_trigger: str | None = None
+    is_analysis: bool = False
+    hand_locked: bool = False
 
-SC1_START = Scene.SCENE_1_START.value
-SC1_SEATED = Scene.SCENE_1_SEATED.value
-SC2_AWAITING_HAND = Scene.SCENE_2_AWAITING_HAND.value
-SC2_HAND_FOUND = Scene.SCENE_2_HAND_FOUND.value
-SC3_HANDSCAN_IN_PROCESS = Scene.SCENE_3_HANDSCAN_IN_PROCESS.value
-SC3_HANDSCAN_DONE = Scene.SCENE_3_HANDSCAN_DONE.value
-SC4_TRANSFORMATION = Scene.SCENE_4_TRANSFORMATION.value
-SC5_HANDREAD_VISUALISATION = Scene.SCENE_5_HANDREAD_VISUALISATION.value
-SC5_1_CORE_ELEMENT = Scene.SCENE_5_SHOT_1_CORE_ELEMENT.value
-SC5_2_WEAK_ELEMENT = Scene.SCENE_5_SHOT_2_WEAK_ELEMENT.value
-SC5_3_ADVICE = Scene.SCENE_5_SHOT_3_ADVICE.value
+    @property
+    def id(self) -> str:
+        return self.state.value
 
-STATES = [scene.value for scene in Scene]
-
-INITIAL = IDLE
-ANY_SOURCE = "*"
-
-DEBUG_STATES = [DEBUG_HAND_ABSENT, 
-                DEBUG_HAND_TILTED, 
-                DEBUG_HAND_WRONG_SIDE]
-PERSON_EVENT_TRIGGER = {
-    PersonTrigger.DETECTED: "ip_person_detected",
-    PersonTrigger.SEATED: "ip_person_seated",
-    PersonTrigger.ABSENT: "ip_person_left",
-}
 
 @dataclass(frozen=True)
 class StateChange:
@@ -47,199 +29,98 @@ class StateChange:
     dest: str
 
 
-def _transition(trigger: str, source: str | list[str], dest: str, **kwargs) -> dict[str, object]:
-    data = {
-        "trigger": trigger,
-        "source": source,
-        "dest": dest,
-    }
-    data.update(kwargs)
-    return data
+def _transition(
+    trigger: str,
+    source: str | list[str],
+    dest: str | None,
+    **kwargs: Any,
+) -> dict[str, Any]:
+    return {"trigger": trigger, "source": source, "dest": dest, **kwargs}
 
 
-TRANSITIONS = [
-    # Camera / hand input.
-
-    # Debug
-    _transition("ip_hand_absent",[ DEBUG_HAND_TILTED,DEBUG_HAND_WRONG_SIDE, SC2_AWAITING_HAND, SC2_HAND_FOUND], 
-                                DEBUG_HAND_ABSENT, before="store_previous_transition"),
-    _transition("ip_hand_tilted",[ DEBUG_HAND_ABSENT,DEBUG_HAND_WRONG_SIDE, SC2_AWAITING_HAND, SC2_HAND_FOUND], 
-                                DEBUG_HAND_TILTED, before="store_previous_transition"),
-    _transition("ip_hand_wrong_side",[ DEBUG_HAND_ABSENT,DEBUG_HAND_TILTED, SC2_AWAITING_HAND, SC2_HAND_FOUND], 
-                                DEBUG_HAND_WRONG_SIDE, before="store_previous_transition"),
-    _transition("exit_debug", [DEBUG_HAND_ABSENT, DEBUG_HAND_TILTED, DEBUG_HAND_WRONG_SIDE], 
-                                None, before="return_to_previous_transition"),
-    # Scene 0 / person arrival
-    _transition("ip_person_detected", IDLE, SC1_START),
-    # Scene 1
-    _transition("ip_person_seated", SC1_START, SC1_SEATED),
-    # Scene 2
-    _transition("ip_hand_absent", SC1_SEATED, SC2_AWAITING_HAND),
-    _transition("ip_hand_present", SC1_SEATED, SC2_HAND_FOUND),
-    _transition("ip_hand_present", SC2_AWAITING_HAND, SC2_HAND_FOUND),
-    _transition("restart_hand_prompt", SC2_HAND_FOUND, SC2_AWAITING_HAND),
-    # Scene 3
-    _transition("ip_hand_correct", SC2_HAND_FOUND, SC3_HANDSCAN_IN_PROCESS),
-    _transition("hand_scanning", SC3_HANDSCAN_IN_PROCESS, SC3_HANDSCAN_DONE),
-    _transition("scan_complete", SC3_HANDSCAN_DONE, SC4_TRANSFORMATION),
-    # Scene 4
-    _transition("transformation_done", SC4_TRANSFORMATION, SC5_HANDREAD_VISUALISATION),
-    # Scene 5
-    _transition("hand_visual_done", SC5_HANDREAD_VISUALISATION, SC5_1_CORE_ELEMENT),
-    _transition("core_element_done", SC5_1_CORE_ELEMENT, SC5_2_WEAK_ELEMENT),
-    _transition("weak_element_done", SC5_2_WEAK_ELEMENT, SC5_3_ADVICE),
-    _transition("advice_done", SC5_3_ADVICE, OUTRO),
-    # End
-    _transition(
-        "ip_person_left",
-        [
-            SC1_START,
-            SC1_SEATED,
-            SC2_AWAITING_HAND,
-            SC2_HAND_FOUND,
-            SC3_HANDSCAN_IN_PROCESS,
-            SC3_HANDSCAN_DONE,
-            SC4_TRANSFORMATION,
-            SC5_HANDREAD_VISUALISATION,
-            SC5_1_CORE_ELEMENT,
-            SC5_2_WEAK_ELEMENT,
-            SC5_3_ADVICE,
-        ],
-        OUTRO,
-    ),
-    _transition("ip_person_left", OUTRO, IDLE),
-    _transition("reset", ANY_SOURCE, IDLE),
+_DBG = [
+    Scene.DBG_ABSENT.value,
+    Scene.DBG_TILTED.value,
+    Scene.DBG_WRONG.value,
+    Scene.DBG_NOT_FULLY.value,
 ]
 
-TRANSITION_IDS = list(dict.fromkeys(item["trigger"] for item in TRANSITIONS))
+STATE_DEFS = [
+    StateDef(state=Scene.SCENE0, description="Idle"),
+    StateDef(state=Scene.SCENE1, description="Welcome"),
+    StateDef(state=Scene.SCENE2, description="Seated greeting", auto_trigger="seated_done"),
+    StateDef(state=Scene.SCENE3, description="Witch intro", auto_trigger="intro_done"),
+    StateDef(state=Scene.SCENE4, description="Awaiting hand"),
+    StateDef(state=Scene.SCENE5, description="Handscan", auto_trigger="scan_complete", hand_locked=True),
+    StateDef(
+        state=Scene.HAND_REMOVAL,
+        description="Handscan complete; visitor may remove hand",
+        auto_trigger="hand_removal_done",
+        hand_locked=True,
+    ),
+    StateDef(state=Scene.SCENE6, description="Analysis", auto_trigger="analysis_done", is_analysis=True, hand_locked=True),
+    StateDef(state=Scene.SCENE7, description="Outro", hand_locked=True),
+    StateDef(state=Scene.DBG_ABSENT, description="Debug: hand absent"),
+    StateDef(state=Scene.DBG_TILTED, description="Debug: hand tilted"),
+    StateDef(state=Scene.DBG_WRONG, description="Debug: back of hand"),
+    StateDef(state=Scene.DBG_NOT_FULLY, description="Debug: hand not fully in view"),
+]
 
-ANIMATION_TRIGGER_BY_STATE: dict[str, str] = {
-    SC3_HANDSCAN_IN_PROCESS: "hand_scanning",
-    SC3_HANDSCAN_DONE: "scan_complete",
-    SC4_TRANSFORMATION: "transformation_done",
-    SC5_HANDREAD_VISUALISATION: "hand_visual_done",
-    SC5_1_CORE_ELEMENT: "core_element_done",
-    SC5_2_WEAK_ELEMENT: "weak_element_done",
-    SC5_3_ADVICE: "advice_done",
-    OUTRO: "reset",
-}
+TRANSITIONS = [
+    # Person events
+    _transition(PersonTrigger.DETECTED.value, Scene.SCENE0.value, Scene.SCENE1.value),
+    _transition(PersonTrigger.DETECTED.value, Scene.SCENE1.value, Scene.SCENE1.value),
+    _transition(PersonTrigger.SEATED.value, Scene.SCENE0.value, Scene.SCENE1.value),
+    _transition(PersonTrigger.SEATED.value, Scene.SCENE1.value, Scene.SCENE2.value),
+    _transition(PersonTrigger.ABSENT.value, "*", Scene.SCENE7.value, conditions="_is_not_outro_or_idle"),
+    _transition(PersonTrigger.ABSENT.value, Scene.SCENE7.value, Scene.SCENE0.value),
 
-AUTO_ADVANCE_STATES = frozenset(ANIMATION_TRIGGER_BY_STATE)
-HAND_REPLAY_STATES = frozenset({
-    Scene.SCENE_1_SEATED.value,
-    Scene.SCENE_2_AWAITING_HAND.value,
-    Scene.SCENE_2_HAND_FOUND.value,
-})
-ANALYSIS_SCENES = frozenset({
-    Scene.SCENE_5_HANDREAD_VISUALISATION,
-    Scene.SCENE_5_SHOT_1_CORE_ELEMENT,
-    Scene.SCENE_5_SHOT_2_WEAK_ELEMENT,
-    Scene.SCENE_5_SHOT_3_ADVICE,
-})
-HAND_LOCKED_STATES = frozenset({
-    Scene.SCENE_3_HANDSCAN_IN_PROCESS.value,
-    Scene.SCENE_3_HANDSCAN_DONE.value,
-    Scene.SCENE_4_TRANSFORMATION.value,
-    Scene.SCENE_5_HANDREAD_VISUALISATION.value,
-    Scene.SCENE_5_SHOT_1_CORE_ELEMENT.value,
-    Scene.SCENE_5_SHOT_2_WEAK_ELEMENT.value,
-    Scene.SCENE_5_SHOT_3_ADVICE.value,
-    Scene.SCENE_6_OUTRO.value,
-})
-PERSON_LOCKED_STATES = HAND_LOCKED_STATES
-WAIT_FOR_UNREAL_STATES = frozenset()
+    # Correct hand — advance
+    _transition(HandTrigger.DETECTED.value, Scene.SCENE4.value, Scene.SCENE5.value),
+    _transition(HandTrigger.DETECTED.value, _DBG, None, before="return_to_previous_transition"),
 
-HAND_TRIGGER_BY_STATE: dict[str, dict[str, str]] = {
-    DEBUG_HAND_ABSENT: {
-        "handback": "ip_hand_wrong_side",
-        "tilted": "ip_hand_tilted",
-        "ready": "exit_debug",
-        "present": "exit_debug",
-    }, 
-    DEBUG_HAND_TILTED: {
-        "absent": "ip_hand_absent",
-        "handback": "ip_hand_wrong_side",
-        "ready": "exit_debug",
-        "present": "exit_debug",
-    }, 
-    DEBUG_HAND_WRONG_SIDE: {
-        "absent": "ip_hand_absent",
-        "tilted": "ip_hand_tilted",
-        "ready": "exit_debug",
-        "present": "exit_debug",
-    },
-    SC1_SEATED: {
-        "absent": "ip_hand_absent",
-        "ready": "ip_hand_present",
-        "present": "ip_hand_present",
-    },
-    SC2_AWAITING_HAND: {
-        "absent": "ip_hand_absent",
-        "handback": "ip_hand_wrong_side",
-        "tilted": "ip_hand_tilted",
-        "ready": "ip_hand_present",
-        "present": "ip_hand_present",
-    },
-    SC2_HAND_FOUND: {
-        "absent": "ip_hand_absent",
-        "handback": "ip_hand_wrong_side",
-        "tilted": "ip_hand_tilted",
-        "ready": "ip_hand_correct",
-        "present": "ip_hand_correct",
-    },
-}
+    # Wrong hand from awaiting → debug
+    _transition(HandTrigger.ABSENT.value, Scene.SCENE4.value, Scene.DBG_ABSENT.value, before="store_previous_transition"),
+    _transition(HandTrigger.TILTED.value, Scene.SCENE4.value, Scene.DBG_TILTED.value, before="store_previous_transition"),
+    _transition(HandTrigger.WRONG_SIDE.value, Scene.SCENE4.value, Scene.DBG_WRONG.value, before="store_previous_transition"),
+    _transition(HandTrigger.NOT_FULLY_IN_VIEW.value, Scene.SCENE4.value, Scene.DBG_NOT_FULLY.value, before="store_previous_transition"),
 
-STATE_DESCRIPTIONS: dict[str, str] = {
-    DEBUG_HAND_ABSENT: "Debug, wenn Hand überhaupt nicht anwesend ist",
-    DEBUG_HAND_TILTED: "Debug, wenn Hand nicht gerade, mit der Innenfläche nach oben, gehalten wird",
-    DEBUG_HAND_WRONG_SIDE: "Debug, wenn die Hand Rückenseite gezeigt wird",
+    # Inter-debug transitions
+    _transition(HandTrigger.ABSENT.value, [Scene.DBG_TILTED.value, Scene.DBG_WRONG.value, Scene.DBG_NOT_FULLY.value], Scene.DBG_ABSENT.value, before="store_previous_transition"),
+    _transition(HandTrigger.TILTED.value, [Scene.DBG_ABSENT.value, Scene.DBG_WRONG.value, Scene.DBG_NOT_FULLY.value], Scene.DBG_TILTED.value, before="store_previous_transition"),
+    _transition(HandTrigger.WRONG_SIDE.value, [Scene.DBG_ABSENT.value, Scene.DBG_TILTED.value, Scene.DBG_NOT_FULLY.value], Scene.DBG_WRONG.value, before="store_previous_transition"),
+    _transition(HandTrigger.NOT_FULLY_IN_VIEW.value, [Scene.DBG_ABSENT.value, Scene.DBG_TILTED.value, Scene.DBG_WRONG.value], Scene.DBG_NOT_FULLY.value, before="store_previous_transition"),
 
-    IDLE: "Szene 0: Wahrsagerin reagiert nicht, Besucher betritt den Raum",
-    OUTRO: "Szene 6: Wahrsagerin transformiert sich zurück und hat \"nichts mehr zu sagen\"",
-    SC1_START: "Szene 1: Besucher wurde im Raum erkannt, Begrüßung wird geliefert",
-    SC1_SEATED: "Szene 1: Besucher hat sich hingesetzt, kurze Sitzbestätigung und Anweisung werden geliefert",
-    SC2_AWAITING_HAND: "Szene 2: Hand liegt im Stein und ist (grob) für die Kamera erkennbar",
-    SC2_HAND_FOUND: "Szene 2: Hand bleibt ruhig unter der Kamera",
-    SC3_HANDSCAN_IN_PROCESS: "Szene 3: Hand ist erkannt und stabil, analyse startet",
-    SC3_HANDSCAN_DONE: "Szene 3: Hand wurde analysiert, Witch sagt, Hand kann raus",
-    SC4_TRANSFORMATION: "Szene 4: Witch transformiert sich für die Analyse der Hand",
-
-    SC5_HANDREAD_VISUALISATION: "Szene 5: Visuelle Darstellung der Hand auf dem Bildschirm",
-    SC5_1_CORE_ELEMENT: "Szene 5 Shot 1: Stärkstes Element wird erklärt",
-    SC5_2_WEAK_ELEMENT: "Szene 5 Shot 2: Schwächstes Element wird erklärt",
-    SC5_3_ADVICE: "Szene 5 Shot 3: Tipps und Tricks fürs Leben",
-
-}
+    # Internal sequence
+    _transition("seated_done", Scene.SCENE2.value, Scene.SCENE3.value),
+    _transition("intro_done", Scene.SCENE3.value, Scene.SCENE4.value),
+    _transition("restart_hand_prompt", Scene.SCENE5.value, Scene.SCENE4.value),
+    _transition("scan_complete", Scene.SCENE5.value, Scene.HAND_REMOVAL.value),
+    _transition("hand_removal_done", Scene.HAND_REMOVAL.value, Scene.SCENE6.value),
+    _transition("analysis_done", Scene.SCENE6.value, Scene.SCENE7.value),
+    _transition("reset", "*", Scene.SCENE0.value),
+]
 
 
 class WitchStateMachine:
     def __init__(self) -> None:
-        self.previous_state = None
-        self._state: str = INITIAL
+        self.previous_state: str | None = None
+        self._states = [s.id for s in STATE_DEFS]
+        self._defs = {s.id: s for s in STATE_DEFS}
+        self._state = self._states[0]
         self.manual_mode = False
         self._machine = GraphMachine(
             model=self,
-            states=STATES,
+            states=self._states,
             transitions=TRANSITIONS,
-            initial=INITIAL,
+            initial=self._states[0],
             auto_transitions=False,
             ignore_invalid_triggers=True,
             graph_engine="mermaid",
             title="The Witch State Machine",
-            send_event = True,
+            send_event=True,
         )
 
-    def store_previous_transition(self, event_data):
-        source = event_data.transition.source
-        if source not in DEBUG_STATES:
-            self.previous_state = source
-
-    def return_to_previous_transition(self, event_data):
-        if self.previous_state:
-            event_data.transition.dest = self.previous_state
-            event_data.result = True
-
-    
     @property
     def state(self) -> str:
         return self._state
@@ -252,57 +133,54 @@ class WitchStateMachine:
     def machine(self):
         return self._machine
 
-    def hand_event(self, event: HandEvent) -> list[StateChange]:
-        condition = hand_condition(event)
-        change = self.advance(HAND_TRIGGER_BY_STATE.get(self.state, {}).get(condition))
-        return [change] if change else []
+    def store_previous_transition(self, event_data) -> None:
+        source = event_data.transition.source
+        if not source.startswith("scene_debug_"):
+            self.previous_state = source
 
-    def person_event(self, event: PersonEvent) -> list[StateChange]:
-        change = self.advance(PERSON_EVENT_TRIGGER.get(event.trigger))
-        return [change] if change else []
+    def return_to_previous_transition(self, event_data) -> None:
+        if self.previous_state is None:
+            return
+        event_data.transition.dest = self.previous_state
+        event_data.result = True
+
+    def _is_not_outro_or_idle(self, event_data) -> bool:
+        return self.state not in (Scene.SCENE7.value, Scene.SCENE0.value)
+
+    def advance(self, trigger: str | None) -> list[StateChange]:
+        if trigger is None:
+            return []
+        source = self.state
+        run_trigger = getattr(self, trigger, None)
+        if run_trigger is None:
+            return []
+        if not run_trigger():
+            return []
+        return [StateChange(trigger=trigger, source=source, dest=self.state)]
 
     def event_done(self, scene: str | None = None) -> list[StateChange]:
         if scene is not None and scene != self.state:
             return []
-        change = self.advance(ANIMATION_TRIGGER_BY_STATE.get(self.state))
-        return [change] if change else []
-
-    def advance(self, trigger: str | None) -> StateChange | None:
-        if trigger not in TRANSITION_IDS:
-            return None
-
-        run_trigger = getattr(self, trigger, None)
-        if run_trigger is None:
-            return None
-
-        source = self.state
-        if not run_trigger():
-            return None
-        return StateChange(trigger=trigger, source=source, dest=self.state)
+        return self.advance(self._get_state_def(self.state).auto_trigger)
 
     def force_state(self, state: str) -> str:
-        if state in STATES:
+        if state in self._states:
             self._machine.set_state(state, model=self)
         return self.state
 
-    def description(self) -> str:
-        return STATE_DESCRIPTIONS.get(self.state, self.state)
-
     def save_markdown(self, path: Path | None = None) -> Path:
         path = path or Path(__file__).with_name("StateMachine.md")
-        mermaid = self._machine.get_graph().source.replace("direction LR", "direction TB")
+        mermaid = self._machine.get_graph().source.replace(
+            "direction LR", "direction TB"
+        )
+        mermaid = "\n".join(line.rstrip() for line in mermaid.splitlines())
         path.write_text(f"```mermaid\n{mermaid.strip()}\n```\n", encoding="utf-8")
         return path
 
-
-def hand_condition(event: HandEvent) -> str:
-    if event.trigger in {HandTrigger.ABSENT,  HandTrigger.NOT_FULLY_IN_VIEW}:
-        return "absent"
-    if event.trigger is HandTrigger.WRONG_SIDE:
-        return "handback"
-    if event.trigger is HandTrigger.TILTED:
-        return "tilted"
-    return "ready" if event.vector else "present"
+    def _get_state_def(self, state: str | None) -> StateDef:
+        return self._defs.get(
+            state or self.state, StateDef(Scene.SCENE0, state or self.state)
+        )
 
 
 if __name__ == "__main__":

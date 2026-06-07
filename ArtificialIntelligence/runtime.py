@@ -28,17 +28,10 @@ from .hand_analysis import (
     get_scene_base_text,
 )
 from .message_channels import EventChannel
-from .speech_pipeline import SpeechPipeline
+from .speech_pipeline import AudioPlaybackConfig, SpeechPipeline, normalize_llm_text
 from .state_machine.state_machine import (
-    ANALYSIS_SCENES,
-    AUTO_ADVANCE_STATES,
-    HAND_LOCKED_STATES,
-    HAND_REPLAY_STATES,
-    PERSON_LOCKED_STATES,
-    WAIT_FOR_UNREAL_STATES,
     StateChange,
     WitchStateMachine,
-    hand_condition,
 )
 from .websocket_server.websocket_server import WebSocketServer
 
@@ -47,10 +40,6 @@ logger = logging.getLogger("ai")
 
 def _wait_for_unreal_ack() -> bool:
     return os.environ.get("WITCH_WAIT_FOR_UNREAL_ACK", "true").strip().lower() == "true"
-
-
-def _gaslight_enabled() -> bool:
-    return os.environ.get("WITCH_GASLIGHT", "").strip().lower() == "true"
 
 
 OUTBOUND_AI3D_EVENT = (
@@ -72,6 +61,7 @@ class WitchRuntime:
         state_machine: WitchStateMachine,
         llm: Any,
         tts: Any,
+        audio_config: AudioPlaybackConfig | None = None,
     ):
         self._ws_server = ws_server
         self._state_machine = state_machine
@@ -85,10 +75,13 @@ class WitchRuntime:
         self._speech_scene: Scene | None = None
         self._speech_task: asyncio.Task[None] | None = None
         self._speech_loop: asyncio.AbstractEventLoop | None = None
+        self._seat_override_task: asyncio.Task[None] | None = None
+        self._pending_person_event: PersonEvent | None = None
         self._pending_unreal_ack: PendingUnrealAck | None = None
         self._queued_speech: tuple[str, Scene] | None = None
         self._analysis_started = False
         self._desired_hand: Hand | None = None
+        self._hand_was_present_in_awaiting: bool = False
         self._ip_channel = EventChannel(
             ws_server=ws_server,
             path="/ws/ip-ai",
@@ -105,7 +98,7 @@ class WitchRuntime:
         self._speech_pipeline = SpeechPipeline(
             llm=llm,
             tts=tts,
-            tts_seed=int(os.environ.get("WITCH_TTS_SEED", "42")),
+            audio_config=audio_config,
         )
 
         self._register_routes()
@@ -133,7 +126,7 @@ class WitchRuntime:
 
     async def _process_ip_event(self, event: IPEvent) -> None:
         if isinstance(event, HandEvent):
-            if self._state_machine.state in HAND_LOCKED_STATES:
+            if self._state_machine._get_state_def(None).hand_locked:
                 logger.info(
                     "Ignoring hand event after analysis lock: state=%s trigger=%s",
                     self._state_machine.state,
@@ -144,7 +137,7 @@ class WitchRuntime:
             logger.info("Broadcasting hand event: %s", event.trigger)
 
             if self._hand_reset_required:
-                if event.trigger in {HandTrigger.ABSENT, HandTrigger.NOT_FULLY_IN_VIEW}:
+                if event.trigger in (HandTrigger.ABSENT, HandTrigger.NOT_FULLY_IN_VIEW):
                     logger.info(
                         "Hand removed after gaslight; next insertion may continue normally"
                     )
@@ -153,7 +146,7 @@ class WitchRuntime:
                     if event.vector:
                         self._analysis_hand_event = event
                     return
-                elif hand_condition(event) in {"present", "ready"}:
+                elif event.trigger not in (HandTrigger.ABSENT, HandTrigger.NOT_FULLY_IN_VIEW):
                     logger.info(
                         "Ignoring hand event until the visitor removes the gaslit hand: trigger=%s",
                         event.trigger,
@@ -161,14 +154,14 @@ class WitchRuntime:
                     return
 
             if (
-                self._state_machine.state == Scene.SCENE_2_AWAITING_HAND.value
+                self._state_machine.state == Scene.SCENE4.value
                 and event.hand is not None
-                and hand_condition(event) not in {"absent"}
-                and _gaslight_enabled()
+                and event.trigger not in (HandTrigger.ABSENT, HandTrigger.NOT_FULLY_IN_VIEW)
+                and os.environ.get("WITCH_GASLIGHT", "true").strip().lower() == "true"
                 and (
                     self._desired_hand is None
                     or (
-                        hand_condition(event) in {"present", "ready"}
+                        event.trigger is HandTrigger.DETECTED
                         and event.hand is not self._desired_hand
                     )
                 )
@@ -182,9 +175,9 @@ class WitchRuntime:
                 self._hand_reset_required = True
                 self._gaslight_hand_name = self._hand_name(event)
 
-                change = self._state_machine.advance("ip_hand_present")
-                if change is not None:
-                    scene_changed = await self._emit_scene_changes([change])
+                changes = self._state_machine.advance(HandTrigger.DETECTED.value)
+                if changes:
+                    scene_changed = await self._emit_scene_changes(changes)
                     if scene_changed:
                         await self._on_state_changed()
                         await self._start_speech_for_current_scene(restart=True)
@@ -194,8 +187,15 @@ class WitchRuntime:
             if event.vector:
                 self._analysis_hand_event = event
 
+            if self._state_machine.state == Scene.SCENE4.value:
+                if event.trigger not in (HandTrigger.ABSENT, HandTrigger.NOT_FULLY_IN_VIEW):
+                    self._hand_was_present_in_awaiting = True
+                elif event.trigger in (HandTrigger.ABSENT, HandTrigger.NOT_FULLY_IN_VIEW) and not self._hand_was_present_in_awaiting:
+                    logger.info("Ignoring hand_absent in awaiting_hand: hand was never present")
+                    return
+
             scene_changed = await self._emit_scene_changes(
-                self._state_machine.hand_event(event)
+                self._state_machine.advance(event.trigger.value)
             )
             if scene_changed:
                 await self._on_state_changed()
@@ -203,13 +203,23 @@ class WitchRuntime:
             return
 
         if isinstance(event, PersonEvent):
+            if (
+                event.trigger is PersonTrigger.SEATED
+                and self._state_machine.state == Scene.SCENE1.value
+                and self._speech_task is not None
+                and not self._speech_task.done()
+            ):
+                logger.info("Deferring seated event until scene 0 speech completes")
+                self._pending_person_event = event
+                return
+
             self._forbidden_hand = None
             self._hand_gaslight_pending = False
             self._hand_reset_required = False
             self._gaslight_hand_name = None
             self._desired_hand = None
 
-            if self._state_machine.state in PERSON_LOCKED_STATES and event.trigger is not PersonTrigger.ABSENT:
+            if self._state_machine._get_state_def(None).hand_locked and event.trigger is not PersonTrigger.ABSENT:
                 logger.info(
                     "Ignoring person event during locked flow: state=%s trigger=%s",
                     self._state_machine.state,
@@ -218,7 +228,7 @@ class WitchRuntime:
                 return
 
         scene_changed = await self._emit_scene_changes(
-            self._state_machine.person_event(event)
+            self._state_machine.advance(event.trigger.value)
         )
         if scene_changed:
             await self._on_state_changed()
@@ -241,20 +251,20 @@ class WitchRuntime:
         )
 
     def _speech_prompt_for_scene(self, scene: Scene) -> str | None:
-        if scene is Scene.SCENE_2_HAND_FOUND and self._hand_gaslight_pending:
+        if scene is Scene.SCENE4:
+            return None
+
+        if scene is Scene.SCENE5 and self._hand_gaslight_pending:
             base_text = (
                 f"Du hast mir deine {self._gaslight_hand_name or 'unbekannte'} Hand gezeigt. "
                 "Genau diese ist die falsche. Nimm die andere Hand."
             )
             return build_scene_prompt(scene, base_text=base_text)
 
-        if scene is Scene.SCENE_5_HANDREAD_VISUALISATION:
+        if scene is Scene.SCENE6:
             return build_combined_analysis_prompt(
                 self._analysis_hand_event or self._latest_hand_event,
             )
-
-        if scene in {Scene.SCENE_5_SHOT_1_CORE_ELEMENT, Scene.SCENE_5_SHOT_2_WEAK_ELEMENT, Scene.SCENE_5_SHOT_3_ADVICE}:
-            return None
 
         base_text = get_scene_base_text(scene)
         if not base_text:
@@ -295,7 +305,9 @@ class WitchRuntime:
 
     async def _run_speech(self, prompt: str, scene: Scene) -> None:
         try:
-            text = await self._speech_pipeline.generate_text(prompt)
+            text = normalize_llm_text(
+                await self._speech_pipeline.generate_text(prompt)
+            )
             await self._speech_pipeline.play_text(
                 text,
                 on_audio_start=lambda: self._emit_scene_events_on_audio_start(
@@ -318,7 +330,10 @@ class WitchRuntime:
             await self._emit_ai3d_event(
                 ErrorEvent(message=f"Speech failed for {scene.value}: {exc}"),
             )
-            await self._advance_scene_after_speech(scene)
+            if self._state_machine.state == scene.value:
+                logger.info("Holding %s until speech can be played", scene.value)
+                await asyncio.sleep(2)
+                await self._start_speech_for_current_scene(restart=True)
         finally:
             current = asyncio.current_task()
             if self._speech_task is current:
@@ -392,7 +407,10 @@ class WitchRuntime:
             await self._emit_ai3d_event(pending_scene_command)
             self._pending_scene_command = None
 
-        if scene in ANALYSIS_SCENES and text is not None:
+        if (
+            self._state_machine._get_state_def(scene.value).is_analysis
+            and text is not None
+        ):
             await self._emit_ai3d_event(
                 AnalysisResultEvent(text=text, scene=scene),
             )
@@ -416,8 +434,6 @@ class WitchRuntime:
         if scene != self._state_machine.state:
             return
         if not _wait_for_unreal_ack():
-            return
-        if scene not in WAIT_FOR_UNREAL_STATES:
             return
 
         self._pending_unreal_ack = PendingUnrealAck(
@@ -456,6 +472,32 @@ class WitchRuntime:
         await self._process_ip_event(person_event)
         return self._state_machine.state
 
+    async def _replay_seat_sensor_override(self) -> None:
+        try:
+            for trigger in (PersonTrigger.DETECTED, PersonTrigger.SEATED):
+                await asyncio.sleep(10)
+                event = PersonEvent(trigger=trigger)
+                logger.info("Seat sensor override after reset: %s", trigger.value)
+                await self._process_ip_event(event)
+                await self._ip_channel.broadcast(event)
+        except asyncio.CancelledError:
+            logger.info("Cancelled pending seat sensor override replay")
+            raise
+        finally:
+            if self._seat_override_task is asyncio.current_task():
+                self._seat_override_task = None
+
+    async def _restart_seat_sensor_override(self) -> None:
+        task = self._seat_override_task
+        if task is not None and not task.done():
+            task.cancel()
+            with suppress(asyncio.CancelledError):
+                await task
+
+        self._seat_override_task = asyncio.create_task(
+            self._replay_seat_sensor_override()
+        )
+
     async def acknowledge_unreal_event(self) -> str:
         await self._process_unreal_event(EventDoneEvent(origin="ManualSimulation"))
         return self._state_machine.state
@@ -489,8 +531,9 @@ class WitchRuntime:
         self._queued_speech = None
         self._analysis_started = False
         self._desired_hand = None
+        self._pending_person_event = None
     async def _on_state_changed(self) -> None:
-        if self._state_machine.state == Scene.SCENE_0_IDLE.value:
+        if self._state_machine.state == Scene.SCENE0.value:
             self._latest_hand_event = None
             self._analysis_hand_event = None
             self._forbidden_hand = None
@@ -502,21 +545,26 @@ class WitchRuntime:
             self._queued_speech = None
             self._analysis_started = False
             self._desired_hand = None
+            self._pending_person_event = None
+            self._hand_was_present_in_awaiting = False
             self._state_machine.manual_mode = False
             self._state_machine.previous_state = None
             return
 
+        if self._state_machine.state == Scene.SCENE4.value:
+            self._hand_was_present_in_awaiting = False
+
         if (
-            self._state_machine.state == Scene.SCENE_3_HANDSCAN_DONE.value
+            self._state_machine.state == Scene.SCENE5.value
             and not self._analysis_started
         ):
             self._analysis_started = True
             await self._emit_ai3d_event(
-                AnalysisStartedEvent(scene=Scene.SCENE_3_HANDSCAN_DONE),
+                AnalysisStartedEvent(scene=Scene.SCENE5),
             )
 
         if (
-            self._state_machine.state in HAND_LOCKED_STATES
+            self._state_machine._get_state_def(None).hand_locked
             and self._analysis_hand_event is None
             and self._latest_hand_event is not None
             and self._latest_hand_event.vector
@@ -527,20 +575,20 @@ class WitchRuntime:
         if self._state_machine.state != scene.value:
             return
 
-        if scene is Scene.SCENE_2_HAND_FOUND and self._hand_gaslight_pending:
+        if scene is Scene.SCENE5 and self._hand_gaslight_pending:
             self._hand_gaslight_pending = False
             self._latest_hand_event = None
-            change = self._state_machine.advance("restart_hand_prompt")
-            if change is not None:
-                await self._emit_scene_changes([change])
+            changes = self._state_machine.advance("restart_hand_prompt")
+            if changes:
+                await self._emit_scene_changes(changes)
                 await self._on_state_changed()
                 await self._emit_scene_events_on_audio_start(
-                    Scene.SCENE_2_AWAITING_HAND,
+                    Scene.SCENE4,
                     None,
                 )
             return
 
-        if scene.value in AUTO_ADVANCE_STATES:
+        if self._state_machine._get_state_def(scene.value).auto_trigger is not None:
             changes = self._state_machine.event_done(scene.value)
             if changes:
                 await self._emit_scene_changes(changes)
@@ -548,12 +596,24 @@ class WitchRuntime:
                 await self._start_speech_for_current_scene(restart=True)
                 return
 
+        if await self._replay_pending_person_event():
+            return
         await self._replay_latest_hand_event()
 
-    async def _replay_latest_hand_event(self) -> bool:
-        if self._state_machine.state not in HAND_REPLAY_STATES:
+    async def _replay_pending_person_event(self) -> bool:
+        event = self._pending_person_event
+        if event is None:
             return False
-        if self._state_machine.state in HAND_LOCKED_STATES:
+        self._pending_person_event = None
+        logger.info("Processing deferred person event: %s", event.trigger.value)
+        await self._process_ip_event(event)
+        return True
+
+    async def _replay_latest_hand_event(self) -> bool:
+        current_state = self._state_machine.state
+        if not (not self._state_machine._get_state_def(current_state).hand_locked and not current_state.startswith("scene_debug_")):
+            return False
+        if self._state_machine._get_state_def(None).hand_locked:
             return False
         if self._latest_hand_event is None:
             return False
@@ -587,7 +647,6 @@ class WitchRuntime:
         self._speech_scene = None
         self._queued_speech = None
 
-        self._speech_pipeline.stop_player()
         if task is None or task.done():
             return
 
@@ -603,7 +662,6 @@ class WitchRuntime:
         self._speech_scene = None
         self._queued_speech = None
 
-        self._speech_pipeline.stop_player()
         if task is None or task.done():
             return
 
@@ -624,23 +682,26 @@ class WitchRuntime:
 
     async def trigger_state_event(self, event: str) -> str:
         if event:
-            change = self._state_machine.advance(event)
+            changes = self._state_machine.advance(event)
             logger.info(
-                "trigger_state_event: %s -> %s (change=%s)",
+                "trigger_state_event: %s -> %s (changes=%s)",
                 self._state_machine.state,
                 event,
-                change,
+                changes,
             )
             if event == "reset":
-                if change is None:
-                    self._state_machine.force_state(Scene.SCENE_0_IDLE.value)
+                if not changes:
+                    self._state_machine.force_state(Scene.SCENE0.value)
                     logger.info("Reset: force_state fallback used")
+                change = changes[-1] if changes else None
                 self._pending_scene_command = self._scene_command(
-                    StateChange(
-                        trigger="reset", source="", dest=Scene.SCENE_0_IDLE.value
+                    change or StateChange(
+                        trigger="reset", source="", dest=Scene.SCENE0.value
                     ),
                 )
-                await self._emit_scene_events_on_audio_start(Scene.SCENE_0_IDLE, None)
+                await self._emit_scene_events_on_audio_start(Scene.SCENE0, None)
                 await self._on_state_changed()
                 await self._cancel_speech()
+                if os.getenv("WITCH_SEAT_SENSOR_OVERRIDE", "false") == "true":
+                    await self._restart_seat_sensor_override()
         return self._state_machine.state

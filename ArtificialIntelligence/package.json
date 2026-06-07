@@ -1,41 +1,41 @@
 {
   "scenes": {
-    "scene_1_start": "Ich spüre, dass du näher kommst. Tritt ein und nimm vor mir Platz.",
-    "scene_1_seated": "Gut. Bleib sitzen. Lege deine Hand in den Stein und lass sie offen vor mir ruhen.",
-    "scene_2_awaiting_hand": "Ich sehe deine Hand noch nicht klar. Lege sie mit der Innenfläche nach oben in den Stein.",
-    "scene_2_hand_found": "Gut. Ich habe sie erfasst. Halte jetzt still und bewege keinen Finger.",
-    "scene_3_handscan_in_process": "Bleib genau so. Ich lese bereits, was in deinen Linien verborgen liegt.",
-    "scene_3_handscan_done": "Es ist vollbracht. Du darfst die Hand nun langsam aus dem Stein nehmen.",
-    "scene_4_transformation": "Was verborgen war, tritt nun an die Oberfläche.",
-    "scene_6_outro": "Für diesen Augenblick ist alles gesagt. Geh weiter mit wachem Blick.",
+    "scene_0_welcome": "Ich spüre, dass du näher kommst. Tritt ein und setz dich zu mir.",
+    "scene_1_seated": "Bleib sitzen und mach es dir bequem.",
+    "scene_2_intro": "Ich bin die Hexe dieses Ortes. Seit langer Zeit lese ich, was anderen verborgen bleibt: Spuren der Vergangenheit, Kräfte der Gegenwart und Wege, die noch vor dir liegen. Heute werde ich in deiner Hand nach diesen Zeichen suchen. Lege nun deine Hand vollständig in den Stein und lass sie dort vor mir ruhen.",
+    "scene_4_handscan": "Gut. Ich habe sie erfasst. Halte jetzt still und bewege keinen Finger.",
+    "scene_4_handscan_done": "Die Zeichen deiner Hand sind erfasst. Du kannst deine Hand jetzt aus dem Stein nehmen.",
+    "scene_5_analysis": "Ich lese nun, was in den Linien deiner Hand verborgen liegt.",
+    "scene_6_outro": "Es ist vollbracht. Für diesen Augenblick ist alles gesagt. Geh weiter mit wachem Blick.",
     "scene_debug_shot_1_hand_absent": "Ich sehe deine Hand nicht. Lege sie vollständig in den Stein.",
-    "scene_debug_shot_2_hand_tilted": "Drehe die Hand flach. Die Innenfläche muss ruhig nach oben zeigen.",
-    "scene_debug_shot_3_hand_wrong_side": "Nicht den Handrücken. Zeig mir die offene Innenfläche."
+    "scene_debug_shot_2_hand_tilted": "Lege deine Hand flach hin. Die Handfläche muss ruhig nach oben zeigen.",
+    "scene_debug_shot_3_hand_wrong_side": "Zeig mir nicht den Handrücken, sondern deine offene Handfläche.",
+    "scene_debug_shot_4_hand_not_fully_in_view": "Ich kann deine Hand noch nicht vollständig sehen. Lege sie ganz flach in den Stein."
   },
   "hand_analysis": {
     "shot_1": {
-      "erde": "Deine Finger bleiben nah beieinander. Kaum Spannung nach außen.Du gehst selten ins Risiko, wenn du keinen Grund siehst.Und du brauchst oft einen sehr guten Grund.",
-      "holz": "Deine Finger sind lang und oft unter Spannung. Das zeigt deinen endlosen Wunsch, zu wachsen und deinen Horizont zu erweitern. Stillstand erträgst du schwer.",
-      "feuer": "Deine Haut wirkt lebhaft und warm. Das zeigt: Deine Emotionen kommen schnell an die Oberfläche. Und du hast wenig Toleranz für Respektlosigkeit.",
-      "wasser": "Deine Hand wirkt geschmeidig, die Finger passen sich leicht an. Das verleiht dir die ultimative Anpassungsfähigkeit, dich nahtlos in jede Umgebung einzufügen."
+      "erde": "Deine Finger liegen eng beieinander und zeigen kaum Spannung nach außen. Du gehst selten ein Risiko ein, wenn du keinen guten Grund dafür siehst.",
+      "holz": "Deine langen Finger stehen oft unter Spannung. Darin zeigt sich dein unstillbarer Wunsch, zu wachsen und deinen Horizont zu erweitern. Stillstand erträgst du nur schwer.",
+      "feuer": "Deine Haut wirkt lebhaft und warm. Das zeigt, dass deine Gefühle schnell an die Oberfläche treten und du wenig Toleranz für Respektlosigkeit hast.",
+      "wasser": "Deine Hand wirkt geschmeidig, und deine Finger passen sich leicht an. Das verleiht dir eine große Anpassungsfähigkeit und hilft dir, dich mühelos in neue Umgebungen einzufügen."
     },
     "shot_3": {
-      "erde": "Erde.Du hältst Dinge zusammen. Auch wenn sie eigentlich auseinanderfallen sollten",
-      "holz": "Holz. Du beschreitest furchtlos neue Wege[cite: 19]. Auch wenn du dich dabei oft jeder Kontrolle entziehen willst.",
-      "feuer": "Feuer. Wie ein Lagerfeuer, das in der Dunkelheit brennt, stichst du heraus. Du bist niemand, der Geheimnisse für sich behält.",
-      "wasser": "Wasser. Du besitzt eine scharfe Intuition, die den Kern der Dinge durchdringt. Wie Feuchtigkeit, die in Risse sickert."
+      "erde": "Erde. Du hältst die Dinge zusammen, selbst wenn sie eigentlich auseinanderfallen sollten.",
+      "holz": "Holz. Du beschreitest furchtlos neue Wege, auch wenn du dich dabei oft jeder Kontrolle entziehen willst.",
+      "feuer": "Feuer. Wie ein Lagerfeuer in der Dunkelheit stichst du aus deiner Umgebung hervor. Du bist niemand, der Geheimnisse lange für sich behält.",
+      "wasser": "Wasser. Deine scharfe Intuition dringt bis zum Kern der Dinge vor, so wie Feuchtigkeit in feine Risse sickert."
     },
     "shot_4": {
-      "erde": "Andere verlassen sich schnell auf dich. Du wirkst stabil.Aber du denkst lange. Sehr lange. Ist es die Sorgfalt oder das Zögern?",
-      "holz": "Deine Kraft zu planen und dich zu entfalten ist immens. Doch es fällt dir schwer, die Dinge zu einem fruchtbaren Abschluss zu bringen.",
-      "feuer": "Deine Tatkraft ist intensiv. Dennoch neigst du zum Burnout, genau wie ein Feuer, dem der Brennstoff ausgeht.",
-      "wasser": "Du saugst Wissen mühelos auf, um die Muster der Welt zu verstehen. Doch ähnlich wie die Tiefe des Ozeans neigst du dazu, deine wahren Gedanken bis ganz zum Schluss zu verbergen."
+      "erde": "Andere verlassen sich schnell auf dich, denn du wirkst beständig. Doch du denkst lange nach, manchmal sehr lange. Ist es Sorgfalt oder Zögern?",
+      "holz": "Deine Fähigkeit zu planen und dich zu entfalten ist groß. Doch es fällt dir schwer, deine Vorhaben erfolgreich abzuschließen.",
+      "feuer": "Deine Tatkraft ist stark. Dennoch neigst du dazu, dich zu verausgaben, wie ein Feuer, dem allmählich der Brennstoff ausgeht.",
+      "wasser": "Du nimmst Wissen mühelos auf und erkennst darin die Muster der Welt. Doch zugleich verbirgst du deine wahren Gedanken oft bis zuletzt in dir."
     },
     "shot_5": {
-      "erde": "Um deine fehlende Erd-Stabilität zu erden, trage oft warme Beige- oder Brauntöne und berühre Keramikbecher. Wandere an Wochenenden oder gehe barfuß auf feldwegen, um dein berggleiches, friedliches Zentrum zu finden.",
-      "holz": "Um deine fehlende Holzenergie zu beleben, umgieb deinen Alltag mit lebendigen grünen Gegenständen und Zimmerpflanzen. Spaziere an Wochenenden durch üppige Parks, um die frische Vitalität aufzunehmen, die deinen Antrieb neu startet.",
-      "feuer": "Um deine fehlende Feuerenergie zu entfachen, zünde täglich Duftkerzen an und setze auf rote oder orangefarbene Akzente. Genieße an sonnigen Tagen die Sonne auf einer Café-Terrasse, um deine Leidenschaft aufzuladen.",
-      "wasser": "Um deine fehlende Wasserweisheit einzuladen, trage tiefe Schwarz- oder Marinetöne und trinke aus transparenten Bechern. Wenn dein Geist überlastet ist, schlendere bei Sonnenuntergang an einem flussufer entlang, um Unruhe aufzulösen."
+      "erde": "Um deine fehlende Erdenergie zu stärken, trage warme Beige- oder Brauntöne und nimm gelegentlich einen Keramikbecher in die Hand. Wandere am Wochenende oder geh barfuß über Feldwege, um deine innere Ruhe und Beständigkeit wiederzufinden.",
+      "holz": "Um deine fehlende Holzenergie zu beleben, umgib dich im Alltag mit kräftigen Grüntönen und Zimmerpflanzen. Spaziere am Wochenende durch üppige Parks und nimm die frische Kraft der Natur in dich auf, um deinen Antrieb zu erneuern.",
+      "feuer": "Um deine fehlende Feuerenergie zu entfachen, zünde täglich Duftkerzen an und setze auf rote oder orangefarbene Akzente. Genieße an sonnigen Tagen die Wärme auf einer Café-Terrasse, um deine Leidenschaft neu zu entfachen.",
+      "wasser": "Um deine fehlende Wasserenergie zu stärken, trage schwarze oder marineblaue Kleidung und trink aus durchsichtigen Gläsern. Wenn dein Geist überlastet ist, schlendere bei Sonnenuntergang an einem Flussufer entlang, um deine innere Unruhe zu lösen."
     }
   }
 }

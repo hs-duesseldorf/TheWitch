@@ -54,7 +54,6 @@ EMBEDDING_MODEL = "arcface"
 
 HAND_LANDMARK_VISIBILITY_MARGIN_PX = 2.0
 NOT_FULLY_IN_VIEW_DEBOUNCE_S = 2.5
-MIN_HAND_EVENT_INTERVAL_S = 0.15
 GEOMETRY_FEATURE_KEYS = (
     "palm_width",
     "palm_height",
@@ -102,7 +101,6 @@ class HeadlessPalmClient:
         self.last_hand_observation_signature: tuple[Any, ...] | None = None
         self.last_video_frame_publish_at = 0.0
         self.last_roi_frame_publish_at = 0.0
-        self._last_hand_event_at = 0.0
 
         self.cap = cv2.VideoCapture(self.camera_source)
         if not self.cap.isOpened():
@@ -211,8 +209,6 @@ class HeadlessPalmClient:
     ) -> None:
         if camera_frame_bgr is not None and self._should_publish_video_frame():
             self._publish_video_frame(camera_frame_bgr)
-        if not self._should_publish_hand_signature(trigger, hand, False):
-            return
         self._publish_hand_event(
             HandEvent(
                 trigger=trigger,
@@ -225,10 +221,6 @@ class HeadlessPalmClient:
         hand: Hand | None,
     ) -> None:
         vector = self.feature_cache["embedding_vector"]
-        if not self._should_publish_hand_signature(
-            HandTrigger.DETECTED, hand, bool(vector)
-        ):
-            return
         self._publish_hand_event(
             HandEvent(
                 trigger=HandTrigger.DETECTED,
@@ -238,27 +230,11 @@ class HeadlessPalmClient:
             )
         )
 
-    def _should_publish_hand_signature(
-        self,
-        trigger: HandTrigger,
-        hand: Hand | None,
-        has_vector: bool,
-    ) -> bool:
-        return (trigger, hand, has_vector) != self.last_hand_observation_signature
-
     def _publish_hand_event(self, event: HandEvent) -> None:
-        now = time.monotonic()
-        if now - self._last_hand_event_at < MIN_HAND_EVENT_INTERVAL_S:
-            return
-        signature = (
-            event.trigger,
-            event.hand,
-            bool(event.vector),
-        )
+        signature = (event.trigger, event.hand, bool(event.vector))
         if signature == self.last_hand_observation_signature:
             return
         self.last_hand_observation_signature = signature
-        self._last_hand_event_at = now
         self.event_client.send_message(event)
 
     def _update_feature_cache(self) -> None:

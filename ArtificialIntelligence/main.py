@@ -18,6 +18,7 @@ from .clients.llm_client import LLMClient
 from .clients.tts_client import TTSClient
 from .debug_ui import set_runtime as _set_debug_runtime, run as _run_debug_ui
 from .runtime import WitchRuntime
+from .speech_pipeline import AudioPlaybackConfig
 from .state_machine.state_machine import WitchStateMachine
 from .websocket_server.websocket_server import WebSocketServer
 
@@ -48,9 +49,10 @@ class App:
                 base_url=_get_llm_url(),
                 model=_llm_model_name(),
             ),
-            tts=TTSClient(
-                base_url=_get_tts_url(),
-                model=os.environ["WITCH_TTS_MODEL"],
+            tts=TTSClient(base_url=_get_tts_url()),
+            audio_config=AudioPlaybackConfig(
+                prebuffer_seconds=float(os.environ["WITCH_AUDIO_PREBUFFER_SECONDS"]),
+                speaker_delay_seconds=float(os.environ["WITCH_SPEAKER_DELAY_SECONDS"]),
             ),
         )
 

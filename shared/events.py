@@ -5,8 +5,6 @@ from typing import Any, TypeAlias
 
 import msgspec
 
-# Triggers & identifiers
-
 
 class HandTrigger(str, Enum):
     DETECTED = "hand_detected"
@@ -28,37 +26,20 @@ class Hand(str, Enum):
 
 
 class Scene(str, Enum):
-    #Shortened Statemachine
+    DBG_ABSENT = "scene_debug_shot_1_hand_absent"
+    DBG_TILTED = "scene_debug_shot_2_hand_tilted"
+    DBG_WRONG = "scene_debug_shot_3_hand_wrong_side"
+    DBG_NOT_FULLY = "scene_debug_shot_4_hand_not_fully_in_view"
 
-    # DEBUG / HAND DETECTION
-    SCENE_DEBUG_SHOT_1_HAND_ABSENT = "scene_debug_shot_1_hand_absent"
-    SCENE_DEBUG_SHOT_2_HAND_TILTED = "scene_debug_shot_2_hand_tilted"
-    SCENE_DEBUG_SHOT_3_HAND_WRONG_SIDE = "scene_debug_shot_3_hand_wrong_side"
-    # OTHER SCENES
-    SCENE_0_IDLE = "scene_0_idle"
-    SCENE_6_OUTRO = "scene_6_outro"
-    # SCENE 1 - Welcome / instructions
-    SCENE_1_START = "scene_1_start"
-    SCENE_1_SEATED = "scene_1_seated"
-    # SCENE 2 - Hand inside stone
-    SCENE_2_AWAITING_HAND = "scene_2_awaiting_hand"
-    SCENE_2_HAND_FOUND = "scene_2_hand_found"
-    # SCENE 3 - Handscan
-    SCENE_3_HANDSCAN_IN_PROCESS = "scene_3_handscan_in_process"
-    SCENE_3_HANDSCAN_DONE = "scene_3_handscan_done"
-    # SCENE 4 - Transformation
-    SCENE_4_TRANSFORMATION = "scene_4_transformation"
-    # SCENE 5 - Hand reading
-    SCENE_5_HANDREAD_VISUALISATION = "scene_5_handread_visualisation"
-    SCENE_5_SHOT_1_CORE_ELEMENT = "scene_5_shot_1_core_element"
-    SCENE_5_SHOT_2_WEAK_ELEMENT = "scene_5_shot_2_weak_element"
-    SCENE_5_SHOT_3_ADVICE = "scene_5_shot_3_advice"
-
-
-# Events
-# `tag_field` names the JSON discriminator key ("type").
-# `tag` sets its value for each subclass.
-# Use isinstance() / match to branch on event type after decoding.
+    SCENE0 = "scene_idle"
+    SCENE1 = "scene_0_welcome"
+    SCENE2 = "scene_1_seated"
+    SCENE3 = "scene_2_intro"
+    SCENE4 = "scene_3_awaiting_hand"
+    SCENE5 = "scene_4_handscan"
+    HAND_REMOVAL = "scene_4_handscan_done"
+    SCENE6 = "scene_5_analysis"
+    SCENE7 = "scene_6_outro"
 
 
 class Event(msgspec.Struct, frozen=True, kw_only=True, tag_field="type", omit_defaults=True):

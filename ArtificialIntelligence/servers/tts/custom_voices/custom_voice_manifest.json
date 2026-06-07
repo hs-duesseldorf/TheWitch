@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "model_type": "qwen3_tts",
+  "model": "Qwen/Qwen3-TTS-12Hz-0.6B-Base",
+  "hidden_size": 1024,
+  "voices": {
+    "witch": {
+      "name": "witch",
+      "file": "witch.safetensors",
+      "mode": "icl",
+      "embedding_dim": 1024,
+      "ref_code_length": 64,
+      "ref_text": "Guten Abend. Ich sehe die Linien deiner Hand klar vor mir.",
+      "speaker_description": "A very calm, very slow middle-aged female German voice with a natural Asian accent and subtle Korean cadence. Low-pitched, warm, mature, soft, steady, and quietly mysterious. She speaks with long pauses, restrained emotion, stable pitch, and gentle, deliberate pacing."
+    }
+  }
+}
