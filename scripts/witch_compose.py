@@ -49,7 +49,7 @@ SERVICES = {
             "WITCH_SPEAKER_DELAY_SECONDS",
             "WITCH_TTS_HOST",
             "WITCH_TTS_PORT",
-            "WITCH_TTS_SILENCE_STOP_SECONDS",
+            "WITCH_TTS_MAX_DURATION_SECONDS",
             "WITCH_VIRTUAL_CABLE_NAME",
             "WITCH_WAIT_FOR_UNREAL_ACK",
         ),

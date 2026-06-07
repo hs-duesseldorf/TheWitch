@@ -211,7 +211,7 @@ the client terminates the upstream response after sustained near-silent output
 following speech. Valid shorter pauses are buffered and played if speech resumes:
 
 ```dotenv
-WITCH_TTS_SILENCE_STOP_SECONDS=5.0
+WITCH_TTS_MAX_DURATION_SECONDS=120
 ```
 
 The anchored Base voice is stored as an offline-precomputed ICL profile:
