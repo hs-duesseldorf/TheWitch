@@ -27,14 +27,17 @@ stages:
     output_connectors:
       to_stage_1: connector_of_shared_memory
     default_sampling_params:
-      temperature: 0.9
+      temperature: 0.8
       top_p: 1.0
       top_k: 50
       seed: 42
-      repetition_penalty: 1.05
+      repetition_penalty: 1.15
+      stop_token_ids: [2150]
+      detokenize: false
+      max_tokens: 4096
     subtalker_sampling_params:
       do_sample: true
-      temperature: 0.9
+      temperature: 0.8
       top_k: 50
       top_p: 1.0
 
