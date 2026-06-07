@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 import wave
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
@@ -15,6 +16,7 @@ DEFAULT_QWEN_SAMPLE_RATE = 24_000
 QWEN_SPEECH_PATH = "/v1/audio/speech"
 PCM_SAMPLE_WIDTH = 2
 PCM_CHUNK_SECONDS = 0.1
+NEAR_SILENCE_RMS_THRESHOLD = 0.003
 REQUEST_ATTEMPTS = 5
 RETRY_DELAY_SECONDS = 1.0
 HTTP_CONNECT_TIMEOUT_SECONDS = 10
@@ -36,6 +38,7 @@ class TTSClient:
             raise ValueError("TTS base URL must not be empty")
 
         self.base_url = base_url.rstrip("/")
+        self.silence_stop_seconds = float(os.environ["WITCH_TTS_SILENCE_STOP_SECONDS"])
 
     async def stream_synthesize(self, text: str) -> AsyncIterator[AudioFrame]:
         text = text.strip()
@@ -74,7 +77,10 @@ class TTSClient:
                             raise RuntimeError(
                                 f"TTS stream failed: HTTP {resp.status}: {body}"
                             )
-                        async for chunk in self._pcm_chunks(resp):
+                        chunks = self._stop_after_sustained_silence(
+                            self._pcm_chunks(resp)
+                        )
+                        async for chunk in chunks:
                             yielded_audio = True
                             yield AudioFrame(
                                 audio=chunk,
@@ -125,6 +131,49 @@ class TTSClient:
             if buffer:
                 yield bytes(buffer)
 
+    async def _stop_after_sustained_silence(
+        self,
+        chunks: AsyncIterator[bytes],
+    ) -> AsyncIterator[bytes]:
+        stop_bytes = _pcm_bytes_for_seconds(self.silence_stop_seconds)
+        if stop_bytes <= 0:
+            async for chunk in chunks:
+                yield chunk
+            return
+
+        window_bytes = _pcm_bytes_for_seconds(PCM_CHUNK_SECONDS)
+        meaningful_audio_seen = False
+        suspected_tail = bytearray()
+
+        async for chunk in chunks:
+            for offset in range(0, len(chunk), window_bytes):
+                window = chunk[offset : offset + window_bytes]
+                if not meaningful_audio_seen:
+                    yield window
+                    meaningful_audio_seen = not _is_near_silent(
+                        window,
+                    )
+                    continue
+
+                if _is_near_silent(window):
+                    suspected_tail.extend(window)
+                    if len(suspected_tail) >= stop_bytes:
+                        logger.warning(
+                            "Stopping runaway TTS stream after %.2fs of near-silent audio",
+                            len(suspected_tail)
+                            / (DEFAULT_QWEN_SAMPLE_RATE * PCM_SAMPLE_WIDTH),
+                        )
+                        return
+                    continue
+
+                if suspected_tail:
+                    yield bytes(suspected_tail)
+                    suspected_tail.clear()
+                yield window
+
+        if suspected_tail:
+            yield bytes(suspected_tail)
+
     def _decode_wav(self, audio: bytes) -> list[bytes]:
         import io
 
@@ -145,3 +194,19 @@ class TTSClient:
             int(DEFAULT_QWEN_SAMPLE_RATE * PCM_CHUNK_SECONDS) * PCM_SAMPLE_WIDTH
         )
         return [pcm[i : i + chunk_bytes] for i in range(0, len(pcm), chunk_bytes)]
+
+
+def _pcm_bytes_for_seconds(seconds: float) -> int:
+    samples = int(DEFAULT_QWEN_SAMPLE_RATE * max(0.0, seconds))
+    return samples * PCM_SAMPLE_WIDTH
+
+
+def _is_near_silent(pcm: bytes) -> bool:
+    import numpy as np
+
+    samples = np.frombuffer(pcm, dtype=np.int16)
+    if samples.size == 0:
+        return True
+    normalized = samples.astype(np.float32) / 32768.0
+    rms = float(np.sqrt(np.mean(normalized * normalized)))
+    return rms <= NEAR_SILENCE_RMS_THRESHOLD

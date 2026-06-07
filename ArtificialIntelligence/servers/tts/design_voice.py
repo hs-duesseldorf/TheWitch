@@ -18,7 +18,6 @@ from ArtificialIntelligence.servers.tts.server_config import (
     CUSTOM_VOICE_PROFILE,
     LANGUAGE,
     VOICE_ANCHOR,
-    VOICE_ANCHOR_TEMPO,
     VOICE_ANCHOR_TEXT,
     VOICE_DESIGN_MODEL,
 )
@@ -71,39 +70,6 @@ def _trim_trailing_silence(audio: np.ndarray, sr: int, silence_threshold: float 
     return audio[:keep]
 
 
-def _adjust_reference_tempo(audio: np.ndarray, sr: int, tempo: float) -> np.ndarray:
-    if not 0.5 <= tempo <= 1.0:
-        raise ValueError("WITCH_TTS_ANCHOR_TEMPO must be between 0.5 and 1.0")
-    if tempo == 1.0:
-        return audio
-
-    process = subprocess.run(
-        [
-            "ffmpeg",
-            "-hide_banner",
-            "-loglevel",
-            "error",
-            "-f",
-            "f32le",
-            "-ar",
-            str(sr),
-            "-ac",
-            "1",
-            "-i",
-            "pipe:0",
-            "-af",
-            f"atempo={tempo}",
-            "-f",
-            "f32le",
-            "pipe:1",
-        ],
-        input=np.asarray(audio, dtype=np.float32).tobytes(),
-        capture_output=True,
-        check=True,
-    )
-    return np.frombuffer(process.stdout, dtype=np.float32).copy()
-
-
 def _generate_reference(url: str, description: str) -> None:
     response = httpx.post(
         f"{url}/v1/audio/speech",
@@ -132,14 +98,12 @@ def _generate_reference(url: str, description: str) -> None:
 
     raw_wav, sr = sf.read(io.BytesIO(response.content), dtype="float32")
     trimmed = _trim_trailing_silence(raw_wav, sr)
-    adjusted = _adjust_reference_tempo(trimmed, sr, VOICE_ANCHOR_TEMPO)
-    sf.write(str(VOICE_ANCHOR), adjusted, sr)
+    sf.write(str(VOICE_ANCHOR), trimmed, sr)
     CUSTOM_VOICE_MANIFEST.unlink(missing_ok=True)
     CUSTOM_VOICE_PROFILE.unlink(missing_ok=True)
     print(
         f"[tts-design] Created reference recording: {VOICE_ANCHOR} "
-        f"({raw_wav.shape[0] / sr:.1f}s -> {adjusted.shape[0] / sr:.1f}s, "
-        f"tempo={VOICE_ANCHOR_TEMPO:.2f})",
+        f"({raw_wav.shape[0] / sr:.1f}s -> {trimmed.shape[0] / sr:.1f}s)",
         flush=True,
     )
 

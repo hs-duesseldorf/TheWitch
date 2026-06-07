@@ -18,15 +18,11 @@ from .clients.llm_client import LLMClient
 from .clients.tts_client import TTSClient
 from .debug_ui import set_runtime as _set_debug_runtime, run as _run_debug_ui
 from .runtime import WitchRuntime
-from .speech_pipeline import AudioPlaybackConfig
 from .state_machine.state_machine import WitchStateMachine
 from .websocket_server.websocket_server import WebSocketServer
 
-DEFAULT_OLLAMA_MODEL = "hf.co/unsloth/Qwen3-4B-GGUF:Qwen3-4B-Q4_K_M.gguf"
-
-
 def _llm_model_name() -> str:
-    return os.getenv("WITCH_OLLAMA_MODEL", "").strip() or os.getenv("OLLAMA_MODEL", "").strip() or DEFAULT_OLLAMA_MODEL
+    return os.environ["WITCH_OLLAMA_MODEL"].strip()
 
 
 def _get_llm_url() -> str:
@@ -39,7 +35,7 @@ def _get_tts_url() -> str:
 
 class App:
     def __init__(self):
-        ws_port = int(os.getenv("WITCH_AI_PORT"))
+        ws_port = int(os.environ["WITCH_AI_PORT"])
         self.ws_server = WebSocketServer(host="0.0.0.0", port=ws_port)
         self.state_machine = WitchStateMachine()
         self.runtime = WitchRuntime(
@@ -50,10 +46,8 @@ class App:
                 model=_llm_model_name(),
             ),
             tts=TTSClient(base_url=_get_tts_url()),
-            audio_config=AudioPlaybackConfig(
-                prebuffer_seconds=float(os.environ["WITCH_AUDIO_PREBUFFER_SECONDS"]),
-                speaker_delay_seconds=float(os.environ["WITCH_SPEAKER_DELAY_SECONDS"]),
-            ),
+            audio_prebuffer_seconds=float(os.environ["WITCH_AUDIO_PREBUFFER_SECONDS"]),
+            speaker_delay_seconds=float(os.environ["WITCH_SPEAKER_DELAY_SECONDS"]),
         )
 
 

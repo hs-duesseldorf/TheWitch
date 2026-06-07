@@ -27,6 +27,7 @@ class Service:
     command: tuple[str, ...]
     venv: Path | None = None
     requirements: Path | None = None
+    required_env: tuple[str, ...] = ()
 
 
 SERVICES = {
@@ -35,30 +36,79 @@ SERVICES = {
         command=("python", "-m", "ArtificialIntelligence.main"),
         venv=ROOT / "ArtificialIntelligence" / ".venv",
         requirements=ROOT / "ArtificialIntelligence" / "requirements.txt",
+        required_env=(
+            "LLM_MAX_MODEL_LEN",
+            "WITCH_AI_PORT",
+            "WITCH_AI_UI_PORT",
+            "WITCH_AUDIO_PREBUFFER_SECONDS",
+            "WITCH_GASLIGHT",
+            "WITCH_LLM_HOST",
+            "WITCH_LLM_PORT",
+            "WITCH_OLLAMA_MODEL",
+            "WITCH_SEAT_SENSOR_OVERRIDE",
+            "WITCH_SPEAKER_DELAY_SECONDS",
+            "WITCH_TTS_HOST",
+            "WITCH_TTS_PORT",
+            "WITCH_TTS_SILENCE_STOP_SECONDS",
+            "WITCH_VIRTUAL_CABLE_NAME",
+            "WITCH_WAIT_FOR_UNREAL_ACK",
+        ),
     ),
     "ip": Service(
         name="ip",
         command=("python", "-m", "ImageProcessing.main"),
         venv=ROOT / "ImageProcessing" / ".venv",
         requirements=ROOT / "ImageProcessing" / "requirements.txt",
+        required_env=(
+            "WITCH_AI_HOST",
+            "WITCH_AI_PORT",
+            "WITCH_CAMERA_SOURCE",
+            "WITCH_LD2410S_PORT",
+            "WITCH_LD2410S_ROOM_MAX_MM",
+            "WITCH_LD2410S_SEATED_MAX_MM",
+            "WITCH_SEAT_SENSOR_OVERRIDE",
+        ),
     ),
     "llm": Service(
         name="llm",
         command=("python", "ArtificialIntelligence/servers/llm/run.py"),
         venv=ROOT / "ArtificialIntelligence" / "servers" / "llm" / ".venv",
         requirements=ROOT / "ArtificialIntelligence" / "servers" / "llm" / "requirements.txt",
+        required_env=("LLM_MAX_MODEL_LEN", "WITCH_LLM_PORT", "WITCH_OLLAMA_MODEL"),
     ),
     "tts": Service(
         name="tts",
         command=("python", "-m", "ArtificialIntelligence.servers.tts.run"),
         venv=ROOT / "ArtificialIntelligence" / "servers" / "tts" / ".venv",
         requirements=ROOT / "ArtificialIntelligence" / "servers" / "tts" / "requirements.txt",
+        required_env=(
+            "TTS_MAX_MODEL_LEN",
+            "TTS_MAX_NEW_TOKENS",
+            "WITCH_TTS_ANCHOR_TEXT",
+            "WITCH_TTS_BASE_MODEL",
+            "WITCH_TTS_LANGUAGE",
+            "WITCH_TTS_PORT",
+            "WITCH_TTS_REPETITION_PENALTY",
+            "WITCH_TTS_TEMPERATURE",
+            "WITCH_TTS_VOICE_DESCRIPTION",
+            "WITCH_TTS_VOICE_DESIGN_MODEL",
+            "WITCH_TTS_VOICE_NAME",
+        ),
     ),
     "tts-design": Service(
         name="tts-design",
         command=("python", "-m", "ArtificialIntelligence.servers.tts.design_voice"),
         venv=ROOT / "ArtificialIntelligence" / "servers" / "tts" / ".venv",
         requirements=ROOT / "ArtificialIntelligence" / "servers" / "tts" / "requirements.txt",
+        required_env=(
+            "WITCH_TTS_ANCHOR_TEXT",
+            "WITCH_TTS_BASE_MODEL",
+            "WITCH_TTS_LANGUAGE",
+            "WITCH_TTS_PORT",
+            "WITCH_TTS_VOICE_DESCRIPTION",
+            "WITCH_TTS_VOICE_DESIGN_MODEL",
+            "WITCH_TTS_VOICE_NAME",
+        ),
     ),
 }
 DEFAULT_SERVICES = ("llm", "ai", "ip", "tts")
@@ -88,7 +138,7 @@ def load_env_file(path: Path) -> dict[str, str]:
 def merged_env() -> dict[str, str]:
     env = os.environ.copy()
     env.update(load_env_file(ENV_FILE))
-    env.setdefault("PYTHONUNBUFFERED", "1")
+    env["PYTHONUNBUFFERED"] = "1"
     return env
 
 
@@ -96,13 +146,19 @@ def apply_local_service_env(env: dict[str, str], services: list[Service]) -> Non
     names = {service.name for service in services}
     if {"ai", "llm"}.issubset(names):
         env["WITCH_LLM_HOST"] = "127.0.0.1"
-        return
-    if "llm" in names and env.get("WITCH_LLM_HOST", "").strip() in {
-        "",
-        "0.0.0.0",
-        "::",
-    }:
-        env["WITCH_LLM_HOST"] = "127.0.0.1"
+
+
+def validate_service_env(env: dict[str, str], services: list[Service]) -> None:
+    missing = sorted(
+        {
+            name
+            for service in services
+            for name in service.required_env
+            if not env.get(name, "").strip()
+        }
+    )
+    if missing:
+        raise SystemExit(f"Missing required .env variable(s): {', '.join(missing)}")
 
 
 def venv_python(venv: Path) -> Path:
@@ -244,7 +300,7 @@ def main() -> int:
     )
     parser.add_argument("--build", action="store_true", help="create venvs and install requirements before starting")
     args = parser.parse_args()
-    os.environ.setdefault("UV_CACHE_DIR", str(UV_CACHE_DIR))
+    os.environ["UV_CACHE_DIR"] = str(UV_CACHE_DIR)
 
     if args.command and args.command[0] == "kill":
         names = args.command[1:] if len(args.command) > 1 else []
@@ -268,6 +324,7 @@ def main() -> int:
 
     env = merged_env()
     apply_local_service_env(env, services)
+    validate_service_env(env, services)
     processes: list[tuple[Service, subprocess.Popen[str]]] = []
     exit_code = 0
     try:

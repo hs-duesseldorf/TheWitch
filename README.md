@@ -206,6 +206,14 @@ WITCH_SEAT_SENSOR_OVERRIDE=true
 
 The public TTS endpoint accepts only the text input. Model selection, voice, language, fallback voice description, fixed reference text, and streaming settings are configured server-side in `.env`.
 
+To prevent a broken model stream from blocking scene progression indefinitely,
+the client terminates the upstream response after sustained near-silent output
+following speech. Valid shorter pauses are buffered and played if speech resumes:
+
+```dotenv
+WITCH_TTS_SILENCE_STOP_SECONDS=5.0
+```
+
 The anchored Base voice is stored as an offline-precomputed ICL profile:
 
 ```bash
@@ -221,7 +229,7 @@ At startup, the TTS host:
 
 If no complete precomputed profile or reference recording exists, the host uses the VoiceDesign model with `WITCH_TTS_VOICE_DESCRIPTION`.
 
-To create a new anchored voice, first stop the normal `tts` service and configure `WITCH_TTS_VOICE_DESCRIPTION`, `WITCH_TTS_ANCHOR_TEXT`, and `WITCH_TTS_ANCHOR_TEMPO` in `.env`. `WITCH_TTS_ANCHOR_TEMPO=0.82` makes the reference delivery slower while preserving pitch; the live TTS stream does not use audio speed adjustment.
+To create a new anchored voice, first stop the normal `tts` service and configure `WITCH_TTS_VOICE_DESCRIPTION` and `WITCH_TTS_ANCHOR_TEXT` in `.env`. VoiceDesign follows the speaking style and pace described by `WITCH_TTS_VOICE_DESCRIPTION`.
 
 Generate the reference recording with VoiceDesign:
 

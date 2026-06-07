@@ -26,15 +26,8 @@ except Exception:
 logger = logging.getLogger(__name__)
 
 SR = 48000
+TTS_INPUT_SAMPLE_RATE = 24000
 UNDERRUN_LOG_INTERVAL_SECONDS = 2.0
-
-
-@dataclass(frozen=True)
-class AudioPlaybackConfig:
-    input_sample_rate: int = 24000
-    output_sample_rate: int = SR
-    prebuffer_seconds: float = 1.5
-    speaker_delay_seconds: float = 0.0
 
 
 @dataclass(frozen=True)
@@ -60,27 +53,6 @@ class _AudioOutput:
     submitted_frames: int = 0
     playback_started_at: float | None = None
     playback_complete_at: float | None = None
-
-
-def _configured_audio_device(devices: list[dict[str, Any]]) -> int | None:
-    configured = os.getenv("WITCH_AUDIO_DEVICE", "").strip()
-    if not configured:
-        return None
-
-    if configured.isdigit():
-        index = int(configured)
-        if 0 <= index < len(devices) and devices[index]["max_output_channels"] > 0:
-            return index
-        logger.warning("WITCH_AUDIO_DEVICE=%s is not a valid output device index", configured)
-        return None
-
-    needle = configured.lower()
-    for index, device in enumerate(devices):
-        if device["max_output_channels"] > 0 and needle in device["name"].lower():
-            return index
-
-    logger.warning("WITCH_AUDIO_DEVICE=%r did not match any output device", configured)
-    return None
 
 
 def normalize_llm_text(text: str) -> str:
@@ -151,7 +123,7 @@ def _linux_output_score(name: str) -> int:
 
 
 def _is_virtual_cable(system: str, name: str) -> bool:
-    needle = os.environ.get("WITCH_VIRTUAL_CABLE_NAME", "").strip()
+    needle = os.environ["WITCH_VIRTUAL_CABLE_NAME"].strip()
     return bool(needle) and needle.lower() in name.lower()
 
 
@@ -164,10 +136,6 @@ def find_audio_devices() -> list[int | None]:
 
     try:
         devices = list(sd.query_devices())
-        configured = _configured_audio_device(devices)
-        if configured is not None:
-            return [configured]
-
         output_devices = [
             (index, device)
             for index, device in enumerate(devices)
@@ -218,13 +186,12 @@ def find_audio_devices() -> list[int | None]:
 
 
 class StreamingAudioPlayer:
-    def __init__(self, config: AudioPlaybackConfig | None = None):
-        self._config = config or AudioPlaybackConfig()
-        self._input_sample_rate = self._config.input_sample_rate
-        self._output_sample_rate = self._config.output_sample_rate
-        self._prebuffer_seconds = max(0.0, self._config.prebuffer_seconds)
+    def __init__(self, *, prebuffer_seconds: float, speaker_delay_seconds: float):
+        self._input_sample_rate = TTS_INPUT_SAMPLE_RATE
+        self._output_sample_rate = SR
+        self._prebuffer_seconds = max(0.0, prebuffer_seconds)
         self._prebuffer_frames = int(self._output_sample_rate * self._prebuffer_seconds)
-        self._speaker_delay_seconds = max(0.0, self._config.speaker_delay_seconds)
+        self._speaker_delay_seconds = max(0.0, speaker_delay_seconds)
         self._speaker_delay_frames = int(self._output_sample_rate * self._speaker_delay_seconds)
         self._pcm_remainder = b""
         self._source_queue: queue.SimpleQueue[_QueuedAudio] = queue.SimpleQueue()
@@ -621,11 +588,16 @@ class SpeechPipeline:
         self,
         llm: Any,
         tts: Any,
-        audio_config: AudioPlaybackConfig | None = None,
+        *,
+        prebuffer_seconds: float,
+        speaker_delay_seconds: float,
     ):
         self._llm = llm
         self._tts = tts
-        self._player = StreamingAudioPlayer(audio_config)
+        self._player = StreamingAudioPlayer(
+            prebuffer_seconds=prebuffer_seconds,
+            speaker_delay_seconds=speaker_delay_seconds,
+        )
         self._stage = "idle"
         self._player_started = False
 

@@ -16,6 +16,13 @@ from ArtificialIntelligence.servers.tts.server_config import profile
 SERVER_DIR = Path(__file__).resolve().parent
 ROOT = SERVER_DIR.parents[2]
 VENV_DIR = SERVER_DIR / ".venv"
+TTS_PROCESS_ENV = {
+    "VLLM_USE_FLASHINFER_SAMPLER": "0",
+    "OMP_NUM_THREADS": "2",
+    "OPENBLAS_NUM_THREADS": "2",
+    "MKL_NUM_THREADS": "2",
+    "NUMEXPR_NUM_THREADS": "2",
+}
 
 
 def _wait_for_server(url: str, process: subprocess.Popen[bytes]) -> None:
@@ -70,11 +77,7 @@ def run() -> None:
     internal_port = public_port + 1
     internal_url = f"http://127.0.0.1:{internal_port}"
     os.environ["WITCH_TTS_INTERNAL_PORT"] = str(internal_port)
-    os.environ.setdefault("VLLM_USE_FLASHINFER_SAMPLER", "0")
-    os.environ.setdefault("OMP_NUM_THREADS", "2")
-    os.environ.setdefault("OPENBLAS_NUM_THREADS", "2")
-    os.environ.setdefault("MKL_NUM_THREADS", "2")
-    os.environ.setdefault("NUMEXPR_NUM_THREADS", "2")
+    os.environ.update(TTS_PROCESS_ENV)
     executable = VENV_DIR / "bin" / "vllm-omni"
     deploy_config = SERVER_DIR / "qwen3_tts_witch.yaml"
     command = [

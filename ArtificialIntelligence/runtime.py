@@ -28,7 +28,7 @@ from .hand_analysis import (
     get_scene_base_text,
 )
 from .message_channels import EventChannel
-from .speech_pipeline import AudioPlaybackConfig, SpeechPipeline, normalize_llm_text
+from .speech_pipeline import SpeechPipeline, normalize_llm_text
 from .state_machine.state_machine import (
     StateChange,
     WitchStateMachine,
@@ -39,7 +39,7 @@ logger = logging.getLogger("ai")
 
 
 def _wait_for_unreal_ack() -> bool:
-    return os.environ.get("WITCH_WAIT_FOR_UNREAL_ACK", "true").strip().lower() == "true"
+    return os.environ["WITCH_WAIT_FOR_UNREAL_ACK"].strip().lower() == "true"
 
 
 OUTBOUND_AI3D_EVENT = (
@@ -61,7 +61,8 @@ class WitchRuntime:
         state_machine: WitchStateMachine,
         llm: Any,
         tts: Any,
-        audio_config: AudioPlaybackConfig | None = None,
+        audio_prebuffer_seconds: float,
+        speaker_delay_seconds: float,
     ):
         self._ws_server = ws_server
         self._state_machine = state_machine
@@ -98,7 +99,8 @@ class WitchRuntime:
         self._speech_pipeline = SpeechPipeline(
             llm=llm,
             tts=tts,
-            audio_config=audio_config,
+            prebuffer_seconds=audio_prebuffer_seconds,
+            speaker_delay_seconds=speaker_delay_seconds,
         )
 
         self._register_routes()
@@ -157,7 +159,7 @@ class WitchRuntime:
                 self._state_machine.state == Scene.SCENE4.value
                 and event.hand is not None
                 and event.trigger not in (HandTrigger.ABSENT, HandTrigger.NOT_FULLY_IN_VIEW)
-                and os.environ.get("WITCH_GASLIGHT", "true").strip().lower() == "true"
+                and os.environ["WITCH_GASLIGHT"].strip().lower() == "true"
                 and (
                     self._desired_hand is None
                     or (
@@ -702,6 +704,6 @@ class WitchRuntime:
                 await self._emit_scene_events_on_audio_start(Scene.SCENE0, None)
                 await self._on_state_changed()
                 await self._cancel_speech()
-                if os.getenv("WITCH_SEAT_SENSOR_OVERRIDE", "false") == "true":
+                if os.environ["WITCH_SEAT_SENSOR_OVERRIDE"] == "true":
                     await self._restart_seat_sensor_override()
         return self._state_machine.state

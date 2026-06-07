@@ -72,7 +72,7 @@ def get_state_machine_graph():
 
 @app.get("/api/config")
 def get_config():
-    ws_port = int(os.getenv("WITCH_AI_PORT"))
+    ws_port = int(os.environ["WITCH_AI_PORT"])
     return {"ws_port": ws_port}
 
 
@@ -113,6 +113,6 @@ def manual_off():
 
 
 def run():
-    port = int(os.getenv("WITCH_AI_UI_PORT"))
+    port = int(os.environ["WITCH_AI_UI_PORT"])
     logger.info("FastAPI server starting on 0.0.0.0:%d", port)
     uvicorn.run(app, host="0.0.0.0", port=port)

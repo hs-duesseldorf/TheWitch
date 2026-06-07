@@ -12,18 +12,19 @@ from shared.events import ErrorEvent, PersonEvent, PersonTrigger
 
 logger = logging.getLogger(__name__)
 
-
-@dataclass(frozen=True, slots=True)
-class SeatSensorConfig:
-    ld2410s_baud: int = 115200
-    serial_timeout_ms: int = 5
-    poll_ms: int = 5
-    far_gate: int = 5
-    near_gate: int = 0
-    hold_time_s: int = 10
-    report_frequency_hz: int = 80
-    response_speed: int = 10
-    warmup_s: int = 30
+LD2410S_BAUD = 115200
+LD2410S_SERIAL_TIMEOUT_SECONDS = 0.005
+LD2410S_POLL_SECONDS = 0.005
+LD2410S_DISTANCE_SCALE = 1.0
+LD2410S_DISTANCE_OFFSET_MM = 0
+LD2410S_DEBUG_RAW = False
+LD2410S_CONFIGURE = False
+LD2410S_FAR_GATE = 5
+LD2410S_NEAR_GATE = 0
+LD2410S_HOLD_TIME_SECONDS = 10
+LD2410S_REPORT_FREQUENCY_HZ = 80
+LD2410S_RESPONSE_SPEED = 10
+LD2410S_WARMUP_SECONDS = 10
 
 
 @dataclass(frozen=True, slots=True)
@@ -218,9 +219,7 @@ class SeatPresenceMonitor:
         self,
         *,
         event_client: WebSocketClient,
-        config: SeatSensorConfig | None = None,
     ):
-        self.config = config or SeatSensorConfig()
         self.event_client = event_client
         self.stop_event = threading.Event()
         self.worker: threading.Thread | None = None
@@ -239,7 +238,7 @@ class SeatPresenceMonitor:
         self.worker = None
 
     def _run(self) -> None:
-        if os.getenv("WITCH_SEAT_SENSOR_OVERRIDE", "false") == "true":
+        if os.environ["WITCH_SEAT_SENSOR_OVERRIDE"] == "true":
             logger.info("Seat sensor override enabled")
             logger.info("Seat sensor override: waiting 10s before publishing detected person")
             if not self.stop_event.wait(10):
@@ -257,55 +256,45 @@ class SeatPresenceMonitor:
             self._publish_error(str(exc))
             return
 
-        baud = int(os.getenv("WITCH_LD2410S_BAUD", str(self.config.ld2410s_baud)))
-        serial_timeout_s = max(
-            float(os.getenv("WITCH_LD2410S_SERIAL_TIMEOUT_MS", str(self.config.serial_timeout_ms))) / 1000.0,
-            0.001,
-        )
-        poll_s = max(self.config.poll_ms / 1000.0, 0.001)
-        distance_scale = float(os.getenv("WITCH_LD2410S_DISTANCE_SCALE", "1.0"))
-        distance_offset_mm = int(os.getenv("WITCH_LD2410S_DISTANCE_OFFSET_MM", "0"))
-        debug_raw = os.getenv("WITCH_LD2410S_DEBUG_RAW", "false") == "true"
-        configure_sensor = os.getenv("WITCH_LD2410S_CONFIGURE", "false") == "true"
-        far_gate = int(os.getenv("WITCH_LD2410S_FAR_GATE", str(self.config.far_gate)))
-        near_gate = int(os.getenv("WITCH_LD2410S_NEAR_GATE", str(self.config.near_gate)))
-        hold_time_s = int(os.getenv("WITCH_LD2410S_HOLD_TIME_S", str(self.config.hold_time_s)))
-        report_frequency_hz = int(os.getenv("WITCH_LD2410S_REPORT_FREQUENCY_HZ", str(self.config.report_frequency_hz)))
-        response_speed = int(os.getenv("WITCH_LD2410S_RESPONSE_SPEED", str(self.config.response_speed)))
-        warmup_s = max(0.0, float(os.getenv("WITCH_LD2410S_WARMUP_S", str(self.config.warmup_s))))
-
         try:
-            logger.info("Opening seat sensor on %s at %s baud", port, baud)
-            sensor = LD2410SSerialSensor(port=port, baud=baud, timeout_s=serial_timeout_s)
+            logger.info("Opening seat sensor on %s at %s baud", port, LD2410S_BAUD)
+            sensor = LD2410SSerialSensor(
+                port=port,
+                baud=LD2410S_BAUD,
+                timeout_s=LD2410S_SERIAL_TIMEOUT_SECONDS,
+            )
         except Exception as exc:
             logger.warning("Seat sensor open failed: %s", exc)
             return
 
-        if configure_sensor:
+        if LD2410S_CONFIGURE:
             configured = sensor.configure_common(
-                far_gate=far_gate,
-                near_gate=near_gate,
-                hold_time_s=hold_time_s,
-                status_frequency_hz=report_frequency_hz,
-                distance_frequency_hz=report_frequency_hz,
-                response_speed=response_speed,
+                far_gate=LD2410S_FAR_GATE,
+                near_gate=LD2410S_NEAR_GATE,
+                hold_time_s=LD2410S_HOLD_TIME_SECONDS,
+                status_frequency_hz=LD2410S_REPORT_FREQUENCY_HZ,
+                distance_frequency_hz=LD2410S_REPORT_FREQUENCY_HZ,
+                response_speed=LD2410S_RESPONSE_SPEED,
             )
             if configured:
                 logger.info(
                     "Configured LD2410S: far_gate=%s near_gate=%s hold_time_s=%s report_frequency_hz=%s response_speed=%s",
-                    far_gate,
-                    near_gate,
-                    max(hold_time_s, 10),
-                    report_frequency_hz,
-                    response_speed,
+                    LD2410S_FAR_GATE,
+                    LD2410S_NEAR_GATE,
+                    LD2410S_HOLD_TIME_SECONDS,
+                    LD2410S_REPORT_FREQUENCY_HZ,
+                    LD2410S_RESPONSE_SPEED,
                 )
             else:
                 logger.warning("LD2410S configuration failed; continuing with existing sensor settings")
 
         last_zone = PersonZone.ABSENT
-        warmup_until = time.monotonic() + warmup_s
-        if warmup_s > 0:
-            logger.info("Ignoring seat sensor readings for %.1f seconds during warmup", warmup_s)
+        warmup_until = time.monotonic() + LD2410S_WARMUP_SECONDS
+        if LD2410S_WARMUP_SECONDS > 0:
+            logger.info(
+                "Ignoring seat sensor readings for %.1f seconds during warmup",
+                LD2410S_WARMUP_SECONDS,
+            )
 
         try:
             while not self.stop_event.is_set():
@@ -314,7 +303,7 @@ class SeatPresenceMonitor:
                     reading = sensor.read_presence()
                 except Exception as exc:
                     self._publish_error(f"LD2410S read failed: {exc}")
-                    if self.stop_event.wait(poll_s):
+                    if self.stop_event.wait(LD2410S_POLL_SECONDS):
                         break
                     continue
 
@@ -331,10 +320,10 @@ class SeatPresenceMonitor:
                     else:
                         distance_mm = self._calibrated_distance_mm(
                             reading.distance_mm,
-                            scale=distance_scale,
-                            offset_mm=distance_offset_mm,
+                            scale=LD2410S_DISTANCE_SCALE,
+                            offset_mm=LD2410S_DISTANCE_OFFSET_MM,
                         )
-                        if debug_raw:
+                        if LD2410S_DEBUG_RAW:
                             logger.info(
                                 "LD2410S raw=%s target_state=%s present=%s distance_mm=%s",
                                 reading.raw_frame.hex(" ") if reading.raw_frame else "-",
@@ -371,7 +360,7 @@ class SeatPresenceMonitor:
 
                 if reading is None:
                     elapsed = time.monotonic() - started
-                    if self.stop_event.wait(max(0.0, poll_s - elapsed)):
+                    if self.stop_event.wait(max(0.0, LD2410S_POLL_SECONDS - elapsed)):
                         break
         finally:
             sensor.close()
@@ -438,7 +427,7 @@ class SeatPresenceMonitor:
         return max(0, int(round(distance_mm * scale + offset_mm)))
 
     def _required_env(self, name: str) -> str:
-        value = os.getenv(name)
-        if value is None or not value.strip():
+        value = os.environ[name]
+        if not value.strip():
             raise ValueError(f"Missing required seat sensor env var: {name}")
         return value.strip()
