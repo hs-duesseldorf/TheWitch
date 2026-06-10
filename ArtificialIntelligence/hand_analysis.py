@@ -303,6 +303,11 @@ def build_scene_prompt(
         "Hier ist dein verbindlicher Basetext. Variiere Tonfall, Rhythmus, Satzbau und Wortwahl deutlich.",
         "Die Bedeutung und jede konkrete Handlungsanweisung müssen erhalten bleiben.",
         "Die Neuformulierung muss natürlich klingen und aus grammatikalisch korrekten, vollständigen deutschen Sätzen bestehen.",
+        "Schreibe lieber einfacher und korrekt als poetisch und fehlerhaft.",
+        "Vermeide verschachtelte Sätze.",
+        "Antworte mit genau einer einzigen fertigen Ausgabe.",
+        "Gib keine Alternativen, keine Liste, keine Nummerierung und keine Erklärungen aus.",
+        "Nutze die Beispiele nur als Stilvorbild. Die Beispiele selbst dürfen nicht wiedergegeben werden.",
         "Jede Neuformulierung muss sich deutlich von vorherigen unterscheiden. Vermeide identische Phrasen.",
         f"Basetext: {base_text.strip()}",
     ]
@@ -310,7 +315,7 @@ def build_scene_prompt(
     if examples:
         parts.append(
             "Die folgenden Beispiele dienen ausschließlich als stilistische Orientierung."
-            "Kopiere sie nicht einfach. Übernimm höchstens Tonfall, Rhythmus, Satzlänge und Atmosphäre."
+            "Übernimm höchstens Tonfall, Rhythmus, Satzlänge und Atmosphäre."
         )
         for index, example in enumerate(examples, start=1):
             parts.append(f"Beispiel {index}: {example}")
