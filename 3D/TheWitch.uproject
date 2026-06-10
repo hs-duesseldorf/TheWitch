@@ -89,6 +89,10 @@
 				"Win64",
 				"Linux"
 			]
+		},
+		{
+			"Name": "HDRIBackdrop",
+			"Enabled": true
 		}
 	]
 }
