@@ -296,6 +296,7 @@ def build_scene_prompt(
     extra_context: str | None = None,
 ) -> str:
     scene_name = scene.value if isinstance(scene, Scene) else scene
+    examples = get_scene_examples(scene)
     parts = [
         _SCENE_VARIATION_SYSTEM_PROMPT,
         f"Szene: {scene_name}.",
@@ -305,6 +306,15 @@ def build_scene_prompt(
         "Jede Neuformulierung muss sich deutlich von vorherigen unterscheiden. Vermeide identische Phrasen.",
         f"Basetext: {base_text.strip()}",
     ]
+    
+    if examples:
+        parts.append(
+            "Die folgenden Beispiele dienen ausschließlich als stilistische Orientierung."
+            "Kopiere sie nicht einfach. Übernimm höchstens Tonfall, Rhythmus, Satzlänge und Atmosphäre."
+        )
+        for index, example in enumerate(examples, start=1):
+            parts.append(f"Beispiel {index}: {example}")
+    
     if extra_context:
         parts.append(f"Zusatzkontext: {extra_context.strip()}")
     return "\n".join(parts)
@@ -313,13 +323,36 @@ def build_scene_prompt(
 def get_scene_base_text(scene: Scene | str) -> str | None:
     scene_name = scene.value if isinstance(scene, Scene) else scene
     scene_entry = load_content_package().get("scenes", {}).get(scene_name)
-    if isinstance(scene_entry, str):
-        return scene_entry.strip() or None
-    if isinstance(scene_entry, dict):
-        base_text = scene_entry.get("base_text")
-        if isinstance(base_text, str):
-            return base_text.strip() or None
+    return _entry_base_text(scene_entry)
+
+
+def _entry_base_text(entry: Any) -> str | None:
+    if isinstance(entry, str):
+        return entry.strip() or None
+    
+    if isinstance(entry, dict):
+        value = entry.get("base_text")
+        if isinstance(value, str):
+            return value.strip() or None
     return None
+
+
+def get_scene_examples(scene: Scene | str) -> list[str]:
+    scene_name = scene.value if isinstance(scene, Scene) else scene
+    scene_entry = load_content_package().get("scenes", {}).get(scene_name)
+
+    if not isinstance(scene_entry, dict):
+        return []
+
+    examples = scene_entry.get("examples", [])
+    if not isinstance(examples, list):
+        return []
+
+    return [
+        item.strip()
+        for item in examples
+        if isinstance(item, str) and item.strip()
+    ]
 
 
 def analyze_hand_event(hand_event: HandEvent | None) -> dict[str, Any] | None:
