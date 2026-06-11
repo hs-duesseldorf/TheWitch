@@ -3,11 +3,7 @@ import json
 
 from shared.events import Hand, HandEvent, HandTrigger
 
-<<<<<<< HEAD
-from .hand_analyzer import build_prompt
-=======
 from .hand_analysis import build_prompt
->>>>>>> main
 
 
 def _load_payload(path: str | None) -> dict:

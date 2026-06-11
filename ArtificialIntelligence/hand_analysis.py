@@ -1,11 +1,50 @@
 import json
-<<<<<<< HEAD
 import math
+import logging
+from functools import lru_cache
 from pathlib import Path
-from typing import Dict, Any
+from typing import Any, Dict
+
+from shared.events import HandEvent, Scene
 
 ELEMENTS = ["holz", "feuer", "erde", "metall", "wasser"]
+logger = logging.getLogger(__name__)
+PACKAGE_PATH = Path(__file__).resolve().parent / "package.json"
 
+_HAND_ANALYSIS_SYSTEM_PROMPT = (
+    "/no_think\n"
+    "Antworte ausschließlich auf Deutsch.\n"
+    "Gib nur die finale gesprochene Antwort aus.\n"
+    "Beginne sofort mit der Vorhersage, ohne Analyse oder Vorrede.\n"
+    "STRIKTE REGEL: Du bist ein reiner Text-Transformator. Erfinde keine eigenen Geschichten, Linien oder Metaphern.\n"
+    "Übertrage die bereitgestellten Basistexte vollständig und ohne Sinnveränderung in den Tonfall einer weisen, düsteren Wahrsagerin.\n"
+    "Das in den Basistexten genannte dominante Element, zum Beispiel Holz, Feuer, Erde, Wasser oder Metall, muss namentlich und unmissverständlich ausgesprochen werden. Es darf niemals weggelassen oder durch ein anderes Wort ersetzt werden.\n"
+    "Es geht immer um eine menschliche Hand, niemals um ein Handtuch.\n"
+    "Verwende nie die Wörter Handtuch, Tuch oder Stoff.\n"
+    "Kein Markdown, keine Klammern, keine Emojis.\n"
+    "Ton: weise, leicht dunkel, konkret.\n"
+    "Formuliere ausschließlich vollständige, natürlich klingende und grammatikalisch korrekte deutsche Sätze.\n"
+    "Prüfe vor der Ausgabe Grammatik, Satzbau, Wortstellung, Bezüge und Zeichensetzung. Gib niemals holprige, mehrdeutige oder unvollständige Sätze aus.\n"
+    "Variiere jede Antwort in Wortwahl, Rhythmus und Satzstruktur, aber niemals auf Kosten von korrektem, natürlichem Deutsch oder klarer Bedeutung.\n"
+    "Vermeide Wiederholungen derselben Phrasen und nutze passende Synonyme.\n"
+    "/no_think\n"
+)
+_SCENE_VARIATION_SYSTEM_PROMPT = (
+    "/no_think\n"
+    "Antworte ausschließlich auf Deutsch.\n"
+    "Gib nur die finale gesprochene Antwort aus: kein Markdown, keine Formatierung und keine Erklärungen.\n"
+    "Du bist ein reiner Text-Transformator.\n"
+    "Formuliere den Basetext als kurze, natürlich gesprochene Zeile einer weisen, düsteren Wahrsagerin um.\n"
+    "Bewahre alle konkreten Anweisungen, Handlungen und Fakten.\n"
+    "Erfinde keine neuen Informationen.\n"
+    "Kein Markdown, keine Klammern, keine Emojis, keine Sternchen, keine Backticks.\n"
+    "Ton: ruhig, präzise, leicht dunkel und klar sprechbar.\n"
+    "Formuliere ausschließlich vollständige, natürlich klingende und grammatikalisch korrekte deutsche Sätze.\n"
+    "Prüfe vor der Ausgabe Grammatik, Satzbau, Wortstellung, Bezüge und Zeichensetzung. Gib niemals holprige, mehrdeutige oder unvollständige Sätze aus.\n"
+    "Variiere jede Antwort in Wortwahl, Rhythmus und Satzstruktur, aber niemals auf Kosten von korrektem, natürlichem Deutsch oder klarer Bedeutung.\n"
+    "Vermeide Wiederholungen derselben Formulierung und nutze passende Synonyme.\n"
+    "/no_think\n"
+)
 
 # Population statistics – calibrated against 895-sample dataset
 # (dataset_with_vectors.json).
@@ -45,12 +84,13 @@ STRONG_THRESHOLD =  1.0   # top ~16 %
 WEAK_THRESHOLD   = -1.0   # bottom ~16 %
 
 
+
+def round2(value: float) -> float:
+    return round(value, 2)
+
 def _safe_div(num: float, den: float) -> float:
     return 0.0 if den == 0 else num / den
 
-
-def _round2(value: float) -> float:
-    return round(value, 2)
 
 def extract_features(payload: Dict[str, Any]) -> Dict[str, Any]:
     lengths       = payload["lengths"]
@@ -71,6 +111,7 @@ def extract_features(payload: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
+
 def normalize_input(payload: Dict[str, Any]) -> Dict[str, Any]:
     req_id = str(payload.get("request_id", ""))
     session_id = req_id.split("-")[0].strip().upper() if "-" in req_id else req_id
@@ -86,105 +127,12 @@ def normalize_input(payload: Dict[str, Any]) -> Dict[str, Any]:
             "handedness": handedness,
             "trigger":    payload.get("trigger"),
             "type":       payload.get("type"),
-=======
-import logging
-from functools import lru_cache
-from pathlib import Path
-from typing import Any, Dict
-
-from shared.events import HandEvent, Scene
-
-ELEMENTS = ["holz", "feuer", "erde", "wasser"]
-logger = logging.getLogger(__name__)
-PACKAGE_PATH = Path(__file__).resolve().parent / "package.json"
-
-_HAND_ANALYSIS_SYSTEM_PROMPT = (
-    "/no_think\n"
-    "Antworte ausschließlich auf Deutsch.\n"
-    "Gib nur die finale gesprochene Antwort aus.\n"
-    "Beginne sofort mit der Vorhersage, ohne Analyse oder Vorrede.\n"
-    "STRIKTE REGEL: Du bist ein reiner Text-Transformator. Erfinde keine eigenen Geschichten, Linien oder Metaphern.\n"
-    "Übertrage die bereitgestellten Basistexte vollständig und ohne Sinnveränderung in den Tonfall einer weisen, düsteren Wahrsagerin.\n"
-    "Das in den Basistexten genannte dominante Element, zum Beispiel Holz, Feuer, Erde, Wasser oder Metall, muss namentlich und unmissverständlich ausgesprochen werden. Es darf niemals weggelassen oder durch ein anderes Wort ersetzt werden.\n"
-    "Es geht immer um eine menschliche Hand, niemals um ein Handtuch.\n"
-    "Verwende nie die Wörter Handtuch, Tuch oder Stoff.\n"
-    "Kein Markdown, keine Klammern, keine Emojis.\n"
-    "Ton: weise, leicht dunkel, konkret.\n"
-    "Formuliere ausschließlich vollständige, natürlich klingende und grammatikalisch korrekte deutsche Sätze.\n"
-    "Prüfe vor der Ausgabe Grammatik, Satzbau, Wortstellung, Bezüge und Zeichensetzung. Gib niemals holprige, mehrdeutige oder unvollständige Sätze aus.\n"
-    "Variiere jede Antwort in Wortwahl, Rhythmus und Satzstruktur, aber niemals auf Kosten von korrektem, natürlichem Deutsch oder klarer Bedeutung.\n"
-    "Vermeide Wiederholungen derselben Phrasen und nutze passende Synonyme.\n"
-    "/no_think\n"
-)
-_SCENE_VARIATION_SYSTEM_PROMPT = (
-    "/no_think\n"
-    "Antworte ausschließlich auf Deutsch.\n"
-    "Gib nur die finale gesprochene Antwort aus: kein Markdown, keine Formatierung und keine Erklärungen.\n"
-    "Du bist ein reiner Text-Transformator.\n"
-    "Formuliere den Basetext als kurze, natürlich gesprochene Zeile einer weisen, düsteren Wahrsagerin um.\n"
-    "Bewahre alle konkreten Anweisungen, Handlungen und Fakten.\n"
-    "Erfinde keine neuen Informationen.\n"
-    "Kein Markdown, keine Klammern, keine Emojis, keine Sternchen, keine Backticks.\n"
-    "Ton: ruhig, präzise, leicht dunkel und klar sprechbar.\n"
-    "Formuliere ausschließlich vollständige, natürlich klingende und grammatikalisch korrekte deutsche Sätze.\n"
-    "Prüfe vor der Ausgabe Grammatik, Satzbau, Wortstellung, Bezüge und Zeichensetzung. Gib niemals holprige, mehrdeutige oder unvollständige Sätze aus.\n"
-    "Variiere jede Antwort in Wortwahl, Rhythmus und Satzstruktur, aber niemals auf Kosten von korrektem, natürlichem Deutsch oder klarer Bedeutung.\n"
-    "Vermeide Wiederholungen derselben Formulierung und nutze passende Synonyme.\n"
-    "/no_think\n"
-)
-
-
-def clamp(value: float, min_value: float, max_value: float) -> float:
-    return max(min_value, min(max_value, value))
-
-
-def round2(value: float) -> float:
-    return round(value, 2)
-
-
-def safe_div(numerator: float, denominator: float) -> float:
-    if denominator == 0:
-        return 0.0
-    return numerator / denominator
-
-
-def extract_features(payload: Dict[str, Any]) -> Dict[str, Any]:
-    if "lengths" not in payload:
-        return {
-            "palm_aspect_ratio": payload["palm_aspect_ratio"],
-            "finger_length_ratio": payload["finger_length_ratio"],
-            "index_to_ring_ratio": payload["index_to_ring_ratio"],
-            "finger_profile": payload["finger_profile"],
-        }
-
-    lengths = payload.get("lengths", {})
-    palm_width = lengths.get("palm_width", lengths.get("palm_width", 0.0))
-    palm_height = lengths.get("palm_height", lengths.get("palm_height", 0.0))
-
-    index_length = lengths.get("index_length", 0.0)
-    middle_length = lengths.get("middle_length", 0.0)
-    ring_length = lengths.get("ring_length", 0.0)
-    pinky_length = lengths.get("pinky_length", 0.0)
-
-    finger_lengths = [index_length, middle_length, ring_length, pinky_length]
-    max_finger = max(finger_lengths) if finger_lengths else 0.0
-    avg_finger = sum(finger_lengths) / len(finger_lengths) if finger_lengths else 0.0
-
-    return {
-        "palm_aspect_ratio": safe_div(palm_width, palm_height),
-        "finger_length_ratio": safe_div(avg_finger, palm_height),
-        "index_to_ring_ratio": safe_div(index_length, ring_length),
-        "finger_profile": {
-            "index": safe_div(index_length, max_finger),
-            "middle": safe_div(middle_length, max_finger),
-            "ring": safe_div(ring_length, max_finger),
-            "little": safe_div(pinky_length, max_finger),
->>>>>>> main
         },
     }
 
 
-<<<<<<< HEAD
+
+
 def compute_raw_scores(features: Dict[str, Any]) -> Dict[str, float]:
     """
     score each element as the dot-product of the measurement vector with the element's unit axis. 
@@ -203,6 +151,7 @@ def compute_raw_scores(features: Dict[str, Any]) -> Dict[str, float]:
     return raw
 
 
+
 def normalize_scores(raw_scores: Dict[str, float]) -> Dict[str, float]:
     """Z-score normalise against population statistics."""
     out: Dict[str, float] = {}
@@ -211,7 +160,6 @@ def normalize_scores(raw_scores: Dict[str, float]) -> Dict[str, float]:
         std   = max(stats["std"], 0.01)
         out[key] = max(-3.0, min(3.0, (value - stats["mean"]) / std))
     return out
-
 
 def element_ratio(raw_scores: Dict[str, float]) -> Dict[str, float]:
     total = sum(raw_scores.values())
@@ -224,97 +172,16 @@ def determine_states(normalized_scores: Dict[str, float]) -> Dict[str, str]:
         if z > STRONG_THRESHOLD:
             states[element] = "zu_stark"
         elif z < WEAK_THRESHOLD:
-=======
-def normalize_input(input_payload: Dict[str, Any]) -> Dict[str, Any]:
-    if "lengths" not in input_payload:
-        return {
-            "features": extract_features(input_payload),
-            "meta": {
-                "request_id": input_payload.get("request_id"),
-                "session_id": input_payload.get("session_id"),
-                "handedness": input_payload.get("handedness"),
-                "tracking_quality": input_payload.get("tracking_quality"),
-                "trigger": input_payload.get("trigger"),
-                "type": input_payload.get("type"),
-            },
-        }
-
-    meta = {
-        "request_id": input_payload.get("request_id"),
-        "session_id": input_payload.get("session_id"),
-        "handedness": input_payload.get("hand", input_payload.get("handedness")),
-        "tracking_quality": input_payload.get("tracking_quality"),
-        "trigger": input_payload.get("trigger"),
-        "type": input_payload.get("type"),
-    }
-
-    return {
-        "features": extract_features(input_payload),
-        "meta": meta,
-    }
-
-
-def compute_raw_scores(features: Dict[str, Any]) -> Dict[str, float]:
-    palm_ratio = features["palm_aspect_ratio"]
-    finger_ratio = features["finger_length_ratio"]
-
-    palm_centered = (palm_ratio - 0.68) * 10.0
-    finger_centered = (finger_ratio - 0.85) * 40.0
-
-    base = 10.0
-
-    # Erde: Quadratisch (+) und kurze Finger (-)
-    erde = base + palm_centered - finger_centered
-
-    # Feuer: Rechteckig (-) und kurze Finger (-)
-    feuer = base - palm_centered - finger_centered
-
-    # Holz: Quadratisch (+) und lange Finger (+)
-    holz = base + palm_centered + finger_centered
-
-    # Wasser: Rechteckig (-) und lange Finger (+)
-    wasser = base - palm_centered + finger_centered
-
-    return {
-        "erde": erde,
-        "feuer": feuer,
-        "holz": holz,
-        "wasser": wasser,
-    }
-
-
-def normalize_scores(raw_scores: Dict[str, float]) -> Dict[str, float]:
-    values = list(raw_scores.values())
-    mean = sum(values) / len(values)
-
-    variance = sum((v - mean) ** 2 for v in values) / len(values)
-    std = variance**0.5
-
-    # Falls alle Werte fast gleich sind
-    if std < 1e-6:
-        return {k: 0.0 for k in raw_scores}
-
-    normalized = {k: clamp((v - mean) / std, -2.0, 2.0) for k, v in raw_scores.items()}
-    return normalized
-
-
-def determine_base_states(scores: Dict[str, float]) -> Dict[str, str]:
-    states = {}
-    for element, score in scores.items():
-        if score > 26:
-            states[element] = "zu_stark"
-        elif score < 14:
->>>>>>> main
             states[element] = "zu_schwach"
         else:
             states[element] = "in_balance"
     return states
 
 
-<<<<<<< HEAD
 def compute_confidence(scores: Dict[str, float]) -> float:
     sorted_vals = sorted(scores.values(), reverse=True)
     return round(sorted_vals[0] - sorted_vals[1], 3)
+
 
 
 def build_result(
@@ -338,8 +205,8 @@ def build_result(
     return {
         "request_id":                meta.get("request_id"),
         "handedness":                meta.get("handedness"),
-        "element_scores_raw":        {k: _round2(v) for k, v in raw_scores.items()},
-        "element_scores_normalized": {k: _round2(v) for k, v in normalized_scores.items()},
+        "element_scores_raw":        {k: round2(v) for k, v in raw_scores.items()},
+        "element_scores_normalized": {k: round2(v) for k, v in normalized_scores.items()},
         "element_ratio":             element_ratio(raw_scores),
         "element_states":            states,
         "dominant_element":          dominant_element,
@@ -349,6 +216,15 @@ def build_result(
         "is_border_hand":            is_border_hand,
     }
 
+
+
+@lru_cache(maxsize=1)
+def load_content_package() -> Dict[str, Any]:
+    try:
+        return json.loads(PACKAGE_PATH.read_text(encoding="utf-8"))
+    except Exception:
+        logger.exception("The content package is not valid: %s", PACKAGE_PATH)
+        return {}
 
 def GetLines(result: Dict[str, Any]) -> list[str]:
     lines_list: list[str] = []
@@ -391,193 +267,6 @@ def GetLines(result: Dict[str, Any]) -> list[str]:
 
     return lines_list
 
-
-def calibrate_stats(dataset: list, verbose: bool = True) -> Dict[str, Any]:
-    import statistics as _stats
-
-    palm_vals:   list[float] = []
-    finger_vals: list[float] = []
-    valid: list[Dict[str, Any]] = []
-
-    for item in dataset:
-        lengths = item.get("lengths", {})
-        if not lengths or lengths.get("middle_length", 0) == 0 or lengths.get("palm_height", 0) == 0:
-            continue
-        try:
-            features = extract_features(item)
-            if features["palm_aspect_ratio"] == 0 or features["finger_length_ratio"] == 0:
-                continue
-            palm_vals.append(features["palm_aspect_ratio"])
-            finger_vals.append(features["finger_length_ratio"])
-            valid.append(item)
-        except Exception:
-            continue
-
-    if not palm_vals:
-        print("No valid samples found.")
-        return {}
-
-    new_palm_center   = _stats.median(palm_vals)
-    new_finger_center = _stats.median(finger_vals)
-
-    if verbose:
-        print(f"\n=== Feature centres (n={len(palm_vals)}) ===")
-        print(f"  PALM_CENTER   = {new_palm_center:.4f}  (was {PALM_CENTER})")
-        print(f"  FINGER_CENTER = {new_finger_center:.4f}  (was {FINGER_CENTER})")
-
-    all_scores: Dict[str, list[float]] = {e: [] for e in ELEMENTS}
-    for item in valid:
-        features = extract_features(item)
-        palm_c   = (features["palm_aspect_ratio"]   - new_palm_center)   * PALM_SCALE
-        finger_c = (features["finger_length_ratio"] - new_finger_center) * FINGER_SCALE
-        angle     = math.atan2(finger_c, palm_c)
-        magnitude = math.hypot(palm_c, finger_c)
-        for elem, elem_angle in _ELEMENT_ANGLES.items():
-            all_scores[elem].append(10.0 + magnitude * math.cos(angle - elem_angle))
-
-    new_stats: Dict[str, Dict[str, float]] = {}
-    for e in ELEMENTS:
-        vals = all_scores[e]
-        mean = sum(vals) / len(vals)
-        std  = _stats.pstdev(vals)
-        new_stats[e] = {"mean": round(mean, 6), "std": round(std, 6)}
-
-    if verbose:
-        print(f"\n=== New RAW_SCORE_STATS ===")
-        for e, s in new_stats.items():
-            print(f'    "{e}":   {{"mean": {s["mean"]}, "std": {s["std"]}}},')
-
-    from collections import Counter as _Counter
-    dominance: Dict[str, int] = {e: 0 for e in ELEMENTS}
-    confidences: list[float] = []
-    for item in valid:
-        features = extract_features(item)
-        palm_c   = (features["palm_aspect_ratio"]   - new_palm_center)   * PALM_SCALE
-        finger_c = (features["finger_length_ratio"] - new_finger_center) * FINGER_SCALE
-        angle     = math.atan2(finger_c, palm_c)
-        magnitude = math.hypot(palm_c, finger_c)
-        raw  = {e: 10.0 + magnitude * math.cos(angle - a) for e, a in _ELEMENT_ANGLES.items()}
-        norm = {k: (v - new_stats[k]["mean"]) / max(new_stats[k]["std"], 0.01) for k, v in raw.items()}
-        dom  = max(norm, key=norm.__getitem__)
-        dominance[dom] += 1
-        sv = sorted(norm.values(), reverse=True)
-        confidences.append(sv[0] - sv[1])
-
-    total = sum(dominance.values()) or 1
-    if verbose:
-        print(f"\n=== Distribution (n={total}) ===")
-        for e, cnt in sorted(dominance.items(), key=lambda x: -x[1]):
-            print(f"  {e:<8} {cnt:>4} ({cnt/total*100:5.1f}%)")
-        avg_conf = sum(confidences) / len(confidences)
-        border   = sum(1 for c in confidences if c < CONFIDENCE_THRESHOLD)
-        print(f"\n  Avg confidence:  {avg_conf:.3f}")
-        print(f"  Border hands:    {border} ({border/total*100:.1f}%)")
-
-    return {
-        "palm_center":     new_palm_center,
-        "finger_center":   new_finger_center,
-        "raw_score_stats": new_stats,
-    }
-
-
-if __name__ == "__main__":
-    sample = {
-        "request_id": "P1-left",
-        "lengths": {
-            "palm_width": 0.064823, "palm_height": 0.09616,
-            "thumb_length": 0.091336, "index_length": 0.084551,
-            "middle_length": 0.097795, "ring_length": 0.086348,
-            "pinky_length": 0.06959,
-        },
-    }
-    result = build_result(sample)
-    print(json.dumps(result, ensure_ascii=False, indent=2))
-=======
-def determine_dominant_element(scores: Dict[str, float]) -> str:
-    return max(scores.items(), key=lambda item: item[1])[0]
-
-
-def determine_weakest_element(scores: Dict[str, float]) -> str:
-    return min(scores.items(), key=lambda item: item[1])[0]
-
-
-def element_ratio(raw_scores: Dict[str, Any]) -> Dict[str, Any]:
-    return {
-        k: round((v / sum(raw_scores.values())) * 100, 2) for k, v in raw_scores.items()
-    }
-
-
-def build_result(
-    input_payload: Dict[str, Any], average_payload: Dict[str, Any] | None = None
-) -> Dict[str, Any]:
-    normalized = normalize_input(input_payload)
-    features = normalized["features"]
-    meta = normalized["meta"]
-
-    raw_scores = compute_raw_scores(features)
-    normalized_scores = normalize_scores(raw_scores)
-    final_states = determine_base_states(element_ratio(raw_scores))
-
-    dominant_element = determine_dominant_element(normalized_scores)
-    weakest_element = determine_weakest_element(normalized_scores)
-
-    return {
-        "request_id": meta.get("request_id"),
-        "handedness": meta.get("handedness"),
-        "element_scores_raw": {k: round2(v) for k, v in raw_scores.items()},
-        "element_scores_normalized": {
-            k: round2(v) for k, v in normalized_scores.items()
-        },
-        "element_ratio": element_ratio(raw_scores),
-        "element_states": final_states,
-        "dominant_element": dominant_element,
-        "weakest_element": weakest_element,
-    }
-
-
-@lru_cache(maxsize=1)
-def load_content_package() -> Dict[str, Any]:
-    try:
-        return json.loads(PACKAGE_PATH.read_text(encoding="utf-8"))
-    except Exception:
-        logger.exception("The content package is not valid: %s", PACKAGE_PATH)
-        return {}
-
-
-def GetLines(result: Dict[str, Any]) -> list[str]:
-    lines_list = []
-    package = load_content_package()
-    lines = package.get("hand_analysis", package)
-
-    dominant_element = result.get("dominant_element")
-    weakest_element = result.get("weakest_element")
-
-    if dominant_element:
-        shot_1_line = lines.get("shot_1", {}).get(dominant_element)
-        if shot_1_line:
-            lines_list.append(shot_1_line)
-        else:
-            logger.debug("shot_1_line nicht gefunden fuer %r", dominant_element)
-
-        shot_3_line = lines.get("shot_3", {}).get(dominant_element)
-        if shot_3_line:
-            lines_list.append(shot_3_line)
-        else:
-            logger.debug("shot_3_line nicht gefunden fuer %r", dominant_element)
-
-        shot_4_line = lines.get("shot_4", {}).get(dominant_element)
-        if shot_4_line:
-            lines_list.append(shot_4_line)
-        else:
-            logger.debug("shot_4_line nicht gefunden fuer %r", dominant_element)
-
-    if weakest_element:
-        shot_5_line = lines.get("shot_5", {}).get(weakest_element)
-        if shot_5_line:
-            lines_list.append(shot_5_line)
-        else:
-            logger.debug("shot_5_line nicht gefunden fuer %r", weakest_element)
-    return lines_list
 
 
 def build_hand_analysis_prompt(hand_event: HandEvent | None) -> str:
@@ -776,6 +465,93 @@ def build_combined_analysis_prompt(
 
 build_prompt = build_hand_analysis_prompt
 
+def calibrate_stats(dataset: list, verbose: bool = True) -> Dict[str, Any]:
+    import statistics as _stats
+
+    palm_vals:   list[float] = []
+    finger_vals: list[float] = []
+    valid: list[Dict[str, Any]] = []
+
+    for item in dataset:
+        lengths = item.get("lengths", {})
+        if not lengths or lengths.get("middle_length", 0) == 0 or lengths.get("palm_height", 0) == 0:
+            continue
+        try:
+            features = extract_features(item)
+            if features["palm_aspect_ratio"] == 0 or features["finger_length_ratio"] == 0:
+                continue
+            palm_vals.append(features["palm_aspect_ratio"])
+            finger_vals.append(features["finger_length_ratio"])
+            valid.append(item)
+        except Exception:
+            continue
+
+    if not palm_vals:
+        print("No valid samples found.")
+        return {}
+
+    new_palm_center   = _stats.median(palm_vals)
+    new_finger_center = _stats.median(finger_vals)
+
+    if verbose:
+        print(f"\n=== Feature centres (n={len(palm_vals)}) ===")
+        print(f"  PALM_CENTER   = {new_palm_center:.4f}  (was {PALM_CENTER})")
+        print(f"  FINGER_CENTER = {new_finger_center:.4f}  (was {FINGER_CENTER})")
+
+    all_scores: Dict[str, list[float]] = {e: [] for e in ELEMENTS}
+    for item in valid:
+        features = extract_features(item)
+        palm_c   = (features["palm_aspect_ratio"]   - new_palm_center)   * PALM_SCALE
+        finger_c = (features["finger_length_ratio"] - new_finger_center) * FINGER_SCALE
+        angle     = math.atan2(finger_c, palm_c)
+        magnitude = math.hypot(palm_c, finger_c)
+        for elem, elem_angle in _ELEMENT_ANGLES.items():
+            all_scores[elem].append(10.0 + magnitude * math.cos(angle - elem_angle))
+
+    new_stats: Dict[str, Dict[str, float]] = {}
+    for e in ELEMENTS:
+        vals = all_scores[e]
+        mean = sum(vals) / len(vals)
+        std  = _stats.pstdev(vals)
+        new_stats[e] = {"mean": round(mean, 6), "std": round(std, 6)}
+
+    if verbose:
+        print(f"\n=== New RAW_SCORE_STATS ===")
+        for e, s in new_stats.items():
+            print(f'    "{e}":   {{"mean": {s["mean"]}, "std": {s["std"]}}},')
+
+    from collections import Counter as _Counter
+    dominance: Dict[str, int] = {e: 0 for e in ELEMENTS}
+    confidences: list[float] = []
+    for item in valid:
+        features = extract_features(item)
+        palm_c   = (features["palm_aspect_ratio"]   - new_palm_center)   * PALM_SCALE
+        finger_c = (features["finger_length_ratio"] - new_finger_center) * FINGER_SCALE
+        angle     = math.atan2(finger_c, palm_c)
+        magnitude = math.hypot(palm_c, finger_c)
+        raw  = {e: 10.0 + magnitude * math.cos(angle - a) for e, a in _ELEMENT_ANGLES.items()}
+        norm = {k: (v - new_stats[k]["mean"]) / max(new_stats[k]["std"], 0.01) for k, v in raw.items()}
+        dom  = max(norm, key=norm.__getitem__)
+        dominance[dom] += 1
+        sv = sorted(norm.values(), reverse=True)
+        confidences.append(sv[0] - sv[1])
+
+    total = sum(dominance.values()) or 1
+    if verbose:
+        print(f"\n=== Distribution (n={total}) ===")
+        for e, cnt in sorted(dominance.items(), key=lambda x: -x[1]):
+            print(f"  {e:<8} {cnt:>4} ({cnt/total*100:5.1f}%)")
+        avg_conf = sum(confidences) / len(confidences)
+        border   = sum(1 for c in confidences if c < CONFIDENCE_THRESHOLD)
+        print(f"\n  Avg confidence:  {avg_conf:.3f}")
+        print(f"  Border hands:    {border} ({border/total*100:.1f}%)")
+
+    return {
+        "palm_center":     new_palm_center,
+        "finger_center":   new_finger_center,
+        "raw_score_stats": new_stats,
+    }
+
 
 if __name__ == "__main__":
     sample_input = {
@@ -805,10 +581,10 @@ if __name__ == "__main__":
         },
     }
 
-    result = build_result(sample_input)
+    result = build_result(sample2)
     Lines = GetLines(result)
     print(json.dumps(result, ensure_ascii=False, indent=2))
 
     for line in Lines:
         print(line)
->>>>>>> main
+
