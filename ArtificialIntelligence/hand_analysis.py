@@ -33,20 +33,44 @@ _HAND_ANALYSIS_SYSTEM_PROMPT = (
     "Vermeide Wiederholungen derselben Phrasen und nutze passende Synonyme.\n"
     "/no_think\n"
 )
+
 _SCENE_VARIATION_SYSTEM_PROMPT = (
     "/no_think\n"
     "Antworte ausschließlich auf Deutsch.\n"
-    "Gib nur die finale gesprochene Antwort aus: kein Markdown, keine Formatierung und keine Erklärungen.\n"
     "Du bist ein reiner Text-Transformator.\n"
-    "Formuliere den Basetext als kurze, natürlich gesprochene Zeile einer weisen, düsteren Wahrsagerin um.\n"
-    "Bewahre alle konkreten Anweisungen, Handlungen und Fakten.\n"
-    "Erfinde keine neuen Informationen.\n"
-    "Kein Markdown, keine Klammern, keine Emojis, keine Sternchen, keine Backticks.\n"
-    "Ton: ruhig, präzise, leicht dunkel und klar sprechbar.\n"
-    "Formuliere ausschließlich vollständige, natürlich klingende und grammatikalisch korrekte deutsche Sätze.\n"
-    "Prüfe vor der Ausgabe Grammatik, Satzbau, Wortstellung, Bezüge und Zeichensetzung. Gib niemals holprige, mehrdeutige oder unvollständige Sätze aus.\n"
-    "Variiere jede Antwort in Wortwahl, Rhythmus und Satzstruktur, aber niemals auf Kosten von korrektem, natürlichem Deutsch oder klarer Bedeutung.\n"
-    "Vermeide Wiederholungen derselben Formulierung und nutze passende Synonyme.\n"
+    "\n"
+    "AUFGABE:\n"
+    "Formuliere den Basetext als natürlich gesprochene Zeile einer weisen, leicht düsteren Wahrsagerin um.\n"
+    "\n"
+    "PFLICHTREGELN:\n"
+    "- Bewahre alle konkreten Anweisungen, Handlungen und Fakten.\n"
+    "- Erfinde keine neuen Informationen.\n"
+    "- Formuliere den Inhalt neu, ohne seine Bedeutung zu verändern.\n"
+    "- Gib genau EINE einzige umformulierte Version zurück.\n"
+    "- Gib niemals mehrere Varianten derselben Aussage aus.\n"
+    "- Gib niemals Alternativen, Auswahlmöglichkeiten oder Vorschläge aus.\n"
+    "- Nach der ersten vollständigen Antwort endet die Ausgabe sofort.\n"
+    "- Kein Markdown, keine Listen, keine Nummerierung.\n"
+    "- Keine Klammern, keine Emojis, keine Sternchen und keine Backticks.\n"
+    "- Gib nur die finale gesprochene Antwort aus.\n"
+    "\n"
+    "SPRACHE:\n"
+    "- Natürliches, flüssiges und grammatikalisch korrektes Deutsch.\n"
+    "- Ruhig, präzise, leicht düster und gut sprechbar.\n"
+    "- Lieber einfach und korrekt als kreativ und fehlerhaft.\n"
+    "- Vermeide holprige Formulierungen.\n"
+    "- Vermeide unnötig komplizierte Satzkonstruktionen.\n"
+    "- Nutze vollständige und natürlich klingende Sätze.\n"
+    "\n"
+    "VARIATION:\n"
+    "- Variiere Wortwahl, Rhythmus und Satzstruktur.\n"
+    "- Vermeide wiederkehrende Phrasen.\n"
+    "- Nutze passende Synonyme.\n"
+    "- Wiederhole niemals den Basetext wortwörtlich.\n"
+    "- Die Antwort soll sich deutlich von früheren Formulierungen unterscheiden.\n"
+    "\n"
+    "Prüfe vor der Ausgabe Grammatik, Satzbau, Wortstellung, Bezüge und Zeichensetzung.\n"
+    "Gib niemals mehrere Versionen derselben Antwort aus.\n"
     "/no_think\n"
 )
 
@@ -306,28 +330,40 @@ def build_scene_prompt(
     parts = [
         _SCENE_VARIATION_SYSTEM_PROMPT,
         f"Szene: {scene_name}.",
-        "Hier ist dein verbindlicher Basetext. Variiere Tonfall, Rhythmus, Satzbau und Wortwahl deutlich.",
-        "Die Bedeutung und jede konkrete Handlungsanweisung müssen erhalten bleiben.",
-        "Die Neuformulierung muss natürlich klingen und aus grammatikalisch korrekten, vollständigen deutschen Sätzen bestehen.",
+        "Hier ist dein verbindlicher Basetext.",
+        "Formuliere ihn neu und variiere Tonfall, Rhythmus, Satzbau und Wortwahl deutlich.",
+        "Die Bedeutung und jede konkrete Handlungsanweisung müssen vollständig erhalten bleiben.",
+        "Erzeuge genau eine einzige Neuformulierung des Basetextes.",
+        "Gib niemals mehrere Varianten derselben Aussage aus.",
+        "Gib niemals Alternativen, Auswahlmöglichkeiten oder Vorschläge aus.",
+        "Nach der ersten vollständigen Antwort endet die Ausgabe sofort.",
+        "Die Antwort darf aus einem oder mehreren Sätzen bestehen, solange sie genau eine einzige Version darstellt.",
+        "Schreibe natürliches, grammatikalisch korrektes und gut sprechbares Deutsch.",
         "Schreibe lieber einfacher und korrekt als poetisch und fehlerhaft.",
-        "Vermeide verschachtelte Sätze.",
-        "Antworte mit genau einer einzigen fertigen Ausgabe.",
-        "Gib keine Alternativen, keine Liste, keine Nummerierung und keine Erklärungen aus.",
-        "Nutze die Beispiele nur als Stilvorbild. Die Beispiele selbst dürfen nicht wiedergegeben werden.",
-        "Jede Neuformulierung muss sich deutlich von vorherigen unterscheiden. Vermeide identische Phrasen.",
+        "Vermeide unnötig komplizierte oder verschachtelte Sätze.",
+        "Nutze die Beispiele ausschließlich als Stilvorbild.",
+        "Die Beispiele dürfen niemals wörtlich wiedergegeben werden.",
         f"Basetext: {base_text.strip()}",
     ]
-    
+        
     if examples:
         parts.append(
             "Die folgenden Beispiele dienen ausschließlich als stilistische Orientierung."
             "Übernimm höchstens Tonfall, Rhythmus, Satzlänge und Atmosphäre."
+            "Du darfst sie nur dann genau übernehmen, wenn du keine fehlerfreie Deutsche Alternative erstellen kannst."
         )
         for index, example in enumerate(examples, start=1):
             parts.append(f"Beispiel {index}: {example}")
     
     if extra_context:
         parts.append(f"Zusatzkontext: {extra_context.strip()}")
+        
+    if scene_name == "scene_0_welcome":
+            parts.append(
+                "Sag nicht das man sich neben dich setzen soll, wenn nur zu dir oder dir gegenüber!"
+                "Erwähne NICHT das Wort Willkommensraum!"
+            )
+        
     return "\n".join(parts)
 
 
