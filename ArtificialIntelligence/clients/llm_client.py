@@ -13,7 +13,6 @@ logger = logging.getLogger(__name__)
 REQUEST_ATTEMPTS = 5
 RETRY_DELAY_SECONDS = 1.0
 THINK_BLOCK_RE = re.compile(r"<think\b[^>]*>.*?</think>", re.IGNORECASE | re.DOTALL)
-DEFAULT_NUM_CTX = 2048
 NUM_PREDICT = 512
 
 
@@ -128,7 +127,7 @@ class LLMClient:
                 logger.warning("LLM warmup failed on attempt %d; retrying", attempt)
                 time.sleep(RETRY_DELAY_SECONDS * min(attempt, 10))
 
-    def generate_fortune(self, prompt: str) -> str:
+    def generate_text(self, prompt: str) -> str:
         return self.generate(prompt)
 
     async def async_generate(self, prompt: str) -> str:
@@ -168,8 +167,14 @@ class LLMClient:
         )
         return text
 
-    async def async_generate_fortune(self, prompt: str) -> str:
+    async def async_generate_text(self, prompt: str) -> str:
         return await self.async_generate(prompt)
+
+    def generate_fortune(self, prompt: str) -> str:
+        return self.generate_text(prompt)
+
+    async def async_generate_fortune(self, prompt: str) -> str:
+        return await self.async_generate_text(prompt)
 
     def _messages(self, prompt: str):
         return [{"role": "user", "content": prompt}]
@@ -189,18 +194,7 @@ class LLMClient:
         }
 
     def _num_ctx(self) -> int:
-        raw = os.environ.get("WITCH_LLM_NUM_CTX", "").strip()
-        if not raw:
-            return DEFAULT_NUM_CTX
-        try:
-            return max(512, int(raw))
-        except ValueError:
-            logger.warning(
-                "Invalid WITCH_LLM_NUM_CTX=%r; using %d",
-                raw,
-                DEFAULT_NUM_CTX,
-            )
-            return DEFAULT_NUM_CTX
+        return max(512, int(os.environ["LLM_MAX_MODEL_LEN"]))
 
     def _strip_thinking(self, text: str) -> str:
         text = THINK_BLOCK_RE.sub("", text)

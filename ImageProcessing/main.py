@@ -15,7 +15,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger("image-processing")
 
-from .palm_processing.seat_sensor import SeatPresenceMonitor
+from .seat_sensor import SeatPresenceMonitor
 from .palm_processing.pipeline import HeadlessPalmClient
 from .palm_processing.transport import WebSocketClient
 

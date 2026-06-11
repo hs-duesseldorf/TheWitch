@@ -1,3 +1,11 @@
-vllm==0.20.0
-vllm-omni==0.20.0
+# vllm-omni v0.22.0rc1 imports vllm but its Git-tag package metadata does not declare vllm as a dependency
+vllm==0.22.0
+# vllm-omni v0.22.0rc1 is tagged upstream but not published as a PyPI package.
+vllm-omni @ git+https://github.com/vllm-project/vllm-omni.git@v0.22.0rc1
+fastapi
+httpx
+python-multipart
 python-dotenv
+safetensors
+soundfile
+uvicorn

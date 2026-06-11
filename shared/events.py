@@ -5,8 +5,6 @@ from typing import Any, TypeAlias
 
 import msgspec
 
-# Triggers & identifiers
-
 
 class HandTrigger(str, Enum):
     DETECTED = "hand_detected"
@@ -18,6 +16,7 @@ class HandTrigger(str, Enum):
 
 class PersonTrigger(str, Enum):
     DETECTED = "person_detected"
+    SEATED = "person_seated"
     ABSENT = "person_absent"
 
 
@@ -27,31 +26,20 @@ class Hand(str, Enum):
 
 
 class Scene(str, Enum):
-    SCENE_0_IDLE = "scene_0_idle"
-    SCENE_1_ATTENTION = "scene_1_attention"
-    SCENE_2_INTRO = "scene_2_intro"
-    SCENE_2_REFOCUS = "scene_2_refocus"
-    SCENE_3_SCAN_READY = "scene_3_scan_ready"
-    SCENE_3_HAND_CORRECTION = "scene_3_hand_correction"
-    SCENE_3_SCANNING = "scene_3_scanning"
-    SCENE_3_SCAN_COMPLETE = "scene_3_scan_complete"
-    SCENE_4_TRANSFORMATION = "scene_4_transformation"
-    SCENE_5_INTRODUCTION = "scene_5_introduction"
-    SCENE_6_SHOT_1_VISUAL = "scene_6_shot_1_visual"
-    SCENE_6_SHOT_2_TASK = "scene_6_shot_2_task"
-    SCENE_6_SHOT_3_ELEMENT = "scene_6_shot_3_element"
-    SCENE_6_SHOT_4_POSITIVE_NEGATIVE = "scene_6_shot_4_positive_negative"
-    SCENE_6_SHOT_5_BALANCE = "scene_6_shot_5_balance"
-    SCENE_7_RETURN = "scene_7_return"
-    SCENE_7_SMOKE_END = "scene_7_smoke_end"
-    SCENE_7_VANISH_END = "scene_7_vanish_end"
-    END = "end"
+    DBG_ABSENT = "scene_debug_shot_1_hand_absent"
+    DBG_TILTED = "scene_debug_shot_2_hand_tilted"
+    DBG_WRONG = "scene_debug_shot_3_hand_wrong_side"
+    DBG_NOT_FULLY = "scene_debug_shot_4_hand_not_fully_in_view"
 
-
-# Events
-# `tag_field` names the JSON discriminator key ("type").
-# `tag` sets its value for each subclass.
-# Use isinstance() / match to branch on event type after decoding.
+    SCENE0 = "scene_idle"
+    SCENE1 = "scene_0_welcome"
+    SCENE2 = "scene_1_seated"
+    SCENE3 = "scene_2_intro"
+    SCENE4 = "scene_3_awaiting_hand"
+    SCENE5 = "scene_4_handscan"
+    HAND_REMOVAL = "scene_4_handscan_done"
+    SCENE6 = "scene_5_analysis"
+    SCENE7 = "scene_6_outro"
 
 
 class Event(msgspec.Struct, frozen=True, kw_only=True, tag_field="type", omit_defaults=True):
@@ -74,6 +62,7 @@ class SceneCommandEvent(Event, tag="scene_command"):
     animation: str | None = None
     effects: dict[str, Any] = msgspec.field(default_factory=dict)
     trigger: str | None = None
+    text: str | None = None
 
 
 class EventDoneEvent(Event, tag="event_done"):
@@ -86,17 +75,21 @@ class AnalysisStartedEvent(Event, tag="analysis_started"):
 
 class AnalysisResultEvent(Event, tag="analysis_result"):
     text: str
-
-
-class FortuneEvent(Event, tag="fortune"):
-    text: str
-    sample_rate: int | None = None
+    scene: Scene | None = None
 
 
 class ErrorEvent(Event, tag="error"):
     message: str
 
 
+IPEvent: TypeAlias = HandEvent | PersonEvent
+AI3DEvent: TypeAlias = (
+    SceneCommandEvent
+    | EventDoneEvent
+    | AnalysisStartedEvent
+    | AnalysisResultEvent
+    | ErrorEvent
+)
 WitchEvent: TypeAlias = (
     HandEvent
     | PersonEvent
@@ -104,6 +97,5 @@ WitchEvent: TypeAlias = (
     | EventDoneEvent
     | AnalysisStartedEvent
     | AnalysisResultEvent
-    | FortuneEvent
     | ErrorEvent
 )

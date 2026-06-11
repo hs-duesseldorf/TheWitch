@@ -16,16 +16,10 @@ DEFAULT_QWEN_SAMPLE_RATE = 24_000
 QWEN_SPEECH_PATH = "/v1/audio/speech"
 PCM_SAMPLE_WIDTH = 2
 PCM_CHUNK_SECONDS = 0.1
-DEFAULT_LANGUAGE = "German"
-DEFAULT_VOICE = "vivian"
-DEFAULT_INSTRUCTIONS = (
-    "A mystical fortune teller from the mountains. She speaks German with a very strong Korean accent, her voice "
-    "ancient yet youthful, carrying whispers of incense and distant valleys. Warm, calm, with quiet "
-    "wisdom and subtle mystery. Stable pitch and tone throughout."
-)
-
 REQUEST_ATTEMPTS = 5
 RETRY_DELAY_SECONDS = 1.0
+HTTP_CONNECT_TIMEOUT_SECONDS = 10
+HTTP_READ_TIMEOUT_SECONDS = 120
 
 
 @dataclass(frozen=True)
@@ -37,40 +31,15 @@ class AudioFrame:
 
 
 class TTSClient:
-    def __init__(
-        self,
-        base_url: str,
-        *,
-        model: str,
-        voice: str | None = None,
-        instructions: str | None = None,
-        language: str = DEFAULT_LANGUAGE,
-        task_type: str | None = None,
-    ):
+    def __init__(self, base_url: str):
         base_url = base_url.strip()
         if not base_url:
             raise ValueError("TTS base URL must not be empty")
 
         self.base_url = base_url.rstrip("/")
-        self.model = model.strip()
-        self.language = language.strip()
-        self.task_type = (task_type or self._task_type_from_model(self.model)).strip()
+        self.max_duration_seconds = float(os.environ["WITCH_TTS_MAX_DURATION_SECONDS"])
 
-        configured_voice = (voice or "").strip()
-        if self.task_type == "CustomVoice" and self._looks_like_instructions(
-            configured_voice
-        ):
-            self.voice = DEFAULT_VOICE
-            self.instructions = (instructions or configured_voice).strip()
-        else:
-            self.voice = (configured_voice or DEFAULT_VOICE).strip()
-            self.instructions = (instructions or DEFAULT_INSTRUCTIONS).strip()
-        stream_setting = os.getenv("WITCH_TTS_STREAM", "").strip().lower()
-        self.stream = stream_setting not in {"0", "false", "no", "off"}
-
-    async def stream_synthesize(
-        self, text: str, *, seed: int | None = None
-    ) -> AsyncIterator[AudioFrame]:
+    async def stream_synthesize(self, text: str) -> AsyncIterator[AudioFrame]:
         text = text.strip()
         if not text:
             return
@@ -81,8 +50,7 @@ class TTSClient:
 
         url = urljoin(self.base_url + "/", QWEN_SPEECH_PATH.lstrip("/"))
         logger.info(
-            "Qwen HTTP TTS %s: url=%s text_chars=%d",
-            "stream" if self.stream else "full",
+            "TTS stream request: url=%s text_chars=%d",
             url,
             len(text),
         )
@@ -95,43 +63,30 @@ class TTSClient:
                 async with aiohttp.ClientSession() as session:
                     async with session.post(
                         url,
-                        json=self._speech_request(text, seed=seed),
-                        timeout=aiohttp.ClientTimeout(total=None),
+                        json={"input": text},
+                        timeout=aiohttp.ClientTimeout(
+                            total=None,
+                            connect=HTTP_CONNECT_TIMEOUT_SECONDS,
+                            sock_connect=HTTP_CONNECT_TIMEOUT_SECONDS,
+                            sock_read=HTTP_READ_TIMEOUT_SECONDS,
+                        ),
                     ) as resp:
                         if resp.status >= 400:
                             body = await resp.text()
                             raise RuntimeError(
                                 f"TTS stream failed: HTTP {resp.status}: {body}"
                             )
-                        if self.stream:
-                            async for chunk in self._pcm_chunks(resp):
-                                yielded_audio = True
-                                yield AudioFrame(
-                                    audio=chunk,
-                                    sample_rate=DEFAULT_QWEN_SAMPLE_RATE,
-                                    format="pcm",
-                                    mime_type=resp.headers.get("content-type", "audio/pcm"),
-                                )
-                        else:
-                            audio = await resp.read()
-                            content_type = resp.headers.get("content-type", "audio/pcm")
-                            if "wav" in content_type.lower():
-                                for chunk in self._decode_wav(audio):
-                                    yielded_audio = True
-                                    yield AudioFrame(
-                                        audio=chunk,
-                                        sample_rate=DEFAULT_QWEN_SAMPLE_RATE,
-                                        format="pcm",
-                                        mime_type=content_type,
-                                    )
-                            elif audio:
-                                yielded_audio = True
-                                yield AudioFrame(
-                                    audio=audio,
-                                    sample_rate=DEFAULT_QWEN_SAMPLE_RATE,
-                                    format="pcm",
-                                    mime_type=content_type,
-                                )
+                        chunks = self._limit_audio_duration(
+                            self._pcm_chunks(resp)
+                        )
+                        async for chunk in chunks:
+                            yielded_audio = True
+                            yield AudioFrame(
+                                audio=chunk,
+                                sample_rate=DEFAULT_QWEN_SAMPLE_RATE,
+                                format="pcm",
+                                mime_type=resp.headers.get("content-type", "audio/pcm"),
+                            )
                     return
             except Exception as e:
                 if yielded_audio:
@@ -144,29 +99,6 @@ class TTSClient:
                     "TTS stream failed on attempt %d; retrying: %s", attempt, e
                 )
                 await asyncio.sleep(RETRY_DELAY_SECONDS * min(attempt, 10))
-
-    def _speech_request(
-        self, text: str, *, seed: int | None = None
-    ) -> dict[str, object]:
-        request: dict[str, object] = {
-            "model": self.model,
-            "input": text,
-            "language": self.language,
-            "response_format": "pcm",
-            "task_type": self.task_type,
-            "stream": self.stream,
-            "speed": 1.0,
-            "temperature": 0.1,
-            "repetition_penalty": 1.2,
-        }
-
-        if self.task_type == "CustomVoice":
-            request["voice"] = self.voice
-        if self.task_type in ("CustomVoice", "VoiceDesign") and self.instructions:
-            request["instructions"] = self.instructions
-        if seed is not None:
-            request["seed"] = seed
-        return request
 
     async def _pcm_chunks(self, resp: aiohttp.ClientResponse) -> AsyncIterator[bytes]:
         content_type = resp.headers.get("content-type", "").lower()
@@ -198,6 +130,35 @@ class TTSClient:
             if buffer:
                 yield bytes(buffer)
 
+    async def _limit_audio_duration(
+        self,
+        chunks: AsyncIterator[bytes],
+    ) -> AsyncIterator[bytes]:
+        max_bytes = _pcm_bytes_for_seconds(self.max_duration_seconds)
+        if max_bytes <= 0:
+            async for chunk in chunks:
+                yield chunk
+            return
+
+        total_bytes = 0
+        async for chunk in chunks:
+            remaining = max_bytes - total_bytes
+            if remaining <= 0:
+                logger.warning(
+                    "Stopping TTS stream after %.2fs (max duration reached)",
+                    self.max_duration_seconds,
+                )
+                return
+            if len(chunk) > remaining:
+                yield bytes(chunk[:remaining])
+                logger.warning(
+                    "Stopping TTS stream after %.2fs (max duration reached)",
+                    self.max_duration_seconds,
+                )
+                return
+            yield chunk
+            total_bytes += len(chunk)
+
     def _decode_wav(self, audio: bytes) -> list[bytes]:
         import io
 
@@ -219,12 +180,10 @@ class TTSClient:
         )
         return [pcm[i : i + chunk_bytes] for i in range(0, len(pcm), chunk_bytes)]
 
-    def _task_type_from_model(self, model: str) -> str:
-        if model.endswith("-VoiceDesign"):
-            return "VoiceDesign"
-        if model.endswith("-Base"):
-            return "Base"
-        return "CustomVoice"
 
-    def _looks_like_instructions(self, voice: str) -> bool:
-        return " " in voice or "," in voice or "." in voice
+def _pcm_bytes_for_seconds(seconds: float) -> int:
+    samples = int(DEFAULT_QWEN_SAMPLE_RATE * max(0.0, seconds))
+    return samples * PCM_SAMPLE_WIDTH
+
+
+

@@ -1,0 +1,405 @@
+<html>
+  <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <title>The Witch Debug - Manual</title>
+        <script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
+        <style>
+            :root {
+                color-scheme: dark;
+                --bg: #101113;
+                --panel: #17191d;
+                --text: #e9eaec;
+                --muted: #989da6;
+                --line: #2b2f36;
+                --accent: #f0c36a;
+            }
+            * {
+                box-sizing: border-box;
+            }
+            body {
+                margin: 0;
+                background: var(--bg);
+                color: var(--text);
+                font:
+                    14px/1.45 system-ui,
+                    sans-serif;
+            }
+            main {
+                display: grid;
+                grid-template-columns: 250px 250px minmax(600px, 1fr);
+                grid-template-rows: auto auto;
+                gap: 16px;
+                padding: 16px;
+            }
+            .body {
+                display: flex;
+                flex-direction: column;   
+                align-items: center;      
+                gap: 10px;                
+                padding: 16px;
+            }
+            .top-box {
+                grid-row: 1;
+            }
+
+            .current-state-panel {
+                grid-column: 1 / 3;
+                grid-row: 2;
+            }
+            .state-machine-panel {
+                grid-column: 3;
+                grid-row: 1 / span 2;
+            }
+            .switcher {
+                display: flex;
+                gap: 10px;
+                padding: 12px 16px;
+                background: var(--panel);
+                border-bottom: 1px solid var(--line);
+            }
+            .panel {
+                border: 1px solid var(--line);
+                background: var(--panel);
+                border-radius: 8px;
+                overflow: hidden;
+            }
+            .head {
+                display: flex;
+                align-items: center;
+                gap: 8px;
+                height: 38px;
+                padding: 0 12px;
+                border-bottom: 1px solid var(--line);
+            }
+            .state {
+                color: var(--accent);
+                font:
+                    13px ui-monospace,
+                    monospace;
+            }
+            pre {
+                margin: 0;
+                padding: 10px 12px;
+                min-height: 100px;
+                max-height: 200px;
+                overflow: auto;
+                white-space: pre-wrap;
+                overflow-wrap: anywhere;
+                background: #111316;
+                font:
+                    12px ui-monospace,
+                    monospace;
+            }
+            .wide {
+                grid-column: 1 / -1;
+            }
+            button {
+                height: 30px;
+                border: 1px solid var(--line);
+                background: #20242a;
+                color: var(--text);
+                border-radius: 6px;
+                padding: 0 10px;
+                font: inherit;
+                font-size: 12px;
+                cursor: pointer;
+            }
+
+            button:hover {
+                background: #2a3038;
+            }
+            .graph-tools {
+                display: flex;
+                align-items: center;
+                gap: 4px;
+                margin-left: auto;
+            }
+            .graph-tools button {
+                min-width: 30px;
+                padding: 0 8px;
+            }
+            #graphZoom {
+                min-width: 46px;
+                color: var(--muted);
+                text-align: center;
+                font: 11px ui-monospace, monospace;
+            }
+            #graphViewport {
+                position: relative;
+                height: calc(100vh - 88px);
+                min-height: 600px;
+                overflow: hidden;
+                cursor: grab;
+                background-color: #090a0c;
+                touch-action: none;
+                user-select: none;
+            }
+            #graphViewport.panning {
+                cursor: grabbing;
+            }
+            #graphContent {
+                position: absolute;
+                inset: 0;
+            }
+            #graphContent svg {
+                display: block;
+                width: 100% !important;
+                height: 100% !important;
+                max-width: none !important;
+            }
+            @media (max-width: 1200px) {
+                main {
+                    grid-template-columns: 1fr 1fr;
+                }
+                .current-state-panel,
+                .state-machine-panel {
+                    grid-column: 1 / -1;
+                    grid-row: auto;
+                }
+                #graphViewport {
+                    height: 600px;
+                    min-height: 0;
+                }
+            }
+        </style>
+  </head>
+
+  <body>
+    <header class="switcher">
+        <button id="switchToDebug">Full Debug UI</button>
+    </header>
+        <main>
+
+                <section class="panel top-box">
+            <div class="head"><h2>Hand Events</h2></div>
+            <div class="body">
+                <button data-hand-event="hand_detected">Hand detected</button>
+                <button data-hand-event="hand_absent">Hand absent</button>
+                <button data-hand-event="hand_wrong_side">Wrong side</button>
+                <button data-hand-event="hand_not_fully_in_view">Not fully in view</button>
+                <button data-hand-event="hand_tilted">Hand tilted</button>
+            </div>
+        </section>
+
+        <section class="panel top-box">
+            <div class="head"><h2>Other Events</h2></div>
+            <div class="body">
+                <button data-person-event="person_detected">Person detected</button>
+                <button data-person-event="person_absent">Person absent</button>
+
+                <button data-animation-event="animation-event_done">Animation done</button>
+            </div>
+        </section>
+
+        <section class="panel top-box current-state-panel">
+            <div class="head"><h2>Current State</h2></div>
+            <div class="body">
+                <span id="currentState" class="state">-</span>
+                <button id="resetButton">Reset</button>
+            </div>
+        </section>
+
+        <section class="panel state-machine-panel">
+            <div class="head">
+                <h2>State Machine</h2>
+                <div class="graph-tools">
+                    <button id="graphZoomOut" title="Zoom out">-</button>
+                    <span id="graphZoom">100%</span>
+                    <button id="graphZoomIn" title="Zoom in">+</button>
+                    <button id="graphFit" title="Fit diagram">Fit</button>
+                </div>
+            </div>
+            <div id="graphViewport">
+                <div id="graphContent"></div>
+            </div>
+        </section>
+
+    </main>
+    <script>
+        const API = location.origin;
+        const $ = (id) => document.getElementById(id);
+        let currentState = "";
+        let graphRenderId = 0;
+        let graphPending = false;
+        const graphView = { scale: 1, x: 0, y: 0, initialized: false };
+        mermaid.initialize({
+            startOnLoad: false,
+            theme: "dark",
+            securityLevel: "loose",
+        });
+
+        fetch("/api/manual_mode/on", { method: "POST" });
+
+        async function json(path) {
+            return (await fetch(`${API}${path}`)).json();
+        }
+
+        async function updateState() {
+            const nextState = (await json("/api/state")).state || "-";
+            document.getElementById("currentState").textContent = nextState;
+        }
+
+        function applyGraphTransform() {
+            const viewport = $("graphViewport");
+            const svg = $("graphContent").querySelector("svg");
+            if (!svg) return;
+            svg.setAttribute(
+                "viewBox",
+                [
+                    -graphView.x / graphView.scale,
+                    -graphView.y / graphView.scale,
+                    viewport.clientWidth / graphView.scale,
+                    viewport.clientHeight / graphView.scale,
+                ].join(" "),
+            );
+            $("graphZoom").textContent = `${Math.round(graphView.scale * 100)}%`;
+        }
+
+        function zoomGraph(factor, clientX, clientY) {
+            const viewport = $("graphViewport");
+            const rect = viewport.getBoundingClientRect();
+            const px = (clientX ?? rect.left + rect.width / 2) - rect.left;
+            const py = (clientY ?? rect.top + rect.height / 2) - rect.top;
+            const next = Math.min(4, Math.max(0.1, graphView.scale * factor));
+            const ratio = next / graphView.scale;
+            graphView.x = px - (px - graphView.x) * ratio;
+            graphView.y = py - (py - graphView.y) * ratio;
+            graphView.scale = next;
+            applyGraphTransform();
+        }
+
+        function fitGraph() {
+            const viewport = $("graphViewport");
+            const svg = $("graphContent").querySelector("svg");
+            if (!svg) return;
+            const width = Number(svg.dataset.graphWidth);
+            const height = Number(svg.dataset.graphHeight);
+            const padding = 40;
+            graphView.scale = Math.max(
+                0.1,
+                Math.min(
+                    1,
+                    (viewport.clientWidth - padding * 2) / width,
+                    (viewport.clientHeight - padding * 2) / height,
+                ),
+            );
+            graphView.x = (viewport.clientWidth - width * graphView.scale) / 2;
+            graphView.y = (viewport.clientHeight - height * graphView.scale) / 2;
+            graphView.initialized = true;
+            applyGraphTransform();
+        }
+
+        function initGraphNavigation() {
+            const viewport = $("graphViewport");
+            let pan = null;
+            viewport.addEventListener("wheel", (event) => {
+                event.preventDefault();
+                zoomGraph(Math.exp(-event.deltaY * 0.0015), event.clientX, event.clientY);
+            }, { passive: false });
+            viewport.addEventListener("pointerdown", (event) => {
+                pan = { x: event.clientX, y: event.clientY };
+                viewport.setPointerCapture(event.pointerId);
+                viewport.classList.add("panning");
+            });
+            viewport.addEventListener("pointermove", (event) => {
+                if (!pan) return;
+                graphView.x += event.clientX - pan.x;
+                graphView.y += event.clientY - pan.y;
+                pan = { x: event.clientX, y: event.clientY };
+                applyGraphTransform();
+            });
+            const stopPan = () => {
+                pan = null;
+                viewport.classList.remove("panning");
+            };
+            viewport.addEventListener("pointerup", stopPan);
+            viewport.addEventListener("pointercancel", stopPan);
+            viewport.addEventListener("dblclick", fitGraph);
+            new ResizeObserver(() => applyGraphTransform()).observe(viewport);
+            $("graphZoomOut").onclick = () => zoomGraph(0.8);
+            $("graphZoomIn").onclick = () => zoomGraph(1.25);
+            $("graphFit").onclick = fitGraph;
+        }
+
+        async function loadGraph() {
+            if (graphPending) return;
+            graphPending = true;
+            setTimeout(async () => {
+                graphPending = false;
+                const div = $("graphContent");
+                const renderId = ++graphRenderId;
+                const { graph } = await json("/api/state-machine-graph");
+                try {
+                    const rendered = await mermaid.render(
+                        `g${Date.now()}-${renderId}`,
+                        graph,
+                    );
+                    if (renderId === graphRenderId) {
+                        div.innerHTML = rendered.svg;
+                        const svg = div.querySelector("svg");
+                        const box = svg.viewBox.baseVal;
+                        svg.dataset.graphWidth = box.width;
+                        svg.dataset.graphHeight = box.height;
+                        svg.setAttribute("preserveAspectRatio", "none");
+                        graphView.initialized ? applyGraphTransform() : fitGraph();
+                    }
+                } catch {
+                    if (renderId === graphRenderId) div.textContent = graph;
+                }
+            }, 100);
+        }
+
+        document.addEventListener("DOMContentLoaded", () => {
+            initGraphNavigation();
+            updateState();
+            loadGraph();
+
+            document.getElementById("resetButton").onclick = async () => {
+                await fetch(`${API}/api/reset`, { method: "POST" });
+                await updateState();
+                await loadGraph();
+            };
+
+            document.getElementById("switchToDebug").onclick = () => {
+                window.location.href = "/debug_ui.html";
+            };
+
+            document.querySelectorAll("[data-hand-event]").forEach(btn => {
+                btn.onclick = async () => {
+                    const ev = btn.dataset.handEvent;
+                    await fetch(`${API}/api/sim_hand_event/${ev}`, { method: "POST" });
+                    await updateState();
+                    await loadGraph();
+                };
+            });
+
+            document.querySelectorAll("[data-person-event]").forEach(btn => {
+                btn.onclick = async () => {
+                    const ev = btn.dataset.personEvent;
+                    await fetch(`${API}/api/sim_person_event/${ev}`, { method: "POST" });
+                    await updateState();
+                    await loadGraph();
+                };
+            });
+
+            document.querySelectorAll("[data-animation-event]").forEach(btn => {
+                btn.onclick = async () => {
+                    const ev = btn.dataset.animationEvent;
+                    await fetch(`${API}/api/sim_animation_event`, { method: "POST" });
+                    await updateState();
+                    await loadGraph();
+                };
+            });
+
+            
+        });
+
+        window.addEventListener("beforeunload", () => {
+            fetch("/api/manual_mode/off", { method: "POST" });
+        });
+    
+    </script>
+  </body>
+
+</html>

@@ -1,6 +1,7 @@
-# Qwen3-TTS deploy tuned for streaming speech generation.
-# Code2Wav is patched from scripts/tts_python_patches to tolerate malformed async tail chunks.
+# Unified Qwen3-TTS deploy config — VoiceDesign and inference.
+# No limits on output — truncation is the caller's responsibility.
 async_chunk: true
+custom_voice_dir: ArtificialIntelligence/servers/tts/custom_voices
 
 connectors:
   connector_of_shared_memory:
@@ -18,37 +19,35 @@ connectors:
 stages:
   - stage_id: 0
     max_num_seqs: 1
-    gpu_memory_utilization: 0.22
+    gpu_memory_utilization: 0.3
     trust_remote_code: true
     enable_prefix_caching: false
     async_scheduling: true
-    max_num_batched_tokens: 512
-    max_model_len: 2048
     devices: "0"
     output_connectors:
       to_stage_1: connector_of_shared_memory
     default_sampling_params:
-      temperature: 0.35
+      temperature: 0.8
       top_p: 1.0
-      top_k: 20
-      max_tokens: 2048
+      top_k: 50
       seed: 42
-      repetition_penalty: 1.02
+      repetition_penalty: 1.15
+      stop_token_ids: [2150]
+      detokenize: false
+      max_tokens: 4096
     subtalker_sampling_params:
       do_sample: true
-      temperature: 0.35
-      top_k: 20
+      temperature: 0.8
+      top_k: 50
       top_p: 1.0
 
   - stage_id: 1
     max_num_seqs: 1
-    gpu_memory_utilization: 0.22
+    gpu_memory_utilization: 0.3
     enforce_eager: true
     trust_remote_code: true
     enable_prefix_caching: false
     async_scheduling: true
-    max_num_batched_tokens: 32768
-    max_model_len: 32768
     devices: "0"
     input_connectors:
       from_stage_0: connector_of_shared_memory
@@ -56,7 +55,6 @@ stages:
       temperature: 0.0
       top_p: 1.0
       top_k: -1
-      max_tokens: 32768
       seed: 42
       repetition_penalty: 1.0
 

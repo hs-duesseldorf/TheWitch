@@ -6,101 +6,181 @@ A digital installation featuring a virtual fortune teller that reads visitors' p
 
 ```mermaid
 flowchart LR
-    ip[ImageProcessing<br/>Camera + Hand Tracking]
-    ai[AI Service<br/>State Machine + Orchestration]
-    llm[LLM Server<br/>Ollama]
-    tts[TTS Server<br/>vLLM-Omni]
-    debug[Debug UI<br/>http://localhost:10030/]
-    unreal[3D / Unreal]
+    ip[Image Processing<br/>camera, hand, seat]
+    ai[AI Orchestrator<br/>state machine + websocket hub]
+    models[LLM + TTS Services]
+    unreal[Unreal 3D Client]
+    debug[Debug UI]
+    audio[Speakers / VB-Cable]
 
-    ip <-- "WebSocket /ws/ip-ai" --> ai
-    ip <-- "WebSocket /ws/ip-ai-video" --> ai
-    ip <-- "WebSocket /ws/ip-roi" --> ai
-
-    debug -- "HTTP /api/*" --> ai
-    ai -- "WebSocket /ws/ip-ai" --> debug
-    ai -- "WebSocket /ws/ai-3d" --> debug
-    ai -- "WebSocket /ws/ai-3d-video" --> debug
-    ai -- "WebSocket /ws/ai-3d-roi" --> debug
-
-    unreal <-- "WebSocket /ws/ai-3d" --> ai
-    unreal <-- "WebSocket /ws/ai-3d-video" --> ai
-    unreal <-- "WebSocket /ws/ai-3d-roi" --> ai
-
-    ai -- "Ollama /api/chat" --> llm
-    ai -- "HTTP /v1/audio/speech/stream" --> tts
-    ai -- "audio" --> speakers
-
-    speakers[Speakers + VB-Cable]
+    ip -- "events + video" --> ai
+    ai -- "scene transitions" --> unreal
+    ai -- "debug streams" --> debug
+    debug -- "manual controls" --> ai
+    ai -- "prompts + speech requests" --> models
+    models -- "fortune text + audio" --> ai
+    ai -- "audio playback" --> audio
 ```
 
 ## Quick Start
 
-Prerequisites: Python with `venv` support, camera/sensor access on the host.
-
-Run the full stack with witch-compose:
+## 1. Install Requirements (once)
 
 ```bash
-./witch-compose up
+https://docs.astral.sh/uv/getting-started/installation
 ```
 
-The orchestrator creates missing venvs and installs requirements automatically.
-
-Run selected services:
+## 2. Create the Docker connection (once)
 
 ```bash
-./witch-compose up ai ip
-./witch-compose up llm tts
+docker context create my-compute-machine --docker "host=ssh://compassionate_mestorf@10.50.60.111"
 ```
 
-Open the debug UI:
+## 3. Enter the Server Container
+
+```bash
+docker --context my-compute-machine exec -it compute_container_compassionate_mestorf /bin/bash
+```
+
+After joining the container, always do:
+
+```bash
+cd TheWitch
+```
+
+## 4. tmux Session (IMPORTANT)
+
+We all use the SAME shared tmux session so the server processes stay alive even after closing the terminal.
+
+### Create the session (if it does not exist)
+
+```bash
+tmux new -s thewitch
+```
+
+### Join the shared session
+
+```bash
+tmux attach -t thewitch
+```
+
+### See existing sessions
+
+```bash
+tmux ls
+```
+
+Inside tmux, anything you start keeps running after closing the window.
+
+Use:
+
+```bash
+Ctrl + C
+```
+
+to stop running services.
+
+## 5. Start the Server Services
+
+Inside `TheWitch` folder:
+
+```bash
+./witch-compose llm tts
+```
+
+This starts:
+
+- `llm` → Ollama server
+- `tts` → vLLM-Omni server
+
+These stay running inside tmux for everyone.
+
+## 6. Run Local Services
+
+On your own computer, only run:
+
+### Mac/Linux
+
+```bash
+./witch-compose ai ip
+```
+
+### Windows (Terminal, NOT PowerShell)
+
+```powershell
+witch-compose.cmd ai ip
+```
+
+This starts:
+
+- `ai` → orchestration/state machine
+- `ip` → camera + hand tracking
+
+## 7. `.env` Port Setup
+
+```dotenv
+# Other ports
+WITCH_AI_UI_PORT=8080
+WITCH_AI_PORT=8081
+
+# Service ports
+# Put these on local pc
+#WITCH_LLM_PORT=33533
+#WITCH_TTS_PORT=41333
+# Put these on server
+WITCH_LLM_PORT=10032
+WITCH_TTS_PORT=10033
+```
+
+## 8. Webcam
+
+In `.env`:
+
+```dotenv
+WITCH_CAMERA_SOURCE=0
+```
+
+- `0` → integrated webcam
+- `1` → USB webcam
+
+## 9. Unreal Engine Connection
+
+Audio goes to VB-Cable which Unreal can capture as input.
 
 ```text
-http://localhost:10030/
+# Same PC as AI, native Unreal:
+ws://localhost:8081/ws/ai-3d
+
+# Different PC:
+ws://<AI-machine-LAN-IP>:8081/ws/ai-3d
 ```
 
-For a split setup, run `ai` on the desktop and `ip` on the Jetson or camera machine. Set `WITCH_AI_HOST` in `.env` on the camera machine to the desktop address.
+`/ws/ai-3d` carries `scene_command`, `analysis_started`, `analysis_result`, and `error` events.
+Unreal can acknowledge the currently pending AI event with `{"type":"event_done"}`.
+
+## Useful Commands
+
+### Check GPU usage
 
 ```bash
-./witch-compose up ip
+nvidia-smi
 ```
 
-## Services
+Use this to see:
 
-- `llm`: Ollama server for LLM inference
-- `tts`: vLLM-Omni server for text-to-speech
-- `ai`: state machine, LLM/TTS orchestration, WebSocket API, debug UI
-- `ip`: camera, hand tracking, palm ROI, and seat sensor client
+- which AI models are running
+- GPU memory usage
+- process IDs (PIDs)
 
-## Configure
+This is useful if the GPU is full or old processes are still running.
 
-`.env` is the shared configuration file. Local Python loads it with `python-dotenv`; `witch-compose` also injects it into child processes.
+### Stop a stuck process
 
-For an all-local run on one machine:
-
-```dotenv
-WITCH_LLM_HOST=localhost
-WITCH_TTS_HOST=localhost
-WITCH_AI_HOST=localhost
+```bash
+kill <PID>
 ```
 
-For mixed machines, Jetson, or LAN setups, use an address reachable from every service that needs it:
-
-```dotenv
-WITCH_LLM_HOST=192.168.1.20
-WITCH_TTS_HOST=192.168.1.21
-WITCH_AI_HOST=192.168.1.10
-```
-
-The app derives service URLs from those host and port values:
-
-```dotenv
-LLM: http://${WITCH_LLM_HOST}:${WITCH_LLM_PORT}
-TTS: http://${WITCH_TTS_HOST}:${WITCH_TTS_PORT}
-AI: ws://${WITCH_AI_HOST}:${WITCH_AI_PORT}
-```
-
-Do not use `localhost` for cross-machine connections. Use the LAN address of the machine running that service.
+You get the PID from `nvidia-smi`.
 
 ### Local Audio
 
@@ -114,128 +194,6 @@ For Linux with PipeWire/PulseAudio compatibility, create a persistent null sink:
 ./scripts/setup_linux_virtual_audio.sh
 ```
 
-This writes:
-
-```text
-~/.config/pipewire/pipewire-pulse.conf.d/10-witch-virtual-cable.conf
-```
-
-and loads a sink named `WitchVirtualCable` immediately. The capture source exposed by PipeWire is:
-
-```text
-WitchVirtualCable.monitor
-```
-
-Use `WitchVirtualCable.monitor` in Unreal or any other receiver that should listen to the AI voice. The AI process opens the operating system default output plus `WitchVirtualCable` when it is present, so Fedora Settings still controls the physical speaker/headphone output.
-
-Verify the setup:
-
-```bash
-pactl list short sinks | grep WitchVirtualCable
-pactl list short sources | grep WitchVirtualCable.monitor
-```
-
-If PipeWire/PulseAudio is restarted before the sink appears, restart the user service:
-
-```bash
-systemctl --user restart pipewire-pulse
-```
-
-Audio plays automatically via sounddevice.
-
-
-## Local Python
-
-Prerequisites:
-
-- `uv` available to create Python 3.12 venvs
-- Camera and sensor access configured for the host machine
-- `.env` hosts set to values reachable by the local services, usually `localhost` for an all-local run
-
-Create the venvs once:
-
-```bash
-./witch-compose --build
-```
-
-Start the services together:
-
-```bash
-./witch-compose up
-```
-
-Or start them in separate terminals:
-
-Linux:
-
-`llm`:
-
-```bash
-source ArtificialIntelligence/servers/llm/.venv/bin/activate
-python ArtificialIntelligence/servers/llm/run.py
-```
-
-`tts`:
-
-```bash
-source ArtificialIntelligence/servers/tts/.venv/bin/activate
-python ArtificialIntelligence/servers/tts/run.py
-```
-
-The TTS launcher automatically installs the tracked Qwen3-TTS compatibility
-patches into that machine's TTS venv before starting `vllm-omni`. To install
-or inspect the hook manually:
-
-```bash
-python scripts/patch_tts_server_venv.py
-```
-
-`ai`:
-
-```bash
-source ArtificialIntelligence/.venv/bin/activate
-python -m ArtificialIntelligence.main
-```
-
-`ip`:
-
-```bash
-source ImageProcessing/.venv/bin/activate
-python -m ImageProcessing.main
-```
-
-Windows PowerShell:
-
-`llm`:
-
-```powershell
-cd ArtificialIntelligence\servers\llm
-.venv\Scripts\Activate.ps1
-python ArtificialIntelligence\servers\llm\run.py
-```
-
-`tts`:
-
-```powershell
-cd ArtificialIntelligence\servers\tts
-.venv\Scripts\Activate.ps1
-python ArtificialIntelligence\servers\tts\run.py
-```
-
-`ai`:
-
-```powershell
-ArtificialIntelligence\.venv\Scripts\Activate.ps1
-python -m ArtificialIntelligence.main
-```
-
-`ip`:
-
-```powershell
-ImageProcessing\.venv\Scripts\Activate.ps1
-python -m ImageProcessing.main
-```
-
 ## Seat Sensor
 
 The `ip` service publishes a `person_detected` event when the VL53L0X seat sensor detects someone sitting down. For local testing without sensor hardware:
@@ -246,30 +204,49 @@ WITCH_SEAT_SENSOR_OVERRIDE=true
 
 ## Custom TTS Voice
 
-Qwen3-TTS uses the built-in `vivian` CustomVoice speaker by default.
+The public TTS endpoint accepts only the text input. Model selection, voice, language, fallback voice description, fixed reference text, and streaming settings are configured server-side in `.env`.
 
-## Unreal Engine Connection
+To prevent a broken model stream from blocking scene progression indefinitely,
+the client terminates the upstream response after sustained near-silent output
+following speech. Valid shorter pauses are buffered and played if speech resumes:
 
-Audio goes to VB-Cable which Unreal can capture as input.
-
-```text
-# Same PC as AI, native Unreal:
-ws://localhost:10031/ws/ai-3d
-
-# Different PC:
-ws://<AI-machine-LAN-IP>:10031/ws/ai-3d
-
-# AI video and ROI streams:
-ws://<AI-machine-LAN-IP>:10031/ws/ai-3d-video
-ws://<AI-machine-LAN-IP>:10031/ws/ai-3d-roi
+```dotenv
+WITCH_TTS_MAX_DURATION_SECONDS=120
 ```
 
-## Useful Commands
+The anchored Base voice is stored as an offline-precomputed ICL profile:
 
 ```bash
-./witch-compose up
-./witch-compose up ai ip
-./witch-compose up llm tts
-./witch-compose --build
-./witch-compose kill
+ArtificialIntelligence/servers/tts/custom_voices/witch.safetensors
 ```
+
+At startup, the TTS host:
+
+- Starts the Qwen3-TTS Base model on a private internal port.
+- Loads the precomputed `witch` profile containing its speaker embedding and reference codec tokens.
+- Exposes a text-only gateway on `WITCH_TTS_PORT`.
+- Uses the stored voice for every request without loading or sending reference audio.
+
+If no complete precomputed profile or reference recording exists, the host uses the VoiceDesign model with `WITCH_TTS_VOICE_DESCRIPTION`.
+
+To create a new anchored voice, first stop the normal `tts` service and configure `WITCH_TTS_VOICE_DESCRIPTION` and `WITCH_TTS_ANCHOR_TEXT` in `.env`. VoiceDesign follows the speaking style and pace described by `WITCH_TTS_VOICE_DESCRIPTION`.
+
+Generate the reference recording with VoiceDesign:
+
+```bash
+./witch-compose tts-design
+```
+
+This creates and validates:
+
+```text
+ArtificialIntelligence/servers/tts/custom_voices/voice_anchor.wav
+```
+
+Then start the normal TTS service:
+
+```bash
+./witch-compose tts
+```
+
+At startup, `tts` extracts the speaker embedding and reference codec tokens from the recording, writes `custom_voice_manifest.json` and `witch.safetensors`, and starts the anchored Base voice.
