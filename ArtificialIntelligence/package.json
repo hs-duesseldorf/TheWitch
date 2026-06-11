@@ -1,26 +1,25 @@
 {
   "scenes": {
     "scene_0_welcome": {
-      "base_text": "Ich spüre, dass du näher kommst. Tritt ein und setz dich zu mir.",
-      "examples": [
-        "Komm näher. Ich habe deine Ankunft bereits gespürt.",
+      "base_texts": [
+        "Ich spüre, dass du näher kommst. Tritt ein und setz dich zu mir.",
+        "Komm näher und setz dich mir gegenüber. Ich habe deine Ankunft bereits gespürt.",
         "Tritt ein und nimm Platz. Die Zeichen haben dich zu mir geführt.",
         "Setz dich zu mir. Schon seit einiger Zeit wusste ich, dass du kommen würdest."
       ]
     },
 
     "scene_1_seated": {
-      "base_text": "Bleib sitzen und mach es dir bequem.",
-      "examples": [
-        "Bleib ruhig sitzen und finde eine bequeme Haltung.",
-        "Lass die Hektik hinter dir und mach es dir bequem.",
-        "Verweile einen Moment. Richte dich bequem ein."
+      "base_texts": [
+        "Bleib ruhig sitzen und finde eine entspannte Haltung.",
+        "Lass die Hektik hinter dir und mach es dir gemütlich.",
+        "Nimm dir einen Augenblick. Lass Ruhe einkehren und mach es dir bequem."
       ]
     },
 
     "scene_2_intro": {
-      "base_text": "Ich bin die Hexe dieses Ortes. Seit langer Zeit lese ich, was anderen verborgen bleibt: Spuren der Vergangenheit, Kräfte der Gegenwart und Wege, die noch vor dir liegen. Heute werde ich in deiner Hand nach diesen Zeichen suchen. Lege nun deine Hand vollständig in den Stein und lass sie dort vor mir ruhen.",
-      "examples": [
+      "base_texts": [
+        "Ich bin die Hexe dieses Ortes. Seit langer Zeit lese ich, was anderen verborgen bleibt: Spuren der Vergangenheit, Kräfte der Gegenwart und Wege, die noch vor dir liegen. Heute werde ich in deiner Hand nach diesen Zeichen suchen. Lege nun deine Hand vollständig in den Stein und lass sie dort vor mir ruhen.",
         "Seit vielen Jahren deute ich Zeichen, die den meisten verborgen bleiben. Heute werde ich sie in deiner Hand suchen. Lege nun deine Hand vollständig in den Stein. Dort kann ich die Zeichen klar erkennen.",
         "Vergangenheit, Gegenwart und das, was noch kommen mag, hinterlassen Spuren. Deine Hand trägt mehr davon, als du ahnst. Lege nun deine Hand vollständig in den Stein und lass sie dort ruhen, dann wird sich auch dein Schicksal offenbaren.",
         "Ich bin die Hexe dieses Ortes. Was anderen verborgen bleibt, zeigt sich mir in Zeichen, Linien und Schatten. Heute lese ich deine Hand. Lege sie vollständig in den Stein und halte sie ruhig.",
@@ -30,16 +29,16 @@
     },
 
     "scene_4_handscan": {
-      "base_text": "Gut. Ich habe sie erfasst. Halte jetzt still und bewege keinen Finger.",
-      "examples": [
-        "Sehr gut. Bleib nun vollkommen ruhig.",
+      "base_texts": [
+        "Gut. Ich kann sie nun klar sehen. Halte jetzt still und bewege keinen Finger.",
+        "Sehr gut, jetzt kann ich alles sehen was ich brauche. Bleib nun vollkommen ruhig und lass deine Hand still liegen.",
         "Die ersten Zeichen sind sichtbar. Bewege deine Hand jetzt nicht mehr."
       ]
     },
 
     "scene_4_handscan_done": {
-      "base_text": "Die Zeichen deiner Hand sind erfasst. Du kannst deine Hand jetzt aus dem Stein nehmen.",
-      "examples": [
+      "base_texts": [
+        "Ich habe die Zeichen deiner Hand nun fertig gelesen. Du kannst deine Hand jetzt aus dem Stein nehmen.",
         "Ich habe gesehen, was ich sehen musste. Nimm deine Hand nun heraus.",
         "Die Zeichen sind erfasst. Du kannst deine Hand aus dem Stein lösen.",
         "Genug. Die Zeichen liegen nun offen vor mir. Nimm deine Hand zurück."
@@ -47,8 +46,8 @@
     },
 
     "scene_5_analysis": {
-      "base_text": "Ich lese nun, was in den Linien deiner Hand verborgen liegt.",
-      "examples": [
+      "base_texts": [
+        "Ich lese nun, was in den Linien deiner Hand verborgen liegt.",
         "Nun werde ich deuten, was deine Linien offenbaren.",
         "Die Zeichen liegen vor mir. Jetzt beginne ich ihre Bedeutung dir zu offenbaren.",
         "Lass mich dir sagen, was deine Hand über dich erzählt."
@@ -56,8 +55,8 @@
     },
 
     "scene_6_outro": {
-      "base_text": "Es ist vollbracht. Für diesen Augenblick ist alles gesagt. Geh weiter mit wachem Blick.",
-      "examples": [
+      "base_texts": [
+        "Es ist vollbracht. Für diesen Augenblick ist alles gesagt. Geh weiter mit wachem Blick.",
         "Meine Deutung endet hier. Was du daraus machst, liegt nun bei dir.",
         "Für heute sind die Zeichen gesprochen. Geh deinen Weg aufmerksam weiter.",
         "Mehr gibt es in diesem Moment nicht zu sagen. Bewahre die Erkenntnisse gut auf."
@@ -65,8 +64,8 @@
     },
 
     "scene_debug_shot_1_hand_absent": {
-      "base_text": "Ich sehe deine Hand nicht. Lege sie vollständig in den Stein.",
-      "examples": [
+      "base_texts": [
+        "Ich sehe deine Hand nicht. Lege sie vollständig in den Stein.",
         "Deine Hand entzieht sich meinem Blick. Lege sie in den Stein.",
         "Ich kann deine Hand nicht sehen. Platziere sie vollständig vor mir.",
         "Zeig mir deine Hand, damit ich die Zeichen lesen kann."
@@ -74,8 +73,8 @@
     },
 
     "scene_debug_shot_2_hand_tilted": {
-      "base_text": "Lege deine Hand flach hin. Die Handfläche muss ruhig nach oben zeigen.",
-      "examples": [
+      "base_texts": [
+        "Lege deine Hand flach hin. Die Handfläche muss ruhig nach oben zeigen.",
         "Dreh deine Hand so, dass die Handfläche nach oben zeigt.",
         "Lege die Hand ruhig und flach, mit der Handfläche nach oben, in den Stein.",
         "Die Linien müssen sichtbar sein. Richte deine Handfläche nach oben."
@@ -83,8 +82,8 @@
     },
 
     "scene_debug_shot_3_hand_wrong_side": {
-      "base_text": "Zeig mir nicht den Handrücken, sondern deine offene Handfläche.",
-      "examples": [
+      "base_texts": [
+        "Zeig mir nicht den Handrücken, sondern deine offene Handfläche.",
         "Ich muss deine Handfläche sehen, nicht den Handrücken.",
         "Dreh deine Hand um und zeige mir die Linien.",
         "Nur die offene Handfläche offenbart die Zeichen, die ich suche."
@@ -92,8 +91,8 @@
     },
 
     "scene_debug_shot_4_hand_not_fully_in_view": {
-      "base_text": "Ich kann deine Hand noch nicht vollständig sehen. Lege sie ganz flach in den Stein.",
-      "examples": [
+      "base_texts": [
+        "Ich kann deine Hand noch nicht vollständig sehen. Lege sie ganz flach in den Stein.",
         "Ein Teil deiner Hand liegt noch außerhalb meines Blicks.",
         "Lege die Hand vollständig und flach in den Stein.",
         "Ich brauche freie Sicht auf die gesamte Handfläche."

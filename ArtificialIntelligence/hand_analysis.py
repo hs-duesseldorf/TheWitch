@@ -1,6 +1,7 @@
 import json
 import math
 import logging
+import random
 from functools import lru_cache
 from pathlib import Path
 from typing import Any, Dict
@@ -10,6 +11,9 @@ from shared.events import HandEvent, Scene
 ELEMENTS = ["holz", "feuer", "erde", "metall", "wasser"]
 logger = logging.getLogger(__name__)
 PACKAGE_PATH = Path(__file__).resolve().parent / "package.json"
+
+_LAST_SCENE_BASE_TEXT: dict[str, str] = {}
+_CURRENT_SCENE_BASE_TEXT: dict[str, str] = {}
 
 _HAND_ANALYSIS_SYSTEM_PROMPT = (
     "/no_think\n"
@@ -330,17 +334,42 @@ def build_scene_prompt(
 def get_scene_base_text(scene: Scene | str) -> str | None:
     scene_name = scene.value if isinstance(scene, Scene) else scene
     scene_entry = load_content_package().get("scenes", {}).get(scene_name)
-    return _entry_base_text(scene_entry)
 
+    if isinstance(scene_entry, str):
+        chosen = scene_entry.strip() or None
+        if chosen:
+            _CURRENT_SCENE_BASE_TEXT[scene_name] = chosen
+        return chosen
 
-def _entry_base_text(entry: Any) -> str | None:
-    if isinstance(entry, str):
-        return entry.strip() or None
-    
-    if isinstance(entry, dict):
-        value = entry.get("base_text")
-        if isinstance(value, str):
-            return value.strip() or None
+    if not isinstance(scene_entry, dict):
+        return None
+
+    base_texts = scene_entry.get("base_texts")
+    if isinstance(base_texts, list):
+        candidates = [
+            item.strip()
+            for item in base_texts
+            if isinstance(item, str) and item.strip()
+        ]
+
+        if candidates:
+            last = _LAST_SCENE_BASE_TEXT.get(scene_name)
+            available = [item for item in candidates if item != last]
+
+            chosen = random.choice(available or candidates)
+
+            _LAST_SCENE_BASE_TEXT[scene_name] = chosen
+            _CURRENT_SCENE_BASE_TEXT[scene_name] = chosen
+
+            return chosen
+
+    base_text = scene_entry.get("base_text")
+    if isinstance(base_text, str):
+        chosen = base_text.strip() or None
+        if chosen:
+            _CURRENT_SCENE_BASE_TEXT[scene_name] = chosen
+        return chosen
+
     return None
 
 
@@ -351,15 +380,29 @@ def get_scene_examples(scene: Scene | str) -> list[str]:
     if not isinstance(scene_entry, dict):
         return []
 
-    examples = scene_entry.get("examples", [])
-    if not isinstance(examples, list):
-        return []
+    examples: list[str] = []
 
-    return [
-        item.strip()
-        for item in examples
-        if isinstance(item, str) and item.strip()
-    ]
+    base_texts = scene_entry.get("base_texts")
+    if isinstance(base_texts, list):
+        current_base = _CURRENT_SCENE_BASE_TEXT.get(scene_name)
+
+        examples.extend(
+            item.strip()
+            for item in base_texts
+            if isinstance(item, str)
+            and item.strip()
+            and item.strip() != current_base
+        )
+
+    extra_examples = scene_entry.get("examples")
+    if isinstance(extra_examples, list):
+        examples.extend(
+            item.strip()
+            for item in extra_examples
+            if isinstance(item, str) and item.strip()
+        )
+
+    return examples
 
 
 def analyze_hand_event(hand_event: HandEvent | None) -> dict[str, Any] | None:
