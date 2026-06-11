@@ -12,8 +12,8 @@ ELEMENTS = ["holz", "feuer", "erde", "metall", "wasser"]
 logger = logging.getLogger(__name__)
 PACKAGE_PATH = Path(__file__).resolve().parent / "package.json"
 
-_LAST_SCENE_BASE_TEXT: dict[str, str] = {}
 _CURRENT_SCENE_BASE_TEXT: dict[str, str] = {}
+_SCENE_BASE_TEXT_BAGS: dict[str, list[str]] = {}
 
 _HAND_ANALYSIS_SYSTEM_PROMPT = (
     "/no_think\n"
@@ -389,15 +389,7 @@ def get_scene_base_text(scene: Scene | str) -> str | None:
         ]
 
         if candidates:
-            last = _LAST_SCENE_BASE_TEXT.get(scene_name)
-            available = [item for item in candidates if item != last]
-
-            chosen = random.choice(available or candidates)
-
-            _LAST_SCENE_BASE_TEXT[scene_name] = chosen
-            _CURRENT_SCENE_BASE_TEXT[scene_name] = chosen
-
-            return chosen
+            return _next_from_shuffle_bag(scene_name, candidates)
 
     base_text = scene_entry.get("base_text")
     if isinstance(base_text, str):
@@ -439,6 +431,24 @@ def get_scene_examples(scene: Scene | str) -> list[str]:
         )
 
     return examples
+
+
+def _next_from_shuffle_bag(scene_name: str, candidates: list[str]) -> str:
+    bag = _SCENE_BASE_TEXT_BAGS.get(scene_name, [])
+
+    if not bag or set(bag) - set(candidates):
+        bag = candidates[:]
+        random.shuffle(bag)
+
+        last = _CURRENT_SCENE_BASE_TEXT.get(scene_name)
+        if last and len(bag) > 1 and bag[-1] == last:
+            bag[0], bag[-1] = bag[-1], bag[0]
+
+    chosen = bag.pop()
+    _SCENE_BASE_TEXT_BAGS[scene_name] = bag
+    _CURRENT_SCENE_BASE_TEXT[scene_name] = chosen
+
+    return chosen
 
 
 def analyze_hand_event(hand_event: HandEvent | None) -> dict[str, Any] | None:
