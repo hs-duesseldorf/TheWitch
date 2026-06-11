@@ -72,8 +72,8 @@ TRANSITIONS = [
     _transition(PersonTrigger.DETECTED.value, Scene.SCENE1.value, Scene.SCENE1.value),
     _transition(PersonTrigger.SEATED.value, Scene.SCENE0.value, Scene.SCENE1.value),
     _transition(PersonTrigger.SEATED.value, Scene.SCENE1.value, Scene.SCENE2.value),
-    _transition(PersonTrigger.ABSENT.value, "*", Scene.SCENE7.value, conditions="_is_not_outro_or_idle"),
-    _transition(PersonTrigger.ABSENT.value, Scene.SCENE7.value, Scene.SCENE0.value),
+    # _transition(PersonTrigger.ABSENT.value, "*", Scene.SCENE7.value, conditions="_is_not_outro_or_idle"),
+    # _transition(PersonTrigger.ABSENT.value, Scene.SCENE7.value, Scene.SCENE0.value),
 
     # Correct hand — advance
     _transition(HandTrigger.DETECTED.value, Scene.SCENE4.value, Scene.SCENE5.value),
