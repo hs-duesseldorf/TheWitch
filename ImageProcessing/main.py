@@ -4,6 +4,7 @@ import logging
 import os
 import time
 from contextlib import suppress
+import Jetson.GPIO as GPIO
 
 from dotenv import load_dotenv
 
@@ -37,8 +38,13 @@ def main() -> None:
         roi_client=roi_client,
     )
     seat_monitor = SeatPresenceMonitor(event_client=event_client)
+    led_pin = int(os.environ["WITCH_LED_PIN"])
 
     try:
+        GPIO.setmode(GPIO.BOARD)
+        GPIO.setup(led_pin, GPIO.OUT)
+        GPIO.output(led_pin, GPIO.LOW)
+
         event_client.start()
         video_client.start()
         roi_client.start()

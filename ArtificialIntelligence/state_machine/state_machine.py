@@ -48,17 +48,30 @@ _DBG = [
 STATE_DEFS = [
     StateDef(state=Scene.SCENE0, description="Idle"),
     StateDef(state=Scene.SCENE1, description="Welcome"),
-    StateDef(state=Scene.SCENE2, description="Seated greeting", auto_trigger="seated_done"),
+    StateDef(
+        state=Scene.SCENE2, description="Seated greeting", auto_trigger="seated_done"
+    ),
     StateDef(state=Scene.SCENE3, description="Witch intro", auto_trigger="intro_done"),
     StateDef(state=Scene.SCENE4, description="Awaiting hand"),
-    StateDef(state=Scene.SCENE5, description="Handscan", auto_trigger="scan_complete", hand_locked=True),
+    StateDef(
+        state=Scene.SCENE5,
+        description="Handscan",
+        auto_trigger="scan_complete",
+        hand_locked=True,
+    ),
     StateDef(
         state=Scene.HAND_REMOVAL,
         description="Handscan complete; visitor may remove hand",
         auto_trigger="hand_removal_done",
         hand_locked=True,
     ),
-    StateDef(state=Scene.SCENE6, description="Analysis", auto_trigger="analysis_done", is_analysis=True, hand_locked=True),
+    StateDef(
+        state=Scene.SCENE6,
+        description="Analysis",
+        auto_trigger="analysis_done",
+        is_analysis=True,
+        hand_locked=True,
+    ),
     StateDef(state=Scene.SCENE7, description="Outro", hand_locked=True),
     StateDef(state=Scene.DBG_ABSENT, description="Debug: hand absent"),
     StateDef(state=Scene.DBG_TILTED, description="Debug: hand tilted"),
@@ -72,25 +85,68 @@ TRANSITIONS = [
     _transition(PersonTrigger.DETECTED.value, Scene.SCENE1.value, Scene.SCENE1.value),
     _transition(PersonTrigger.SEATED.value, Scene.SCENE0.value, Scene.SCENE1.value),
     _transition(PersonTrigger.SEATED.value, Scene.SCENE1.value, Scene.SCENE2.value),
-    _transition(PersonTrigger.ABSENT.value, "*", Scene.SCENE7.value, conditions="_is_not_outro_or_idle"),
+    _transition(
+        PersonTrigger.ABSENT.value,
+        "*",
+        Scene.SCENE7.value,
+        conditions="_is_not_outro_or_idle",
+    ),
     _transition(PersonTrigger.ABSENT.value, Scene.SCENE7.value, Scene.SCENE0.value),
-
     # Correct hand — advance
     _transition(HandTrigger.DETECTED.value, Scene.SCENE4.value, Scene.SCENE5.value),
-    _transition(HandTrigger.DETECTED.value, _DBG, None, before="return_to_previous_transition"),
-
+    _transition(
+        HandTrigger.DETECTED.value, _DBG, None, before="return_to_previous_transition"
+    ),
     # Wrong hand from awaiting → debug
-    _transition(HandTrigger.ABSENT.value, Scene.SCENE4.value, Scene.DBG_ABSENT.value, before="store_previous_transition"),
-    _transition(HandTrigger.TILTED.value, Scene.SCENE4.value, Scene.DBG_TILTED.value, before="store_previous_transition"),
-    _transition(HandTrigger.WRONG_SIDE.value, Scene.SCENE4.value, Scene.DBG_WRONG.value, before="store_previous_transition"),
-    _transition(HandTrigger.NOT_FULLY_IN_VIEW.value, Scene.SCENE4.value, Scene.DBG_NOT_FULLY.value, before="store_previous_transition"),
-
+    _transition(
+        HandTrigger.ABSENT.value,
+        Scene.SCENE4.value,
+        Scene.DBG_ABSENT.value,
+        before="store_previous_transition",
+    ),
+    _transition(
+        HandTrigger.TILTED.value,
+        Scene.SCENE4.value,
+        Scene.DBG_TILTED.value,
+        before="store_previous_transition",
+    ),
+    _transition(
+        HandTrigger.WRONG_SIDE.value,
+        Scene.SCENE4.value,
+        Scene.DBG_WRONG.value,
+        before="store_previous_transition",
+    ),
+    _transition(
+        HandTrigger.NOT_FULLY_IN_VIEW.value,
+        Scene.SCENE4.value,
+        Scene.DBG_NOT_FULLY.value,
+        before="store_previous_transition",
+    ),
     # Inter-debug transitions
-    _transition(HandTrigger.ABSENT.value, [Scene.DBG_TILTED.value, Scene.DBG_WRONG.value, Scene.DBG_NOT_FULLY.value], Scene.DBG_ABSENT.value, before="store_previous_transition"),
-    _transition(HandTrigger.TILTED.value, [Scene.DBG_ABSENT.value, Scene.DBG_WRONG.value, Scene.DBG_NOT_FULLY.value], Scene.DBG_TILTED.value, before="store_previous_transition"),
-    _transition(HandTrigger.WRONG_SIDE.value, [Scene.DBG_ABSENT.value, Scene.DBG_TILTED.value, Scene.DBG_NOT_FULLY.value], Scene.DBG_WRONG.value, before="store_previous_transition"),
-    _transition(HandTrigger.NOT_FULLY_IN_VIEW.value, [Scene.DBG_ABSENT.value, Scene.DBG_TILTED.value, Scene.DBG_WRONG.value], Scene.DBG_NOT_FULLY.value, before="store_previous_transition"),
-
+    _transition(
+        HandTrigger.ABSENT.value,
+        [Scene.DBG_TILTED.value, Scene.DBG_WRONG.value, Scene.DBG_NOT_FULLY.value],
+        Scene.DBG_ABSENT.value,
+        before="store_previous_transition",
+    ),
+    _transition(
+        HandTrigger.TILTED.value,
+        [Scene.DBG_ABSENT.value, Scene.DBG_WRONG.value, Scene.DBG_NOT_FULLY.value],
+        Scene.DBG_TILTED.value,
+        before="store_previous_transition",
+    ),
+    _transition(
+        HandTrigger.WRONG_SIDE.value,
+        [Scene.DBG_ABSENT.value, Scene.DBG_TILTED.value, Scene.DBG_NOT_FULLY.value],
+        Scene.DBG_WRONG.value,
+        before="store_previous_transition",
+    ),
+    _transition(
+        HandTrigger.NOT_FULLY_IN_VIEW.value,
+        [Scene.DBG_ABSENT.value, Scene.DBG_TILTED.value, Scene.DBG_WRONG.value],
+        Scene.DBG_NOT_FULLY.value,
+        before="store_previous_transition",
+    ),
     # Internal sequence
     _transition("seated_done", Scene.SCENE2.value, Scene.SCENE3.value),
     _transition("intro_done", Scene.SCENE3.value, Scene.SCENE4.value),
