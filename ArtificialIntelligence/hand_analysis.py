@@ -256,7 +256,7 @@ class LegacyCompatibleMLP(nn.Module):
         return self.network(x)
 
 
-MODEL_PATH = "hand_element_model.pth"
+MODEL_PATH = "hand_element_mode_87l.pth"
 device = torch.device("cpu")
 mlp_model = LegacyCompatibleMLP()
 import os
@@ -264,7 +264,7 @@ import os
 if os.path.exists(MODEL_PATH):
     mlp_model.load_state_dict(torch.load(MODEL_PATH, map_location=device))
     mlp_model.eval()
-    print(f"[SUCCESS] hand_element_model.pth loaded inside find_core_element.")
+    print(f"[SUCCESS] hand_element_mode_87l.pth loaded inside find_core_element.")
 else:
     print(f"[WARNING] {MODEL_PATH} not found. find_core_element will output 'NaN'.")
 

@@ -10,12 +10,11 @@ import numpy as np
 
 # Configuration
 DATASET_PATH = "hand_informs.json"
-MLP_MODEL_PATH = "../hand_element_model.pth"
+MLP_MODEL_PATH = "../hand_element_mode_87l.pth"
 
 
 def safe_div(numerator: float, denominator: float) -> float:
     return numerator / denominator if denominator != 0 else 0.0
-
 
 def extract_features(lengths):
     palm_width = lengths.get("palm_width", 0.0)
@@ -41,7 +40,7 @@ def extract_features(lengths):
     ]
 
 
-class LegacyCompatibleMLP(nn.Module):
+class CompatibleMLP(nn.Module):
     def __init__(self, input_dim=7, num_classes=5):
         super().__init__()
         self.network = nn.Sequential(
@@ -63,7 +62,6 @@ if __name__ == "__main__":
     with open(DATASET_PATH, "r", encoding="utf-8") as f:
         data = json.load(f)
 
-    # 1단계: 사람(Person ID)별로 모든 사진의 특징 벡터를 안전하게 그루핑
     person_features = {}
     for key, item in data.items():
         lengths = item.get("lengths", {})
@@ -72,14 +70,12 @@ if __name__ == "__main__":
 
         feature_vector = extract_features(lengths)
 
-        # 💡 대소문자 혼선 방지를 위해 무조건 대문자 고정 (예: "P153")
         person_id = str(item["request_id"]).split("-")[0].strip().upper()
 
         if person_id not in person_features:
             person_features[person_id] = []
         person_features[person_id].append(feature_vector)
 
-    # 2단계: 사람별 '평균 특징 벡터'를 추출하여 K-Means 정답지 굽기
     unique_person_ids = sorted(list(person_features.keys()))
     person_avg_vectors = []
     for pid in unique_person_ids:
@@ -88,15 +84,12 @@ if __name__ == "__main__":
 
     person_avg_vectors = np.array(person_avg_vectors, dtype=np.float32)
 
-    # 💡 인류 전체의 손 분포가 아닌, '사람 단위'의 고유 모양으로 5대 원소 영역 획정!
     print(f"[INFO] Running K-Means exactly over {len(unique_person_ids)} unique persons...")
-    kmeans = KMeans(n_clusters=5, random_state=42, n_init=10)
+    kmeans = KMeans(n_clusters=5, random_state=42, n_init=15)
     person_labels = kmeans.fit_predict(person_avg_vectors)
 
-    # 딕셔너리에 사람별 정답 고정 명시 (예: {"P153": 2})
     person_to_label = {pid: int(label) for pid, label in zip(unique_person_ids, person_labels)}
 
-    # 3단계: 🌟 [일관성 보장] 890장 사진 전체에 사람 고유 원소 정답을 강제 주입
     X_list, Y_list = [], []
     for key, item in data.items():
         lengths = item.get("lengths", {})
@@ -109,11 +102,16 @@ if __name__ == "__main__":
 
         feature_vector = extract_features(lengths)
         X_list.append(feature_vector)
-        # 💡 핵심: P153의 사진 10장은 각도/수치가 미세하게 달라도 무조건 person_to_label["P153"] 원소로 통일!
         Y_list.append(person_to_label[person_id])
 
     X = np.array(X_list, dtype=np.float32)
     Y = np.array(Y_list, dtype=np.int64)
+
+    from sklearn.preprocessing import StandardScaler
+
+    scaler = StandardScaler()
+    X = scaler.fit_transform(X)  # 모든 특징값을 균일한 스케일로 압축!
+
     print(f"[SUCCESS] Aligned dataset build completed. Total verified images: {len(X)}")
 
     counts = np.bincount(Y, minlength=5)
@@ -130,14 +128,16 @@ if __name__ == "__main__":
 
     train_loader = DataLoader(
         TensorDataset(torch.tensor(X_train, dtype=torch.float32), torch.tensor(Y_train, dtype=torch.long)),
-        batch_size=8, shuffle=True
+        batch_size=8, shuffle=True #8
     )
+
     X_test_tensor = torch.tensor(X_test, dtype=torch.float32)
     Y_test_tensor = torch.tensor(Y_test, dtype=torch.long)
 
-    model = LegacyCompatibleMLP()
+    model = CompatibleMLP()
     criterion = nn.CrossEntropyLoss()
     optimizer = optim.Adam(model.parameters(), lr=0.002)
+
 
     print("[INFO] Executing optimization backpropagation...")
     model.train()
@@ -154,9 +154,8 @@ if __name__ == "__main__":
         preds = torch.argmax(model(X_test_tensor), dim=1)
         total_correct = 0
 
-        print("\n" + "=" * 40)
-        print(" Evaluation Verification Status (Perfect Cohesion)")
-        print("=" * 40)
+        print("Evaluation Verification Status (Perfect Cohesion)")
+
         for class_idx in range(5):
             class_mask = (Y_test_tensor == class_idx)
             class_total = class_mask.sum().item()
