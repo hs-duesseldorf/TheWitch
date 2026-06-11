@@ -9,6 +9,7 @@ import logging
 
 from .palm_processing.transport import WebSocketClient
 from shared.events import ErrorEvent, PersonEvent, PersonTrigger
+import Jetson.GPIO as GPIO
 
 logger = logging.getLogger(__name__)
 
@@ -252,6 +253,7 @@ class SeatPresenceMonitor:
             port = self._required_env("WITCH_LD2410S_PORT")
             seated_max_mm = int(self._required_env("WITCH_LD2410S_SEATED_MAX_MM"))
             present_max_mm = int(self._required_env("WITCH_LD2410S_ROOM_MAX_MM"))
+            led_pin = int(self._required_env("WITCH_LED_PIN"))
         except ValueError as exc:
             self._publish_error(str(exc))
             return
@@ -357,6 +359,8 @@ class SeatPresenceMonitor:
                                     self._publish_zone(PersonZone.PRESENT, distance_mm)
                                 last_zone = zone
                                 self._publish_zone(zone, distance_mm)
+
+                                GPIO.output(led_pin, GPIO.HIGH if zone is PersonZone.SEATED else GPIO.LOW)
 
                 if reading is None:
                     elapsed = time.monotonic() - started
