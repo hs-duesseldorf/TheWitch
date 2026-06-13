@@ -196,10 +196,18 @@ For Linux with PipeWire/PulseAudio compatibility, create a persistent null sink:
 
 ## Seat Sensor
 
-The `ip` service publishes a `person_detected` event when the VL53L0X seat sensor detects someone sitting down. For local testing without sensor hardware:
+The `ip` service publishes person-state events from the LD2410S seat sensor. For
+local testing without sensor hardware:
 
 ```dotenv
 WITCH_SEAT_SENSOR_OVERRIDE=true
+```
+
+All hand and person sensor state changes must remain unchanged for the configured
+stability window before the AI processes them:
+
+```env
+WITCH_EVENT_STABILITY_SECONDS=2.0
 ```
 
 ## Custom TTS Voice

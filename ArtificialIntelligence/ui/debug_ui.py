@@ -13,7 +13,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger("debug-ui")
 
-this_dir = Path(__file__).parent
+this_dir = Path(__file__).resolve().parent.parent
 html_path = this_dir / "assets" / "debug_ui.html"
 html_path_manual = this_dir / "assets" / "debug_ui_manual.html"
 
@@ -61,9 +61,7 @@ def get_state():
 @app.get("/api/state-machine-graph")
 def get_state_machine_graph():
     try:
-        graph = _state_machine.machine.get_graph(
-            _state_machine.state
-        ).source.replace("direction LR", "direction TB")
+        graph = _state_machine.machine.get_graph().source.replace("direction LR", "direction TB")
     except Exception as e:
         logger.warning("Failed to generate state machine graph: %s", e)
         graph = "graph TD\n  error[Graph unavailable]"
@@ -100,8 +98,6 @@ async def simulate_event_done():
 @app.post("/api/state/{state}")
 def set_state(state: str):
     return _state_response(_runtime.force_state(state))
-
-# MANUAL MODE
 
 @app.post("/api/manual_mode/on")
 def manual_on():

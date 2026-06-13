@@ -75,7 +75,6 @@ def palm_facing_score(points3d: np.ndarray, hand: Hand | None) -> float | None:
     if normal_unit is None:
         return None
 
-    # MediaPipe depth grows away from the camera, so the viewing direction is -Z.
     camera_direction = np.array([0.0, 0.0, -1.0], dtype=np.float32)
     facing_score = float(np.dot(normal_unit, camera_direction))
 

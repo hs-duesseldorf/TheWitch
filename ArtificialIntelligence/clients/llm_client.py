@@ -33,7 +33,6 @@ class LLMClient:
         return root
 
     def close(self) -> None:
-        # ollama.Client does not require explicit close in most versions
         pass
 
     def generate(self, prompt: str) -> str:
@@ -186,8 +185,9 @@ class LLMClient:
             "stream": stream,
             "think": False,
             "options": {
-                "temperature": 0.55,
+                "temperature": 0.6,
                 "top_p": 0.8,
+                "repeat_penalty": 1.06,
                 "num_ctx": self._num_ctx(),
                 "num_predict": NUM_PREDICT,
             },
