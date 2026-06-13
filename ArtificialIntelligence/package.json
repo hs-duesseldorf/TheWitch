@@ -5,7 +5,9 @@
         "Ich spüre, dass du näher kommst. Traue dich deine Zukunft zu sehen und setz dich mir gegenüber.",
         "Komm näher und setz dich mir gegenüber. Ich habe deine Ankunft bereits gespürt.",
         "Komm näher und nimm Platz. Die Zeichen haben dich zu mir geführt.",
-        "Setz dich zu mir. Schon seit einiger Zeit wusste ich, dass du kommen würdest."
+        "Setz dich zu mir. Schon seit einiger Zeit wusste ich, dass du kommen würdest.",
+        "Ich spüre deine Präsenz. Setze dich, dann zeige ich dir dein Schicksal.",
+        "Traue dich. Setz dich. Ich weiß, dass du hier bist und mir zuhören möchtest."
       ]
     },
 
@@ -14,7 +16,9 @@
         "Bleib ruhig sitzen und finde eine entspannte Haltung.",
         "Lass die Hektik hinter dir und mach es dir gemütlich.",
         "Nimm dir einen Augenblick. Lass Ruhe einkehren und mach es dir bequem.",
-        "Entspanne dich und sei offen neues über dich selbst zu lernen."
+        "Entspanne dich und sei offen neues über dich selbst zu lernen.",
+        "Atme einmal tief ein. Lasse deine Anspannung zurück.",
+        "Habe Vertrauen und finde hier einen Ort der Ruhe."
       ]
     },
 
@@ -34,16 +38,20 @@
         "Gut. Ich kann sie nun klar sehen. Halte jetzt still und bewege keinen Finger.",
         "Sehr gut, jetzt kann ich alles sehen was ich brauche. Bleib nun vollkommen ruhig und lass deine Hand still liegen.",
         "Die ersten Zeichen sind sichtbar. Bewege deine Hand jetzt nicht mehr.",
-        "Ganz genau so. Nun halt still dann werde ich dir dein Schicksal offenbaren."
+        "Ganz genau so. Nun halt still dann werde ich dir dein Schicksal offenbaren.",
+        "Bewahre nun die Ruhe und bewege nicht deine Hand. Ich sehe jetzt deutlich, was die Zeichen mir zu sagen haben.",
+        "Dein Schicksal wird mir immer klarer. Halte still, damit ich es dir offenbaren kann."
       ]
     },
 
     "scene_4_handscan_done": {
       "base_texts": [
         "Ich habe die Zeichen deiner Hand nun fertig gelesen. Du kannst deine Hand jetzt aus dem Stein nehmen.",
-        "Ich habe gesehen, was ich sehen musste. Nimm deine Hand nun heraus.",
+        "Ich habe gesehen, was ich sehen brauchte. Nimm deine Hand nun heraus.",
         "Die Zeichen sind erfasst. Du kannst deine Hand aus dem Stein lösen.",
-        "Genug. Die Zeichen liegen nun offen vor mir. Nimm deine Hand zurück."
+        "Genug. Die Zeichen liegen nun offen vor mir. Nimm deine Hand zurück.",
+        "Gut. Deine Zukunft sehe ich nun klar und deutlich. Nehme deine Hand aus dem Stein.",
+        "Deine Hand kann mir nichts mehr weiter verraten, ziehe sie zurück. Ich habe alle Zeichen erkannt."
       ]
     },
 
@@ -52,7 +60,9 @@
         "Ich lese nun, was in den Linien deiner Hand verborgen liegt.",
         "Nun werde ich deuten, was deine Linien offenbaren.",
         "Die Zeichen liegen vor mir. Jetzt beginne ich ihre Bedeutung dir zu offenbaren.",
-        "Lass mich dir sagen, was deine Hand über dich erzählt."
+        "Lass mich dir sagen, was deine Hand über dich erzählt.",
+        "Ich werde dir nun offenbaren, was ich in deiner Hand gelesen habe.",
+        "Sei gefasst und höre mir zu. Ich werde dir die Bedeutung deiner Linien zeigen."
       ]
     },
 
@@ -61,7 +71,9 @@
         "Es ist vollbracht. Für diesen Augenblick ist alles gesagt. Geh weiter mit wachem Blick.",
         "Meine Deutung endet hier. Was du daraus machst, liegt nun bei dir.",
         "Für heute sind die Zeichen gesprochen. Geh deinen Weg aufmerksam weiter.",
-        "Mehr gibt es in diesem Moment nicht zu sagen. Bewahre die Erkenntnisse gut auf."
+        "Mehr gibt es in diesem Moment nicht zu sagen. Bewahre die Erkenntnisse gut auf.",
+        "Weiter kann ich dir nun nicht mehr helfen. Der weitere Weg liegt bei dir.",
+        "Habe Kraft für deinen weiteren Weg nach dieser Deutung. Mein Part ist vorbei."
       ]
     },
 
@@ -70,7 +82,9 @@
         "Ich sehe deine Hand nicht. Lege sie vollständig in den Stein.",
         "Deine Hand entzieht sich meinem Blick. Lege sie in den Stein.",
         "Ich kann deine Hand nicht sehen. Platziere sie vollständig vor mir.",
-        "Zeig mir deine Hand, damit ich die Zeichen lesen kann."
+        "Zeig mir deine Hand, damit ich die Zeichen lesen kann.",
+        "Ich spüre deine Hand nicht im Stein. Lege sie rein, um dein Schicksal zu erfahren.",
+        "Trau dich, lege deine Hand in den Stein. Ich sehe, dass sie nicht dort liegt."
       ]
     },
 
@@ -79,7 +93,9 @@
         "Lege deine Hand flach hin. Die Handfläche muss ruhig nach oben zeigen.",
         "Dreh deine Hand so, dass die Handfläche nach oben zeigt.",
         "Lege die Hand ruhig und flach, mit der Handfläche nach oben, in den Stein.",
-        "Die Linien müssen sichtbar sein. Richte deine Handfläche nach oben."
+        "Die Linien müssen sichtbar sein. Richte deine Handfläche nach oben.",
+        "Deine Handfläche muss zu mir zeigen. Lege sie flach und ruhig hin.",
+        "Zeige mir deine Linien. Die Handfläche muss ruhig liegen und nach oben zeigen."
       ]
     },
 
@@ -88,7 +104,9 @@
         "Zeig mir nicht den Handrücken, sondern deine offene Handfläche.",
         "Ich muss deine Handfläche sehen, nicht den Handrücken.",
         "Dreh deine Hand um und zeige mir die Linien.",
-        "Nur die offene Handfläche offenbart die Zeichen, die ich suche."
+        "Nur die offene Handfläche offenbart die Zeichen, die ich suche.",
+        "Mit dem Handrücken nach oben wird dein Schicksal verborgen bleiben. Drehe sie um.",
+        "Drehe deine Hand. Ich muss deine Linien sehen können."
       ]
     },
 
@@ -97,7 +115,9 @@
         "Ich kann deine Hand noch nicht vollständig sehen. Lege sie ganz flach in den Stein.",
         "Ein Teil deiner Hand liegt noch außerhalb meines Blicks.",
         "Lege die Hand vollständig und flach in den Stein.",
-        "Ich brauche freie Sicht auf die gesamte Handfläche."
+        "Ich brauche freie Sicht auf die gesamte Handfläche.",
+        "Deine Hand bleibt mir noch teils verborgen. Lege sie vollständig rein.",
+        "Traue dich und lege die Hand in den Stein. Ich sehe erst einen Teil von ihr."
       ]
     }
   },
