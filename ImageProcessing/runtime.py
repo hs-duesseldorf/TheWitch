@@ -11,7 +11,8 @@ from dotenv import load_dotenv
 from ImageProcessing.observation_stabilizer import ObservationStabilizer
 from ImageProcessing.palm_processing.transport import WebSocketClient
 from ImageProcessing.seat_sensor.seat_sensor_override import SeatSensorOverride
-from ImageProcessing.stone_leds import StoneLeds
+from ImageProcessing.stone_leds.stone_leds import StoneLeds
+from ImageProcessing.stone_leds.stone_leds_override import StoneLedsOverride
 from shared.events import PersonEvent, PersonTrigger, WitchEvent
 
 load_dotenv()
@@ -34,7 +35,7 @@ class Runtime:
         )
 
         self.heartbeat_seconds = float(
-            os.environ.get("WITCH_EVENT_HEARTBEAT_SECONDS", "0.5")
+            os.environ["WITCH_EVENT_HEARTBEAT_SECONDS"]
         )
 
         self.hand_tracker = self._create_hand_tracker()
@@ -119,7 +120,7 @@ class Runtime:
             self.stone_leds.show_absent()
 
     def _create_seat_sensor(self):
-        if os.environ.get("WITCH_SEAT_SENSOR_OVERRIDE", "").strip().lower() == "true":
+        if os.environ["WITCH_SEAT_SENSOR_OVERRIDE"].strip().lower() == "true":
             return SeatSensorOverride()
 
         from ImageProcessing.seat_sensor.seat_sensor import SeatSensor
@@ -132,28 +133,11 @@ class Runtime:
         return HandTracker(self.video_client, self.roi_client)
 
     def _create_leds(self):
-        if os.environ.get("WITCH_SEAT_SENSOR_OVERRIDE", "").strip().lower() == "true":
-            return _NoopStoneLeds()
+        if os.environ["WITCH_SEAT_SENSOR_OVERRIDE"].strip().lower() == "true":
+            return StoneLedsOverride()
 
         try:
             return StoneLeds(int(os.environ["WITCH_LED_PIN"]))
         except Exception as exc:
             logger.warning("Stone LEDs unavailable: %s", exc)
-            return _NoopStoneLeds()
-
-
-class _NoopStoneLeds:
-    def open(self):
-        return None
-
-    def show_absent(self):
-        return None
-
-    def show_present(self):
-        return None
-
-    def show_seated(self):
-        return None
-
-    def close(self):
-        return None
+            return StoneLedsOverride()
