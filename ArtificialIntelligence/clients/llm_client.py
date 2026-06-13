@@ -33,7 +33,6 @@ class LLMClient:
         return root
 
     def close(self) -> None:
-        # ollama.Client does not require explicit close in most versions
         pass
 
     def generate(self, prompt: str) -> str:

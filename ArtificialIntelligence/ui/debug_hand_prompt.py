@@ -3,7 +3,7 @@ import json
 
 from shared.events import Hand, HandEvent, HandTrigger
 
-from .hand_analysis import build_prompt
+from ArtificialIntelligence.analysis.hand_analyzer import HandAnalyzer
 
 
 def _load_payload(path: str | None) -> dict:
@@ -49,7 +49,7 @@ def main() -> None:
 
     payload = _load_payload(args.json)
     event = _to_hand_event(payload)
-    prompt = build_prompt(event)
+    prompt = HandAnalyzer().build_prompt(event)
     print(prompt)
 
 

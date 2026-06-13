@@ -50,14 +50,12 @@ def _wait_for_server(url: str, process: subprocess.Popen[bytes]) -> None:
 
 
 def _trim_trailing_silence(audio: np.ndarray, sr: int, silence_threshold: float = 0.015, min_duration: float = 1.0) -> np.ndarray:
-    """Trim trailing silence/static from audio while keeping leading speech intact."""
     window = int(0.05 * sr)
     rms = np.sqrt(np.mean(audio[: len(audio) - len(audio) % window].reshape(-1, window) ** 2, axis=1))
     above = np.flatnonzero(rms > silence_threshold)
     if above.size == 0:
         return audio[: int(min_duration * sr)]
 
-    # Detect gaps of silence > 1 second — speech ended and static follows
     gap_threshold = int(1.0 / 0.05)
     gaps = np.diff(above)
     big_gaps = np.flatnonzero(gaps > gap_threshold)

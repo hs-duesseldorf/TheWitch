@@ -41,6 +41,7 @@ SERVICES = {
             "WITCH_AI_PORT",
             "WITCH_AI_UI_PORT",
             "WITCH_AUDIO_PREBUFFER_SECONDS",
+            "WITCH_EVENT_STABILITY_SECONDS",
             "WITCH_GASLIGHT",
             "WITCH_LLM_HOST",
             "WITCH_LLM_PORT",

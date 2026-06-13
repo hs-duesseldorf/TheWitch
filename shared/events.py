@@ -26,23 +26,27 @@ class Hand(str, Enum):
 
 
 class Scene(str, Enum):
-    DBG_ABSENT = "scene_debug_shot_1_hand_absent"
-    DBG_TILTED = "scene_debug_shot_2_hand_tilted"
-    DBG_WRONG = "scene_debug_shot_3_hand_wrong_side"
-    DBG_NOT_FULLY = "scene_debug_shot_4_hand_not_fully_in_view"
+    DEBUG_HAND_TILTED = "scene_debug_shot_2_hand_tilted"
+    DEBUG_WRONG_SIDE = "scene_debug_shot_3_hand_wrong_side"
+    DEBUG_NOT_FULLY_IN_VIEW = "scene_debug_shot_4_hand_not_fully_in_view"
+    DEBUG_HAND_PULLED_AWAY = "scene_debug_shot_5_hand_pulled_away"
+    DEBUG_GASLIGHT = "scene_debug_gaslight"
 
-    SCENE0 = "scene_idle"
-    SCENE1 = "scene_0_welcome"
-    SCENE2 = "scene_1_seated"
-    SCENE3 = "scene_2_intro"
-    SCENE4 = "scene_3_awaiting_hand"
-    SCENE5 = "scene_4_handscan"
-    HAND_REMOVAL = "scene_4_handscan_done"
-    SCENE6 = "scene_5_analysis"
-    SCENE7 = "scene_6_outro"
+    SCENE_0_IDLE = "scene_0_idle"
+    SCENE_1_WELCOME = "scene_1_welcome"
+    SCENE_2_SEATED = "scene_2_seated"
+    SCENE_3_INTRO = "scene_3_intro"
+    SCENE_4_AWAITING_HAND = "scene_4_awaiting_hand"
+    SCENE_5_HANDSCAN = "scene_5_handscan"
+    SCENE_6_HAND_DETECTED = "scene_6_hand_detected"
+    SCENE_7_HANDSCAN_DONE = "scene_7_handscan_done"
+    SCENE_8_ANALYSIS = "scene_8_analysis"
+    SCENE_9_OUTRO = "scene_9_outro"
 
 
-class Event(msgspec.Struct, frozen=True, kw_only=True, tag_field="type", omit_defaults=True):
+class Event(
+    msgspec.Struct, frozen=True, kw_only=True, tag_field="type", omit_defaults=True
+):
     origin: str | None = None
 
 
