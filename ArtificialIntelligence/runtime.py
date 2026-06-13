@@ -261,7 +261,7 @@ class Runtime:
 
     async def enter_awaiting_hand(self, change: Transition):
         if change.source.startswith("scene_debug_"):
-            self._debug_cooldown_until = time.monotonic() + float(os.environ.get("WITCH_DEBUG_COOLDOWN_SECONDS", "3"))
+            self._debug_cooldown_until = time.monotonic() + float(os.environ["WITCH_DEBUG_COOLDOWN_SECONDS"])
         await self.emit_scene_events_on_audio_start(Scene.SCENE_4_AWAITING_HAND, None)
 
     async def enter_handscan(self, _change: Transition):

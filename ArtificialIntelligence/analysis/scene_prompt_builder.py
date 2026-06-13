@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
+import random
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -14,17 +15,40 @@ PACKAGE_PATH = Path(__file__).resolve().parent.parent / "package.json"
 SYSTEM_PROMPT = (
     "/no_think\n"
     "Antworte ausschließlich auf Deutsch.\n"
-    "Gib nur die finale gesprochene Antwort aus: kein Markdown, keine Formatierung und keine Erklärungen.\n"
     "Du bist ein reiner Text-Transformator.\n"
-    "Formuliere den Basetext als kurze, natürlich gesprochene Zeile einer weisen, düsteren Wahrsagerin um.\n"
-    "Bewahre alle konkreten Anweisungen, Handlungen und Fakten.\n"
-    "Erfinde keine neuen Informationen.\n"
-    "Kein Markdown, keine Klammern, keine Emojis, keine Sternchen, keine Backticks.\n"
-    "Ton: ruhig, präzise, leicht dunkel und klar sprechbar.\n"
-    "Formuliere ausschließlich vollständige, natürlich klingende und grammatikalisch korrekte deutsche Sätze.\n"
-    "Prüfe vor der Ausgabe Grammatik, Satzbau, Wortstellung, Bezüge und Zeichensetzung. Gib niemals holprige, mehrdeutige oder unvollständige Sätze aus.\n"
-    "Variiere jede Antwort in Wortwahl, Rhythmus und Satzstruktur, aber niemals auf Kosten von korrektem, natürlichem Deutsch oder klarer Bedeutung.\n"
-    "Vermeide Wiederholungen derselben Formulierung und nutze passende Synonyme.\n"
+    "\n"
+    "AUFGABE:\n"
+    "Formuliere den Basetext als natürlich gesprochene Zeile einer weisen, leicht düsteren Wahrsagerin um.\n"
+    "\n"
+    "PFLICHTREGELN:\n"
+    "- Bewahre alle konkreten Anweisungen, Handlungen und Fakten.\n"
+    "- Erfinde keine neuen Informationen.\n"
+    "- Formuliere den Inhalt neu, ohne seine Bedeutung zu verändern.\n"
+    "- Gib genau EINE einzige umformulierte Version zurück.\n"
+    "- Gib niemals mehrere Varianten derselben Aussage aus.\n"
+    "- Gib niemals Alternativen, Auswahlmöglichkeiten oder Vorschläge aus.\n"
+    "- Nach der ersten vollständigen Antwort endet die Ausgabe sofort.\n"
+    "- Kein Markdown, keine Listen, keine Nummerierung.\n"
+    "- Keine Klammern, keine Emojis, keine Sternchen und keine Backticks.\n"
+    "- Gib nur die finale gesprochene Antwort aus.\n"
+    "\n"
+    "SPRACHE:\n"
+    "- Natürliches, flüssiges und grammatikalisch korrektes Deutsch.\n"
+    "- Ruhig, präzise, leicht düster und gut sprechbar.\n"
+    "- Lieber einfach und korrekt als kreativ und fehlerhaft.\n"
+    "- Vermeide holprige Formulierungen.\n"
+    "- Vermeide unnötig komplizierte Satzkonstruktionen.\n"
+    "- Nutze vollständige und natürlich klingende Sätze.\n"
+    "\n"
+    "VARIATION:\n"
+    "- Variiere Wortwahl, Rhythmus und Satzstruktur.\n"
+    "- Vermeide wiederkehrende Phrasen.\n"
+    "- Nutze passende Synonyme.\n"
+    "- Wiederhole niemals den Basetext wortwörtlich.\n"
+    "- Die Antwort soll sich deutlich von früheren Formulierungen unterscheiden.\n"
+    "\n"
+    "Prüfe vor der Ausgabe Grammatik, Satzbau, Wortstellung, Bezüge und Zeichensetzung.\n"
+    "Gib niemals mehrere Versionen derselben Antwort aus.\n"
     "/no_think\n"
 )
 
@@ -38,6 +62,8 @@ class ScenePromptContext:
 class ScenePromptBuilder:
     def __init__(self):
         self.scenes = self._load_scenes()
+        self._current_base_texts: dict[str, str] = {}
+        self._shuffle_bags: dict[str, list[str]] = {}
 
     def build_prompt(self, scene: Scene, context: ScenePromptContext | None = None) -> str | None:
         context = context or ScenePromptContext()
@@ -62,24 +88,81 @@ class ScenePromptBuilder:
 
     def _scene_text(self, scene_name: str) -> str | None:
         entry = self.scenes.get(scene_name)
-        if isinstance(entry, dict):
-            entry = entry.get("base_text")
-        if isinstance(entry, str):
-            return entry.strip() or None
-        return None
+        if not isinstance(entry, list):
+            return None
+        candidates = [
+            item.strip()
+            for item in entry
+            if isinstance(item, str) and item.strip()
+        ]
+        if not candidates:
+            return None
+        return self._next_from_shuffle_bag(scene_name, candidates)
+
+    def _get_examples(self, scene_name: str) -> list[str]:
+        entry = self.scenes.get(scene_name)
+        if not isinstance(entry, list):
+            return []
+        current = self._current_base_texts.get(scene_name)
+        return [
+            item.strip()
+            for item in entry
+            if isinstance(item, str) and item.strip() and item.strip() != current
+        ]
+
+    def _next_from_shuffle_bag(self, scene_name: str, candidates: list[str]) -> str:
+        bag = self._shuffle_bags.get(scene_name, [])
+
+        if not bag or set(bag) - set(candidates):
+            bag = candidates[:]
+            random.shuffle(bag)
+            last = self._current_base_texts.get(scene_name)
+            if last and len(bag) > 1 and bag[-1] == last:
+                bag[0], bag[-1] = bag[-1], bag[0]
+
+        chosen = bag.pop()
+        self._shuffle_bags[scene_name] = bag
+        self._current_base_texts[scene_name] = chosen
+        return chosen
 
     def _wrap(self, scene: Scene, base_text: str) -> str:
-        return "\n".join(
-            [
-                SYSTEM_PROMPT,
-                f"Szene: {scene.value}.",
-                "Hier ist dein verbindlicher Basetext. Variiere Tonfall, Rhythmus, Satzbau und Wortwahl deutlich.",
-                "Die Bedeutung und jede konkrete Handlungsanweisung müssen erhalten bleiben.",
-                "Die Neuformulierung muss natürlich klingen und aus grammatikalisch korrekten, vollständigen deutschen Sätzen bestehen.",
-                "Jede Neuformulierung muss sich deutlich von vorherigen unterscheiden. Vermeide identische Phrasen.",
-                f"Basetext: {base_text.strip()}",
-            ]
-        )
+        scene_name = scene.value
+        parts = [
+            SYSTEM_PROMPT,
+            f"Szene: {scene_name}.",
+            "Hier ist dein verbindlicher Basetext.",
+            "Formuliere ihn neu und variiere Tonfall, Rhythmus, Satzbau und Wortwahl deutlich.",
+            "Die Bedeutung und jede konkrete Handlungsanweisung müssen vollständig erhalten bleiben.",
+            "Erzeuge genau eine einzige Neuformulierung des Basetextes.",
+            "Gib niemals mehrere Varianten derselben Aussage aus.",
+            "Gib niemals Alternativen, Auswahlmöglichkeiten oder Vorschläge aus.",
+            "Nach der ersten vollständigen Antwort endet die Ausgabe sofort.",
+            "Die Antwort darf aus einem oder mehreren Sätzen bestehen, solange sie genau eine einzige Version darstellt.",
+            "Schreibe natürliches, grammatikalisch korrektes und gut sprechbares Deutsch.",
+            "Schreibe lieber einfacher und korrekt als poetisch und fehlerhaft.",
+            "Vermeide unnötig komplizierte oder verschachtelte Sätze.",
+            "Nutze die Beispiele ausschließlich als Stilvorbild.",
+            "Die Beispiele dürfen niemals wörtlich wiedergegeben werden.",
+            f"Basetext: {base_text.strip()}",
+        ]
+
+        examples = self._get_examples(scene_name)
+        if examples:
+            parts.append(
+                "Die folgenden Beispiele dienen ausschließlich als stilistische Orientierung."
+                "Übernimm höchstens Tonfall, Rhythmus, Satzlänge und Atmosphäre."
+                "Du darfst sie nur dann genau übernehmen, wenn du keine fehlerfreie Deutsche Alternative erstellen kannst."
+            )
+            for index, example in enumerate(examples, start=1):
+                parts.append(f"Beispiel {index}: {example}")
+
+        if scene_name == "scene_1_welcome":
+            parts.append(
+                "Sag nicht das man sich neben dich setzen soll, wenn nur zu dir oder dir gegenüber!"
+                "Erwähne NICHT das Wort Willkommensraum!"
+            )
+
+        return "\n".join(parts)
 
     @staticmethod
     def _load_scenes() -> dict:
