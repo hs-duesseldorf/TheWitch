@@ -79,10 +79,14 @@ class ScenePromptBuilder:
     def _base_text(self, scene: Scene, context: ScenePromptContext) -> str | None:
         if scene is Scene.DEBUG_GASLIGHT and context.gaslight_pending:
             hand_name = context.gaslight_hand_name or "unbekannte"
-            return (
-                f"Du hast mir deine {hand_name} Hand gezeigt. "
-                "Genau diese ist die falsche. Nimm die andere Hand."
-            )
+
+            template = self._scene_text(scene.value)
+            if not template:
+                template = (
+                    "Du hast mir deine {hand_name} Hand gezeigt. "
+                    "Genau diese ist die falsche. Nimm die andere Hand."
+                )
+            return template.replace("{hand_name}", hand_name)
 
         return self._scene_text(scene.value)
 
@@ -175,7 +179,6 @@ class ScenePromptBuilder:
             parts.append(
                 "EXTRA INFO:"
                 "Sage niemals wort wörtlich 'Hand gezeigt die falsche.' sondern eher 'Hand gezeigt genau diese ist die falsche.' oder 'Hand gezeigt jedoch leider ist dies genau die falsche.'"
-                "Generiere eine Zufallszahl zwischen 0 und 100, falls diese höher als 50 ist dann tausche den Satz 'Du hast mir deine Hand gezeigt' aus mit 'Ich sehe deine Hand'. Behalte jedoch ob es die linke oder rechte ist."
             )
         
         if scene_name == "scene_5_handscan":
