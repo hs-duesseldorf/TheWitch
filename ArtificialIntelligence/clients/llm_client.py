@@ -187,7 +187,7 @@ class LLMClient:
             "options": {
                 "temperature": 0.6,
                 "top_p": 0.8,
-                "repeat_penalty": 1.06,
+                "repeat_penalty": 1.12,
                 "num_ctx": self._num_ctx(),
                 "num_predict": NUM_PREDICT,
             },
