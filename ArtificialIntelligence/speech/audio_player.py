@@ -7,7 +7,8 @@ import queue
 import threading
 import time
 from dataclasses import dataclass
-from typing import Any, Callable
+from collections.abc import Callable
+from typing import Any
 
 import numpy as np
 import soundfile as sf
@@ -146,8 +147,7 @@ class AudioPlayer:
         self._source_generation = 0
         self._source_lock = threading.Lock()
         self._outputs: list[_AudioOutput] = []
-        self._playback_start_callback: Callable[[], None] | None = None
-        self._playback_start_notified = False
+
 
     def start(self):
         if not HAS_SOUNDDEVICE:
@@ -226,10 +226,8 @@ class AudioPlayer:
     def prebuffer_seconds(self) -> float:
         return self._prebuffer_seconds
 
-    def begin(self, on_playback_start: Callable[[], None] | None = None):
+    def begin(self):
         self.start()
-        self._playback_start_callback = on_playback_start
-        self._playback_start_notified = False
         with self._source_lock:
             self._source_generation += 1
             generation = self._source_generation
@@ -243,9 +241,12 @@ class AudioPlayer:
                 if not output.is_virtual_cable:
                     self._enqueue_output(output, silence, generation=generation)
 
-    def put(self, audio_chunk: bytes, *, format: str = "pcm", sample_rate: int | None = None):
+    def put(self, audio_chunk: bytes, *, format: str = "pcm", sample_rate: int | None = None, effects: list[AudioEffect] | None = None):
         try:
             data = self._convert_chunk(audio_chunk, format=format, sample_rate=sample_rate)
+            if data is not None and effects:
+                for effect in effects:
+                    data = effect(data, self._output_sample_rate)
             if data is not None:
                 self._enqueue_source(data)
         except Exception as exc:
@@ -301,8 +302,7 @@ class AudioPlayer:
         for output in self._outputs:
             self._clear_output(output, producer_done=True, generation=generation)
         self._pcm_remainder = b""
-        self._playback_start_callback = None
-        self._playback_start_notified = False
+
 
     def _callback(self, output, outdata, frames, callback_time, status):
         outdata.fill(0)
@@ -377,9 +377,6 @@ class AudioPlayer:
             else:
                 pending = np.empty((0, 2), dtype=np.float32)
 
-        if written > 0:
-            self._notify_playback_started()
-
         with output.lock:
             if generation == output.generation:
                 output.pending = pending
@@ -403,14 +400,6 @@ class AudioPlayer:
             except (AttributeError, TypeError, ValueError):
                 device_delay = 0.0
         return now + device_delay + (written / self._output_sample_rate)
-
-    def _notify_playback_started(self):
-        if self._playback_start_notified:
-            return
-        callback = self._playback_start_callback
-        self._playback_start_notified = True
-        if callback is not None:
-            callback()
 
     def _drain_source_queue(self):
         while True:
@@ -497,3 +486,6 @@ class AudioPlayer:
                 output.queue.get_nowait()
             except queue.Empty:
                 break
+
+
+AudioEffect = Callable[[np.ndarray, int], np.ndarray]

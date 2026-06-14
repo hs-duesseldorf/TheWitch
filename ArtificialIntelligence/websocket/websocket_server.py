@@ -43,6 +43,8 @@ class WebSocketServer:
         if exclude is not None:
             targets.discard(exclude)
         if not targets:
+            if path is not None:
+                logger.warning("No connected clients on %s, event dropped", path)
             return
         results = await asyncio.gather(
             *[c.send(message) for c in targets],
