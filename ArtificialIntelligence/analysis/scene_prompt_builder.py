@@ -158,8 +158,32 @@ class ScenePromptBuilder:
 
         if scene_name == "scene_1_welcome":
             parts.append(
+                "EXTRA INFO:"
                 "Sag nicht das man sich neben dich setzen soll, wenn nur zu dir oder dir gegenüber!"
                 "Erwähne NICHT das Wort Willkommensraum!"
+                "Sage niemals 'schau dir dein Schicksal an', da du das Schicksal offenbarst würdest du es eher zeigen!"
+            )
+            
+        if scene_name == "scene_3_intro":
+            parts.append(
+                "EXTRA INFO:"
+                "Sage niemals etwas wie 'meine Hand in deiner Hand'. Es geht nur um die Hand der Person die dir gegenüber sitzt!"
+                "Nutze nie das Wort 'now'. Nutze stattdessen das deutsche Wort 'jetzt'."
+            )
+        
+        if scene_name == "scene_debug_gaslight":
+            parts.append(
+                "EXTRA INFO:"
+                "Sage niemals wort wörtlich 'Hand gezeigt die falsche.' sondern eher 'Hand gezeigt genau diese ist die falsche.' oder 'Hand gezeigt jedoch leider ist dies genau die falsche.'"
+                "Generiere eine Zufallszahl zwischen 0 und 100, falls diese höher als 50 ist dann tausche den Satz 'Du hast mir deine Hand gezeigt' aus mit 'Ich sehe deine Hand'. Behalte jedoch ob es die linke oder rechte ist."
+            )
+        
+        if scene_name == "scene_5_handscan":
+            parts.append(
+                "EXTRA INFO:"
+                "Sag nur das du selber etwas siehsts oder das dir etwas etwas sagt."
+                "Sage niemals etwas wie 'jetzt siehst du deine Hand' oder 'jetzt siehst du alles was du brauchst'."
+                "Verwende niemals die Anrede 'du' oder das Wort 'stehen'!"
             )
 
         return "\n".join(parts)
