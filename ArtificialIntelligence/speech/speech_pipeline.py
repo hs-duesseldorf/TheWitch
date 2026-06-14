@@ -5,7 +5,9 @@ import logging
 import re
 import unicodedata
 from contextlib import suppress
-from typing import Any, Awaitable, Callable
+from typing import Any
+
+from ArtificialIntelligence.speech.audio_player import AudioEffect
 
 from ArtificialIntelligence.speech.audio_player import AudioPlayer
 
@@ -101,12 +103,7 @@ class SpeechPipeline:
         finally:
             self._stage = "idle"
 
-    async def play_text(
-        self,
-        text: str,
-        *,
-        on_audio_start: Callable[[], Awaitable[None] | None] | None = None,
-    ):
+    async def play_text(self, text: str, *, effects: list[AudioEffect] | None = None):
         if len(text) < 10:
             logger.warning("Text too short for TTS (%d chars), skipping", len(text))
             self._stage = "idle"
@@ -116,32 +113,9 @@ class SpeechPipeline:
         self._stage = "tts_stream"
         logger.info("TTS full: %s", text[:80])
 
-        loop = asyncio.get_running_loop()
-        audio_start_future: asyncio.Future[None] | None = None
-        audio_start_task: asyncio.Task[None] | None = None
-
-        if on_audio_start is not None:
-            audio_start_future = loop.create_future()
-
-            async def _wait_and_emit_audio_start():
-                await audio_start_future
-                maybe_result = on_audio_start()
-                if maybe_result is not None:
-                    await maybe_result
-
-            audio_start_task = loop.create_task(_wait_and_emit_audio_start())
-
-            def mark_audio_started():
-                if audio_start_future is None or audio_start_future.done():
-                    return
-                loop.call_soon_threadsafe(audio_start_future.set_result, None)
-        else:
-            def mark_audio_started():
-                return None
-
         try:
             try:
-                player.begin(on_playback_start=mark_audio_started)
+                player.begin()
                 use_direct = player.is_active()
                 if use_direct:
                     logger.info("Audio output active; prebuffering %.2fs", player.prebuffer_seconds)
@@ -157,7 +131,7 @@ class SpeechPipeline:
             async for frame in self._tts.stream_synthesize(text):
                 frame_count += 1
                 byte_count += len(frame.audio)
-                player.put(frame.audio, format=frame.format, sample_rate=frame.sample_rate)
+                player.put(frame.audio, format=frame.format, sample_rate=frame.sample_rate, effects=effects)
 
             logger.info(
                 "TTS complete: frames=%d bytes=%d input_chars=%d",
@@ -169,19 +143,11 @@ class SpeechPipeline:
             if frame_count == 0:
                 raise RuntimeError("TTS returned no audio frames")
 
-            mark_audio_started()
             player.finish()
             await player.wait_for_playback()
 
-            if audio_start_task is not None:
-                await audio_start_task
-
             self._stage = "done"
         finally:
-            if audio_start_task is not None and not audio_start_task.done():
-                audio_start_task.cancel()
-                with suppress(asyncio.CancelledError):
-                    await audio_start_task
             self._stage = "idle"
 
     async def _generate_text(self, prompt: str) -> str:

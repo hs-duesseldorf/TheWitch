@@ -3,12 +3,13 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
-import re
 import threading
 import time
 from contextlib import suppress
 from dataclasses import dataclass
 from typing import Any
+
+import pedalboard
 
 from ArtificialIntelligence.analysis.hand_analyzer import HandAnalyzer
 from ArtificialIntelligence.analysis.scene_prompt_builder import (
@@ -17,7 +18,11 @@ from ArtificialIntelligence.analysis.scene_prompt_builder import (
 )
 from ArtificialIntelligence.clients.llm_client import LLMClient
 from ArtificialIntelligence.clients.tts_client import TTSClient
-from ArtificialIntelligence.speech.speech_pipeline import SpeechPipeline, normalize_llm_text
+from ArtificialIntelligence.speech.audio_player import AudioEffect
+from ArtificialIntelligence.speech.speech_pipeline import (
+    SpeechPipeline,
+    normalize_llm_text,
+)
 from ArtificialIntelligence.state_machine.state_machine import StateMachine, Transition
 from ArtificialIntelligence.ui.debug_ui import run as run_debug_ui
 from ArtificialIntelligence.ui.debug_ui import set_runtime
@@ -40,13 +45,6 @@ from shared.events import (
 
 logger = logging.getLogger("ai")
 
-SENTENCE_PATTERN = re.compile(r"[^.!?]+[.!?]?")
-
-
-def split_spoken_sentences(text: str) -> list[str]:
-    sentences = [match.group(0).strip() for match in SENTENCE_PATTERN.finditer(text)]
-    return [sentence for sentence in sentences if sentence] or [text]
-
 OUTBOUND_AI3D_EVENT = (
     SceneCommandEvent | AnalysisStartedEvent | AnalysisResultEvent | ErrorEvent
 )
@@ -62,6 +60,7 @@ class PendingUnrealAck:
 class SpeechRequest:
     content: str
     scene: Scene
+    effects: list[AudioEffect] | None = None
 
 
 class Runtime:
@@ -89,7 +88,7 @@ class Runtime:
         self._gaslight_correct_hand: Hand | None = None
         self.gaslight_pending = False
         self.gaslight_hand_name: str | None = None
-        self.pending_scene_command: SceneCommandEvent | None = None
+
         self.pending_unreal_ack: PendingUnrealAck | None = None
         self.queued_speech: SpeechRequest | None = None
         self.speech_task: asyncio.Task[None] | None = None
@@ -120,7 +119,6 @@ class Runtime:
             Scene.SCENE_3_INTRO: self.enter_intro,
             Scene.SCENE_4_AWAITING_HAND: self.enter_awaiting_hand,
             Scene.SCENE_5_HANDSCAN: self.enter_handscan,
-            Scene.SCENE_6_HAND_DETECTED: self.enter_hand_detected,
             Scene.SCENE_7_HANDSCAN_DONE: self.enter_handscan_complete,
             Scene.SCENE_8_ANALYSIS: self.enter_analysis,
             Scene.SCENE_9_OUTRO: self.enter_outro,
@@ -151,7 +149,9 @@ class Runtime:
         self.websocket_server.add_route("/ws/ai-3d-video", None)
         self.websocket_server.add_route("/ws/ai-3d-roi", None)
 
-    async def _on_ip_ai_message(self, _server: WebSocketServer, _connection: Any, message: str | bytes):
+    async def _on_ip_ai_message(
+        self, _server: WebSocketServer, _connection: Any, message: str | bytes
+    ):
         event = self.ip_channel.decode(message)
         if not isinstance(event, (HandEvent, PersonEvent)):
             return
@@ -160,15 +160,21 @@ class Runtime:
             return
         await self.handle_image_processing_event(event)
 
-    async def _on_ip_ai_video_message(self, _server: WebSocketServer, _connection: Any, message: str | bytes):
+    async def _on_ip_ai_video_message(
+        self, _server: WebSocketServer, _connection: Any, message: str | bytes
+    ):
         if isinstance(message, bytes):
             await self.websocket_server.broadcast(message, path="/ws/ai-3d-video")
 
-    async def _on_ip_roi_message(self, _server: WebSocketServer, _connection: Any, message: str | bytes):
+    async def _on_ip_roi_message(
+        self, _server: WebSocketServer, _connection: Any, message: str | bytes
+    ):
         if isinstance(message, bytes):
             await self.websocket_server.broadcast(message, path="/ws/ai-3d-roi")
 
-    async def _on_ai_3d_message(self, _server: WebSocketServer, _connection: Any, message: str | bytes):
+    async def _on_ai_3d_message(
+        self, _server: WebSocketServer, _connection: Any, message: str | bytes
+    ):
         event = self.ai3d_channel.decode(message)
         if isinstance(event, EventDoneEvent):
             await self.handle_unreal_event(event)
@@ -212,7 +218,9 @@ class Runtime:
             return
         self.pending_unreal_ack = None
         current = self.state_machine.state
-        if current.startswith("scene_debug_") and getattr(self, "_debug_return_state", None):
+        if current.startswith("scene_debug_") and getattr(
+            self, "_debug_return_state", None
+        ):
             dest = self._debug_return_state
             self._debug_return_state = None
             change = self.state_machine._set_state("debug_done", dest)
@@ -229,26 +237,24 @@ class Runtime:
 
     async def apply_state_change(self, change: Transition, *, cancel_speech: bool):
         self.pending_unreal_ack = None
-        self.pending_scene_command = SceneCommandEvent(
-            scene=Scene(change.dest),
-            animation=change.dest,
-            effects={},
-            trigger=change.trigger,
-        )
         if change.dest.startswith("scene_debug_"):
             self._debug_return_state = (
                 Scene.SCENE_5_HANDSCAN.value
                 if change.source == Scene.SCENE_6_HAND_DETECTED.value
                 else change.source
             )
-        if cancel_speech and self.speech_task is not None and not self.speech_task.done():
+        if (
+            cancel_speech
+            and self.speech_task is not None
+            and not self.speech_task.done()
+        ):
             logger.info("Queuing speech replacement at next sentence boundary")
         handler = self.state_handlers.get(Scene(change.dest))
         if handler is not None:
             await handler(change)
 
     async def enter_idle(self, _change: Transition):
-        self.reset_cycle_state(clear_pending_scene_command=False)
+        self.reset_cycle_state()
 
     async def enter_welcome(self, _change: Transition):
         await self.speak_scene(Scene.SCENE_1_WELCOME)
@@ -261,18 +267,21 @@ class Runtime:
 
     async def enter_awaiting_hand(self, change: Transition):
         if change.source.startswith("scene_debug_"):
-            self._debug_cooldown_until = time.monotonic() + float(os.environ["WITCH_DEBUG_COOLDOWN_SECONDS"])
-        await self.emit_scene_events_on_audio_start(Scene.SCENE_4_AWAITING_HAND, None)
+            self._debug_cooldown_until = time.monotonic() + float(
+                os.environ["WITCH_DEBUG_COOLDOWN_SECONDS"]
+            )
 
     async def enter_handscan(self, _change: Transition):
         self._clear_hand_selection()
         if not self.analysis_started:
             self.analysis_started = True
-            await self.emit_ai3d_event(AnalysisStartedEvent(scene=Scene.SCENE_5_HANDSCAN))
+            try:
+                await self.emit_ai3d_event(
+                    AnalysisStartedEvent(scene=Scene.SCENE_5_HANDSCAN)
+                )
+            except Exception as exc:
+                logger.error("Failed to send analysis started event: %s", exc)
         await self.speak_scene(Scene.SCENE_5_HANDSCAN)
-
-    async def enter_hand_detected(self, change: Transition):
-        await self.emit_scene_events_on_audio_start(Scene.SCENE_6_HAND_DETECTED, None)
 
     async def enter_handscan_complete(self, _change: Transition):
         await self.speak_scene(Scene.SCENE_7_HANDSCAN_DONE)
@@ -280,8 +289,15 @@ class Runtime:
     async def enter_analysis(self, _change: Transition):
         prompt = self.hand_analyzer.build_prompt(self._accepted_hand_event)
         if prompt is None:
-            prompt = self.scene_prompt_builder.build_prompt(Scene.SCENE_8_ANALYSIS) or ""
-        await self.start_speech(SpeechRequest(prompt, Scene.SCENE_8_ANALYSIS))
+            prompt = (
+                self.scene_prompt_builder.build_prompt(Scene.SCENE_8_ANALYSIS) or ""
+            )
+
+        pitch_shifter = pedalboard.Pedalboard([pedalboard.PitchShift(-10)])
+        effects: list[AudioEffect] = [lambda data, sr: data + pitch_shifter(data, sr)]
+        await self.start_speech(
+            SpeechRequest(prompt, Scene.SCENE_8_ANALYSIS, effects=effects)
+        )
 
     async def enter_outro(self, _change: Transition):
         await self.speak_scene(Scene.SCENE_9_OUTRO)
@@ -310,7 +326,6 @@ class Runtime:
             ),
         )
         if prompt is None:
-            await self.emit_scene_events_on_audio_start(scene, None)
             await self.advance_scene_after_speech(scene)
             return
         await self.start_speech(SpeechRequest(prompt, scene))
@@ -330,26 +345,27 @@ class Runtime:
             text = request.content
             text = await self.speech_pipeline.generate_text(text)
             text = normalize_llm_text(text)
-            interrupted = False
-            sentences = split_spoken_sentences(text)
-            for index, sentence in enumerate(sentences):
-                on_audio_start = None
-                if index == 0:
-                    def on_audio_start():
-                        return self.emit_scene_events_on_audio_start(scene, text)
-                await self.speech_pipeline.play_text(
-                    sentence,
-                    on_audio_start=on_audio_start,
+            await self.emit_ai3d_event(
+                SceneCommandEvent(
+                    scene=scene,
+                    animation=scene.value,
+                    effects={},
+                    text=text,
                 )
-                if self.queued_speech is not None:
-                    interrupted = True
-                    break
-            if not interrupted:
-                await self.advance_scene_after_speech(scene)
+            )
+            if scene is Scene.SCENE_8_ANALYSIS:
+                await self.emit_ai3d_event(AnalysisResultEvent(text=text, scene=scene))
+            await self.speech_pipeline.play_text(text, effects=request.effects)
+            await self.advance_scene_after_speech(scene)
         except asyncio.CancelledError:
             raise
         except Exception as exc:
-            await self.emit_ai3d_event(ErrorEvent(message=f"Speech failed for {scene.value}: {exc}"))
+            try:
+                await self.emit_ai3d_event(
+                    ErrorEvent(message=f"Speech failed for {scene.value}: {exc}")
+                )
+            except Exception as inner:
+                logger.error("Failed to send error event to Unreal: %s", inner)
             if self.state_machine.state == scene.value:
                 await asyncio.sleep(2)
                 await self.speak_scene(scene)
@@ -364,22 +380,6 @@ class Runtime:
             if queued is not None:
                 with suppress(RuntimeError):
                     await self.start_speech(queued)
-
-    async def emit_scene_events_on_audio_start(self, scene: Scene, text: str | None):
-        command = self.pending_scene_command
-        if command is not None and command.scene is scene:
-            if text is not None:
-                command = SceneCommandEvent(
-                    scene=command.scene,
-                    animation=command.animation,
-                    effects=command.effects,
-                    trigger=command.trigger,
-                    text=text,
-                )
-            await self.emit_ai3d_event(command)
-            self.pending_scene_command = None
-        if scene is Scene.SCENE_8_ANALYSIS and text is not None:
-            await self.emit_ai3d_event(AnalysisResultEvent(text=text, scene=scene))
 
     async def emit_ai3d_event(self, event: OUTBOUND_AI3D_EVENT):
         await self.ai3d_channel.broadcast(event)
@@ -403,7 +403,9 @@ class Runtime:
     async def advance_scene_after_speech(self, scene: Scene):
         if self.state_machine.state != scene.value:
             return
-        if scene.value.startswith("scene_debug_") and getattr(self, "_debug_return_state", None):
+        if scene.value.startswith("scene_debug_") and getattr(
+            self, "_debug_return_state", None
+        ):
             dest = self._debug_return_state
             self._debug_return_state = None
             change = self.state_machine._set_state("debug_done", dest)
@@ -449,18 +451,16 @@ class Runtime:
 
     def force_state(self, state: str) -> str:
         self.state_machine.force_state(state)
-        self.reset_cycle_state(clear_pending_scene_command=True)
+        self.reset_cycle_state()
         return self.state
 
     def set_manual_mode(self, enabled: bool) -> bool:
         self.state_machine.manual_mode = enabled
         return enabled
 
-    def reset_cycle_state(self, *, clear_pending_scene_command: bool):
+    def reset_cycle_state(self):
         self._accepted_hand_event = None
         self._clear_hand_selection()
-        if clear_pending_scene_command:
-            self.pending_scene_command = None
         self.pending_unreal_ack = None
         self.queued_speech = None
         self.analysis_started = False
@@ -501,7 +501,9 @@ class Runtime:
             self.forbidden_hand = event.hand
             self.desired_hand = Hand.LEFT if event.hand is Hand.RIGHT else Hand.RIGHT
         if self._gaslight_correct_hand is None:
-            self._gaslight_correct_hand = Hand.LEFT if event.hand is Hand.RIGHT else Hand.RIGHT
+            self._gaslight_correct_hand = (
+                Hand.LEFT if event.hand is Hand.RIGHT else Hand.RIGHT
+            )
         self.gaslight_pending = True
         self.gaslight_hand_name = self._hand_name(event)
 
