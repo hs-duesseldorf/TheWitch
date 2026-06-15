@@ -84,8 +84,27 @@ if __name__ == "__main__":
 
     person_avg_vectors = np.array(person_avg_vectors, dtype=np.float32)
 
-    print(f"[INFO] Running K-Means exactly over {len(unique_person_ids)} unique persons...")
-    kmeans = KMeans(n_clusters=5, random_state=42, n_init=15)
+
+    # 2 : constrained k-means grouping
+    from k_means_constrained import KMeansConstrained
+
+    unique_person_ids = sorted(list(person_features.keys()))
+    person_avg_vectors = []
+    for pid in unique_person_ids:
+        avg_vector = np.mean(person_features[pid], axis=0)
+        person_avg_vectors.append(avg_vector)
+    person_avg_vectors = np.array(person_avg_vectors, dtype=np.float32)
+
+    n_people = len(unique_person_ids)
+    exact_size = n_people // 5
+
+    print(f"Constrained KMeans (Target size per cluster: {exact_size})")
+    kmeans = KMeansConstrained(
+        n_clusters=5,
+        size_min=exact_size,
+        size_max=exact_size + 1,
+        random_state=42
+    )
     person_labels = kmeans.fit_predict(person_avg_vectors)
 
     person_to_label = {pid: int(label) for pid, label in zip(unique_person_ids, person_labels)}

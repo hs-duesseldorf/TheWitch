@@ -19,7 +19,8 @@ def build_result(input_payload: Dict[str, Any], average_payload: Dict[str, Any] 
         "hand": input_payload.get("hand"),
         "trigger": input_payload.get("trigger"),
         "type": input_payload.get("type"),
-        "dominant_element": find_dominant_element(input_payload)
+        "dominant_element": find_element(MODEL_DOMI_PATH ,input_payload),
+        "weak_element": find_element(MODEL_WEAK_PATH,input_payload)
     }
 
 def extract_features_tensor(lengths):
@@ -65,19 +66,18 @@ class MLP(nn.Module):
         return self.network(x)
 
 
-MODEL_PATH = "hand_element_mode_87l.pth"
-mlp_model = MLP()
+MODEL_WEAK_PATH = "hand_weak_model.pth"
+MODEL_DOMI_PATH = "hand_dominant_model.pth"
 
-if os.path.exists(MODEL_PATH):
-    mlp_model.load_state_dict(torch.load(MODEL_PATH))
-    mlp_model.eval()
-    print(f"hand_element_mode_87l.pth load success")
-else:
-    print(f"{MODEL_PATH} not found. find_core_element will output 'NaN'.")
+def find_element(MODEL_PATH : str, input_payload: Dict[str, Any]) -> str:
+    mlp_model = MLP()
 
-
-def find_dominant_element(input_payload: Dict[str, Any]) -> str:
-    if not os.path.exists(MODEL_PATH):
+    if os.path.exists(MODEL_PATH):
+        mlp_model.load_state_dict(torch.load(MODEL_PATH))
+        mlp_model.eval()
+        print(f"{MODEL_PATH} load success")
+    else:
+        print(f"{MODEL_PATH} not found. find_core_element will output 'NaN'.")
         return "NaN"
 
     lengths = input_payload.get("lengths", {})
@@ -102,7 +102,6 @@ def find_dominant_element(input_payload: Dict[str, Any]) -> str:
 
     best_idx = int(np.argmax(probabilities))
     return ELEMENTS[best_idx]
-
 
 if __name__ == "__main__":
     sample_input = {

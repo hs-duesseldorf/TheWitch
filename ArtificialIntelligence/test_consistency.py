@@ -137,7 +137,6 @@ person_5_input = {
     }
 }
 
-
 def test_two_different_hands():
     result_p1 = build_result(person_1_input)
     result_p1_1 = build_result(person_1_1_input)
