@@ -1,10 +1,6 @@
 import json
 from hand_analysis import build_result
 
-# =====================================================================
-# 데이터셋 (오타 및 수치 오류 완벽 교정 완료)
-# =====================================================================
-
 # Person 1 (Linke Hand)
 person_1_input = {
     "request_id": "person-1-left",

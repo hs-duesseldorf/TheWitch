@@ -40,7 +40,7 @@ def extract_features(lengths):
     ]
 
 
-class CompatibleMLP(nn.Module):
+class MLP(nn.Module):
     def __init__(self, input_dim=7, num_classes=5):
         super().__init__()
         self.network = nn.Sequential(
@@ -134,7 +134,7 @@ if __name__ == "__main__":
     X_test_tensor = torch.tensor(X_test, dtype=torch.float32)
     Y_test_tensor = torch.tensor(Y_test, dtype=torch.long)
 
-    model = CompatibleMLP()
+    model = MLP()
     criterion = nn.CrossEntropyLoss()
     optimizer = optim.Adam(model.parameters(), lr=0.002)
 
