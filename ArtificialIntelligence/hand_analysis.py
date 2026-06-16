@@ -1,17 +1,91 @@
 import json
+import os
+import pickle
 from typing import Dict, Any
 import numpy as np
 import torch
 import torch.nn as nn
-import os
 
 ELEMENTS = ["holz", "feuer", "erde", "metall", "wasser"]
+ROOM_MAPPING = {d: [w for w in range(5) if d != w] for d in range(5)}
+MODEL_DIR = "hand_analysis_models"
+
+
+class SubWeakMLP(nn.Module):
+    def __init__(self, input_dim=263, num_classes=4):
+        super().__init__()
+        self.network = nn.Sequential(
+            nn.Linear(input_dim, 128), nn.ReLU(), nn.BatchNorm1d(128), nn.Dropout(0.2),
+            nn.Linear(128, 64), nn.ReLU(), nn.Linear(64, num_classes)
+        )
+
+    def forward(self, x): return self.network(x)
+
+with open(os.path.join(MODEL_DIR, "rf_stage1.pkl"), "rb") as f: rf_model_s1 = pickle.load(f)
+with open(os.path.join(MODEL_DIR, "xgb_stage1.pkl"), "rb") as f: xgb_model_s1 = pickle.load(f)
+
+weak_mlp_models = {}
+for d_idx in range(5):
+    path = os.path.join(MODEL_DIR, f"sub_mlp_{d_idx}.pth")
+    if os.path.exists(path):
+        model = SubWeakMLP()
+        model.load_state_dict(torch.load(path, map_location=torch.device('cpu')))
+        model.eval()
+        weak_mlp_models[d_idx] = model
+
 
 def safe_div(numerator: float, denominator: float) -> float:
-    if denominator == 0:
-        return 0.0
-    return numerator / denominator
+    return numerator / denominator if denominator != 0 else 0.0
 
+def extract_features_tensor(lengths: Dict[str, float]) -> list:
+    pw, ph = lengths.get("palm_width", 0.0), lengths.get("palm_height", 0.0)
+    idx, mid, rng, pky = lengths.get("index_length", 0.0), lengths.get("middle_length", 0.0), lengths.get("ring_length",
+                                                                                                          0.0), lengths.get(
+        "pinky_length", 0.0)
+
+    fingers = [idx, mid, rng, pky]
+    max_f = max(fingers) if fingers else 0.0
+    avg_f = sum(fingers) / len(fingers) if fingers else 0.0
+
+    return [
+        safe_div(pw, ph), safe_div(avg_f, ph), safe_div(idx, rng),
+        safe_div(idx, max_f), safe_div(mid, max_f), safe_div(rng, max_f), safe_div(pky, max_f)
+    ]
+
+def predict_dominant_element(input_payload: Dict[str, Any]) -> str:
+    lengths = input_payload.get("lengths", {})
+    vector = input_payload.get("vector", [])
+
+    if not lengths or lengths.get("middle_length", 0) == 0 or lengths.get("palm_height", 0) == 0 or len(vector) != 256:
+        return "NaN"
+    input_np = np.array([extract_features_tensor(lengths) + vector], dtype=np.float32)
+
+    rf_probs = rf_model_s1.predict_proba(input_np)[0]
+    xgb_probs = xgb_model_s1.predict_proba(input_np)[0]
+    best_idx = int(np.argmax((rf_probs + xgb_probs) / 2.0))
+    return ELEMENTS[best_idx]
+
+
+def predict_weak_element(input_payload: Dict[str, Any]) -> str:
+    lengths = input_payload.get("lengths", {})
+    vector = input_payload.get("vector", [])
+
+    if not lengths or lengths.get("middle_length", 0) == 0 or lengths.get("palm_height", 0) == 0 or len(vector) != 256:
+        return "NaN"
+    input_np = np.array([extract_features_tensor(lengths) + vector], dtype=np.float32)
+
+    rf_probs = rf_model_s1.predict_proba(input_np)[0]
+    xgb_probs = xgb_model_s1.predict_proba(input_np)[0]
+    pred_d_idx = int(np.argmax((rf_probs + xgb_probs) / 2.0))
+
+    if pred_d_idx not in weak_mlp_models: return "NaN"
+
+    input_tensor = torch.tensor(input_np, dtype=torch.float32)
+    with torch.no_grad():
+        outputs = weak_mlp_models[pred_d_idx](input_tensor)
+        pred_w_idx = int(torch.argmax(outputs, dim=1).item())
+
+    return ELEMENTS[ROOM_MAPPING[pred_d_idx][pred_w_idx]]
 
 def build_result(input_payload: Dict[str, Any], average_payload: Dict[str, Any] | None = None) -> Dict[str, Any]:
     return {
@@ -19,89 +93,9 @@ def build_result(input_payload: Dict[str, Any], average_payload: Dict[str, Any] 
         "hand": input_payload.get("hand"),
         "trigger": input_payload.get("trigger"),
         "type": input_payload.get("type"),
-        "dominant_element": find_element(MODEL_DOMI_PATH ,input_payload),
-        "weak_element": find_element(MODEL_WEAK_PATH,input_payload)
+        "dominant_element": predict_dominant_element( input_payload),
+        "weak_element": predict_weak_element(input_payload)
     }
-
-def extract_features_tensor(lengths):
-    palm_width = lengths.get("palm_width", 0.0)
-    palm_height = lengths.get("palm_height", 0.0)
-
-    index_length = lengths.get("index_length", 0.0)
-    middle_length = lengths.get("middle_length", 0.0)
-    ring_length = lengths.get("ring_length", 0.0)
-    pinky_length = lengths.get("pinky_length", 0.0)
-
-    finger_lengths = [index_length, middle_length, ring_length, pinky_length]
-    max_finger = max(finger_lengths) if finger_lengths else 0.0
-    avg_finger = sum(finger_lengths) / len(finger_lengths) if finger_lengths else 0.0
-
-    return [
-        safe_div(palm_width, palm_height),  # palm_aspect_ratio
-        safe_div(avg_finger, palm_height),  # finger_length_ratio
-        safe_div(index_length, ring_length),  # index_to_ring_ratio
-        safe_div(index_length, max_finger),  # finger_profile.index
-        safe_div(middle_length, max_finger),  # finger_profile.middle
-        safe_div(ring_length, max_finger),  # finger_profile.ring
-        safe_div(pinky_length, max_finger)  # finger_profile.little
-    ]
-
-
-
-class MLP(nn.Module):
-    def __init__(self, input_dim=263, num_classes=5):
-        super().__init__()
-        self.network = nn.Sequential(
-            nn.Linear(input_dim, 128),
-            nn.ReLU(),
-            nn.Dropout(0.2),
-            nn.Linear(128, 64),
-            nn.ReLU(),
-            nn.Linear(64, 32),
-            nn.ReLU(),
-            nn.Linear(32, num_classes)
-        )
-
-    def forward(self, x):
-        return self.network(x)
-
-
-MODEL_WEAK_PATH = "hand_weak_model.pth"
-MODEL_DOMI_PATH = "hand_dominant_model.pth"
-
-def find_element(MODEL_PATH : str, input_payload: Dict[str, Any]) -> str:
-    mlp_model = MLP()
-
-    if os.path.exists(MODEL_PATH):
-        mlp_model.load_state_dict(torch.load(MODEL_PATH))
-        mlp_model.eval()
-        print(f"{MODEL_PATH} load success")
-    else:
-        print(f"{MODEL_PATH} not found. find_core_element will output 'NaN'.")
-        return "NaN"
-
-    lengths = input_payload.get("lengths", {})
-    #zero division error
-    if not lengths or lengths.get("middle_length", 0) == 0 or lengths.get("palm_height", 0) == 0 or  lengths.get("ring_length", 0) == 0:
-        return "NaN"
-
-    vector = input_payload.get("vector", [])
-    if not vector or len(vector) != 256:
-        return "NaN"
-
-    # hand ratio
-    feature_vector = extract_features_tensor(lengths)
-
-    # hand line vec + hand ratio
-    combined_vector = feature_vector + vector
-
-    input_tensor = torch.tensor([combined_vector], dtype=torch.float32)
-
-    with torch.no_grad():
-        probabilities = torch.softmax(mlp_model(input_tensor), dim=1)
-
-    best_idx = int(np.argmax(probabilities))
-    return ELEMENTS[best_idx]
 
 if __name__ == "__main__":
     sample_input = {
