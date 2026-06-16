@@ -6,35 +6,9 @@ import threading
 import time
 from dataclasses import dataclass
 from enum import Enum
-from typing import Generic, TypeVar
+from typing import Callable
 
-from shared.events import ErrorEvent, PersonEvent, PersonTrigger
-
-from .palm_processing.transport import WebSocketClient
-from .seat_sensor_led import SeatSensorLed
-
-SignatureT = TypeVar("SignatureT")
-EVENT_STABILITY_SECONDS = float(os.environ["WITCH_EVENT_STABILITY_SECONDS"])
-
-
-@dataclass
-class EventStabilityFilter(Generic[SignatureT]):
-    stability_seconds: float
-    observed: SignatureT | None = None
-    observed_since: float = 0.0
-    processed: SignatureT | None = None
-
-    def accept(self, signature: SignatureT, now: float) -> bool:
-        if signature != self.observed:
-            self.observed = signature
-            self.observed_since = now
-            return False
-        if (now - self.observed_since) < self.stability_seconds:
-            return False
-        if signature == self.processed:
-            return False
-        self.processed = signature
-        return True
+from shared.events import ErrorEvent, PersonEvent, PersonTrigger, WitchEvent
 
 
 logger = logging.getLogger(__name__)
@@ -261,22 +235,16 @@ class LD2410SSerialSensor:
         )
 
 
-class SeatPresenceMonitor:
-    def __init__(
-        self,
-        *,
-        event_client: WebSocketClient,
-    ):
-        self.event_client = event_client
+class SeatSensor:
+    def __init__(self):
+        self._callback: Callable[[WitchEvent], None] | None = None
         self.stop_event = threading.Event()
         self.worker: threading.Thread | None = None
-        self._person_filter = EventStabilityFilter[PersonTrigger](
-            EVENT_STABILITY_SECONDS
-        )
 
-    def start(self) -> None:
+    def start(self, callback: Callable[[WitchEvent], None]) -> None:
         if self.worker is not None:
             return
+        self._callback = callback
         self.stop_event.clear()
         self.worker = threading.Thread(
             target=self._run, name="ld2410s-seat-monitor", daemon=True
@@ -298,16 +266,8 @@ class SeatPresenceMonitor:
             port = self._required_env("WITCH_LD2410S_PORT")
             seated_max_mm = int(self._required_env("WITCH_LD2410S_SEATED_MAX_MM"))
             present_max_mm = int(self._required_env("WITCH_LD2410S_ROOM_MAX_MM"))
-            led_pin = int(self._required_env("WITCH_LED_PIN"))
         except ValueError as exc:
             self._publish_error(str(exc))
-            return
-
-        try:
-            led = SeatSensorLed(pin=led_pin)
-            led.open()
-        except Exception as exc:
-            self._publish_error(f"Jetson GPIO setup failed: {exc}")
             return
 
         try:
@@ -319,7 +279,6 @@ class SeatPresenceMonitor:
             )
         except Exception as exc:
             logger.warning("Seat sensor open failed: %s", exc)
-            led.close()
             return
 
         if LD2410S_CONFIGURE:
@@ -387,10 +346,9 @@ class SeatPresenceMonitor:
                                 reading.target_state,
                                 reading.present,
                                 reading.distance_mm,
-                            )
+                        )
                         if not reading.present:
                             self._publish_zone(PersonZone.ABSENT, None)
-                            led.set_seated(False)
                         elif distance_mm is None:
                             logger.debug(
                                 "Ignoring seat sensor reading without distance: present=%s target_state=%s",
@@ -408,17 +366,13 @@ class SeatPresenceMonitor:
                                 present_max_mm=present_max_mm,
                             )
                             self._publish_zone(zone, distance_mm)
-                            led.set_seated(zone is PersonZone.SEATED)
 
                 if reading is None:
                     elapsed = time.monotonic() - started
                     if self.stop_event.wait(max(0.0, LD2410S_POLL_SECONDS - elapsed)):
                         break
         finally:
-            try:
-                sensor.close()
-            finally:
-                led.close()
+            sensor.close()
 
     def _ld2410s_zone(
         self,
@@ -438,34 +392,28 @@ class SeatPresenceMonitor:
         return PersonZone.ABSENT
 
     def _publish_person_present(self, distance_mm: int | None) -> None:
-        if not self._person_filter.accept(PersonTrigger.DETECTED, time.monotonic()):
-            return
-        self.event_client.send_message(
+        self._emit(
             PersonEvent(
                 trigger=PersonTrigger.DETECTED,
             )
         )
 
     def _publish_person_seated(self, distance_mm: int | None) -> None:
-        if not self._person_filter.accept(PersonTrigger.SEATED, time.monotonic()):
-            return
-        self.event_client.send_message(
+        self._emit(
             PersonEvent(
                 trigger=PersonTrigger.SEATED,
             )
         )
 
     def _publish_person_absent(self) -> None:
-        if not self._person_filter.accept(PersonTrigger.ABSENT, time.monotonic()):
-            return
-        self.event_client.send_message(
+        self._emit(
             PersonEvent(
                 trigger=PersonTrigger.ABSENT,
             )
         )
 
     def _publish_error(self, message: str) -> None:
-        self.event_client.send_message(
+        self._emit(
             ErrorEvent(
                 message=f"Seat sensor error: {message}",
             )
@@ -494,3 +442,10 @@ class SeatPresenceMonitor:
         if not value.strip():
             raise ValueError(f"Missing required seat sensor env var: {name}")
         return value.strip()
+
+    def _emit(self, event: WitchEvent) -> None:
+        if self._callback is not None:
+            self._callback(event)
+
+
+SeatPresenceMonitor = SeatSensor
