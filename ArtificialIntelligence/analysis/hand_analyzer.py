@@ -1,17 +1,22 @@
 from __future__ import annotations
-
 import json
 import logging
-import math
+import os
+import pickle
 from functools import lru_cache
 from pathlib import Path
-from typing import Any
+from typing import Dict, Any
+import numpy as np
+import torch
+import torch.nn as nn
 
 from shared.events import HandEvent, Scene
 
 logger = logging.getLogger("ai")
 
 ELEMENTS = ["holz", "feuer", "erde", "metall", "wasser"]
+ROOM_MAPPING = {j: [i for i in range(5) if j != i] for j in range(5)}
+MODEL_DIR = "hand_analysis_models"
 
 PACKAGE_PATH = Path(__file__).resolve().parent.parent / "package.json"
 
@@ -34,110 +39,109 @@ _HAND_ANALYSIS_SYSTEM_PROMPT = (
     "/no_think\n"
 )
 
-PALM_CENTER = 0.6524
-FINGER_CENTER = 0.8286
-PALM_SCALE = 15.0
-FINGER_SCALE = 10.0
+class SubWeakMLP(nn.Module):
+    def __init__(self, input_dim=263, num_classes=4):
+        super().__init__()
+        self.fc1 = nn.Linear(input_dim, 128)
+        self.relu1 = nn.ReLU()
+        self.bn1 = nn.BatchNorm1d(128)
+        self.dropout = nn.Dropout(0.2)
+        self.fc2 = nn.Linear(128, 64)
+        self.relu2 = nn.ReLU()
+        self.fc3 = nn.Linear(64, num_classes)
 
-_ELEMENT_ANGLES: dict[str, float] = {
-    "holz": math.radians(0),
-    "wasser": math.radians(72),
-    "feuer": math.radians(144),
-    "metall": math.radians(216),
-    "erde": math.radians(288),
-}
+    def forward(self, x):
+        x = self.fc1(x)
+        x = self.relu1(x)
+        x = self.bn1(x)
+        x = self.dropout(x)
+        x = self.fc2(x)
+        x = self.relu2(x)
+        return self.fc3(x)
 
-RAW_SCORE_STATS: dict[str, dict[str, float]] = {
-    "holz": {"mean": 9.97978, "std": 0.475036},
-    "feuer": {"mean": 10.007811, "std": 0.437006},
-    "erde": {"mean": 10.007582, "std": 0.391533},
-    "metall": {"mean": 10.024907, "std": 0.457624},
-    "wasser": {"mean": 9.979921, "std": 0.40583},
-}
 
-CONFIDENCE_THRESHOLD = 0.2
-STRONG_THRESHOLD = 1.0
-WEAK_THRESHOLD = -1.0
+rf_model_s1, xgb_model_s1 = None, None
+rf_path = os.path.join(MODEL_DIR, "rf_stage1.pkl")
+xgb_path = os.path.join(MODEL_DIR, "xgb_stage1.pkl")
 
+if os.path.exists(rf_path) and os.path.exists(xgb_path):
+    with open(rf_path, "rb") as f: rf_model_s1 = pickle.load(f)
+    with open(xgb_path, "rb") as f: xgb_model_s1 = pickle.load(f)
+
+weak_mlp_models = {}
+for d_idx in range(5):
+    path = os.path.join(MODEL_DIR, f"sub_mlp_{d_idx}.pth")
+    if os.path.exists(path):
+        model = SubWeakMLP()
+        model.load_state_dict(torch.load(path, map_location=torch.device('cpu')))
+        model.eval()
+        weak_mlp_models[d_idx] = model
 
 def _safe_div(num: float, den: float) -> float:
     return 0.0 if den == 0 else num / den
 
-
-def extract_features(lengths: dict[str, float]) -> dict[str, float]:
-    palm_width = lengths.get("palm_width", 0.0)
-    palm_height = lengths.get("palm_height", 0.0)
-    finger_lengths = [
-        lengths.get("index_length", 0.0),
-        lengths.get("middle_length", 0.0),
-        lengths.get("ring_length", 0.0),
-        lengths.get("pinky_length", 0.0),
+def extract_features_tensor(lengths: Dict[str, float]) -> list:
+    pw, ph = lengths.get("palm_width", 0.0), lengths.get("palm_height", 0.0)
+    idx, mid, rng, pky = lengths.get("index_length", 0.0), lengths.get("middle_length", 0.0), lengths.get("ring_length", 0.0), lengths.get("pinky_length", 0.0)
+    fingers = [idx, mid, rng, pky]
+    max_f = max(fingers) if fingers else 0.0
+    avg_f = sum(fingers) / len(fingers) if fingers else 0.0
+    return [
+        _safe_div(pw, ph), _safe_div(avg_f, ph), _safe_div(idx, rng),
+        _safe_div(idx, max_f), _safe_div(mid, max_f), _safe_div(rng, max_f), _safe_div(pky, max_f)
     ]
-    avg_finger = sum(finger_lengths) / len(finger_lengths)
+
+def _prepare_input_np(hand_event: HandEvent) -> np.ndarray | None:
+    lengths = hand_event.lengths or {}
+    vector = hand_event.vector or []
+    if not lengths or lengths.get("middle_length", 0) == 0 or lengths.get("palm_height", 0) == 0 or len(vector) != 256:
+        return None
+    return np.array([extract_features_tensor(lengths) + vector], dtype=np.float32)
+
+def _predict_dominant(input_np: np.ndarray) -> tuple[str, str, bool]:
+    if rf_model_s1 is None or xgb_model_s1 is None:
+        return "holz", "wasser", False
+
+    rf_probs = rf_model_s1.predict_proba(input_np)[0]
+    xgb_probs = xgb_model_s1.predict_proba(input_np)[0]
+    avg_probs = (rf_probs + xgb_probs) / 2.0
+
+    sorted_indices = np.argsort(avg_probs)[::-1]
+    dominant_idx = sorted_indices[0]
+    second_idx = sorted_indices[1]
+
+    prob_diff = avg_probs[dominant_idx] - avg_probs[second_idx]
+    is_border = prob_diff <= 0.05
+
+    return ELEMENTS[dominant_idx], ELEMENTS[second_idx], is_border
+
+def _predict_weak(input_np: np.ndarray, dominant_elem: str) -> str:
+    if rf_model_s1 is None or xgb_model_s1 is None: return "feuer"
+    pred_d_idx = ELEMENTS.index(dominant_elem)
+    if pred_d_idx not in weak_mlp_models: return "feuer"
+
+    input_tensor = torch.tensor(input_np, dtype=torch.float32)
+    with torch.no_grad():
+        outputs = weak_mlp_models[pred_d_idx](input_tensor)
+        pred_w_idx = int(torch.argmax(outputs, dim=1).item())
+    return ELEMENTS[ROOM_MAPPING[pred_d_idx][pred_w_idx]]
+
+def build_result(hand_event: HandEvent) -> Dict[str, Any]:
+    input_np = _prepare_input_np(hand_event)
+
+    dominant, second, is_border = _predict_dominant(input_np)
+    weakest = _predict_weak(input_np, dominant)
+
+    if second == weakest:
+        remaining = [e for e in ELEMENTS if e != dominant and e != weakest]
+        second = remaining[0]
+
     return {
-        "palm_aspect_ratio": _safe_div(palm_width, palm_height),
-        "finger_length_ratio": _safe_div(avg_finger, palm_height),
+        "dominant_element": dominant,
+        "second_element": second,
+        "weakest_element": weakest,
+        "is_border_hand": is_border
     }
-
-
-def compute_raw_scores(features: dict[str, float]) -> dict[str, float]:
-    palm_c = (features["palm_aspect_ratio"] - PALM_CENTER) * PALM_SCALE
-    finger_c = (features["finger_length_ratio"] - FINGER_CENTER) * FINGER_SCALE
-    hx, hy = palm_c, finger_c
-    return {
-        elem: 10.0 + hx * math.cos(elem_angle) + hy * math.sin(elem_angle)
-        for elem, elem_angle in _ELEMENT_ANGLES.items()
-    }
-
-
-def normalize_scores(raw_scores: dict[str, float]) -> dict[str, float]:
-    out: dict[str, float] = {}
-    for key, value in raw_scores.items():
-        stats = RAW_SCORE_STATS[key]
-        std = max(stats["std"], 0.01)
-        out[key] = max(-3.0, min(3.0, (value - stats["mean"]) / std))
-    return out
-
-
-def determine_states(normalized_scores: dict[str, float]) -> dict[str, str]:
-    states: dict[str, str] = {}
-    for element, z in normalized_scores.items():
-        if z > STRONG_THRESHOLD:
-            states[element] = "zu_stark"
-        elif z < WEAK_THRESHOLD:
-            states[element] = "zu_schwach"
-        else:
-            states[element] = "in_balance"
-    return states
-
-
-def compute_confidence(scores: dict[str, float]) -> float:
-    sorted_vals = sorted(scores.values(), reverse=True)
-    return round(sorted_vals[0] - sorted_vals[1], 3)
-
-
-def build_result(lengths: dict[str, float]) -> dict[str, Any]:
-    features = extract_features(lengths)
-    raw_scores = compute_raw_scores(features)
-    normalized_scores = normalize_scores(raw_scores)
-    states = determine_states(normalized_scores)
-    sorted_elems = sorted(normalized_scores, key=normalized_scores.__getitem__, reverse=True)
-    dominant_element = sorted_elems[0]
-    second_element = sorted_elems[1]
-    weakest_element = sorted_elems[-1]
-    confidence = compute_confidence(normalized_scores)
-    is_border_hand = confidence < CONFIDENCE_THRESHOLD
-    return {
-        "element_scores_raw": raw_scores,
-        "element_scores_normalized": normalized_scores,
-        "element_states": states,
-        "dominant_element": dominant_element,
-        "second_element": second_element,
-        "weakest_element": weakest_element,
-        "confidence": confidence,
-        "is_border_hand": is_border_hand,
-    }
-
 
 @lru_cache(maxsize=1)
 def _load_content() -> dict[str, Any]:
@@ -204,7 +208,7 @@ class HandAnalyzer:
             return None
 
         try:
-            result = build_result(hand_event.lengths)
+            result = build_result(hand_event)
         except Exception:
             logger.exception("Hand element scoring failed")
             return None
