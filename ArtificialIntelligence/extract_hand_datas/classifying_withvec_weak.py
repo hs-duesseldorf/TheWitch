@@ -251,3 +251,98 @@ if __name__ == "__main__":
             torch.save(weak_mlp_models[d_idx].state_dict(), mlp_path)
             print(f"✅ [Stage 2] 대륙 {d_idx}번 서브 MLP 저장 완료 ➔ {mlp_path}")
             saved_mlp_count += 1
+
+    # ============================================================
+    # 🔍 [확장 검증] 경계선(Border Hand) 분석 및 정확도 변동성 측정
+    # ============================================================
+    total_test_images = len(X_test_list)
+
+    border_count = 0
+    clear_count = 0
+
+    # 그룹별 맞은 개수 카운트
+    correct_dom_border = 0
+    correct_dom_clear = 0
+    correct_weak_border = 0
+    correct_weak_clear = 0
+
+    # 경계선으로 판정된 조합(예: holz-feuer) 분포 체크용
+    border_pair_counts = {}
+
+    for idx in range(total_test_images):
+        feat = X_test_list[idx]
+        true_d = Y_dom_test[idx]
+        true_w_idx = Y_weak_test[idx]
+        true_w = room_mapping[true_d][true_w_idx]
+
+        feat_t = torch.tensor(feat, dtype=torch.float32).unsqueeze(0)
+        feat_np = np.array([feat], dtype=np.float32)
+
+        with torch.no_grad():
+            # 1단계 대륙 확률 추론
+            p_dom = (rf_model_s1.predict_proba(feat_np)[0] + xgb_model_s1.predict_proba(feat_np)[0]) / 2.0
+
+            # 확률 높은 순으로 정렬
+            sorted_indices = np.argsort(p_dom)[::-1]
+            pred_d = int(sorted_indices[0])
+            second_d = int(sorted_indices[1])
+
+            # 🚨 유저님이 설정한 경계선 조건 (확률 차이 5% 이하)
+            prob_diff = p_dom[pred_d] - p_dom[second_d]
+            is_border = prob_diff <= 0.05
+
+            # 2단계 최종 원소 추론
+            if pred_d in weak_mlp_models:
+                mlp_logits = weak_mlp_models[pred_d](feat_t)
+                mlp_probs = torch.softmax(mlp_logits, dim=1).squeeze(0).numpy()
+                rf_probs = weak_rf_models[pred_d].predict_proba(feat_np)[0]
+                xgb_probs = weak_xgb_models[pred_d].predict_proba(feat_np)[0]
+
+                final_weak_probs = (mlp_probs + rf_probs + xgb_probs) / 3.0
+                pred_w_idx = int(np.argmax(final_weak_probs))
+                pred_w = room_mapping[pred_d][pred_w_idx]
+            else:
+                pred_w = (pred_d + 1) % 5
+
+        # 통계 데이터 분류 누적
+        if is_border:
+            border_count += 1
+            if pred_d == true_d: correct_dom_border += 1
+            if pred_w == true_w: correct_weak_border += 1
+
+            # 어떤 경계선 조합이 많이 나오는지 기록 (알파벳 순 정렬해서 커플링)
+            pair = "-".join(sorted([ELEMENTS[pred_d], ELEMENTS[second_d]]))
+            border_pair_counts[pair] = border_pair_counts.get(pair, 0) + 1
+        else:
+            clear_count += 1
+            if pred_d == true_d: correct_dom_clear += 1
+            if pred_w == true_w: correct_weak_clear += 1
+
+    # --------------------------------------------------------
+    # 📈 [경계선 분석 결과 리포트 출력]
+    # --------------------------------------------------------
+    print("\n" + "=" * 75)
+    print("🔮 [경계선(Border Hand) 분석 및 시뮬레이션 결과]")
+    print("=" * 75)
+    print(f"전체 테스트 데이터 : {total_test_images}장")
+    print(f"  - 애매한 경계선 손 (차이 <= 5%) : {border_count}장 ({safe_div(border_count, total_test_images) * 100:.1f}%)")
+    print(f"  - 확신 전형의 손   (차이 >  5%) : {clear_count}장 ({safe_div(clear_count, total_test_images) * 100:.1f}%)")
+    print("-" * 75)
+
+    print("[1단계 대륙 정확도 비교]")
+    print(
+        f"  - 경계선 그룹 정확도 : {safe_div(correct_dom_border, border_count) * 100:.2f}% ({correct_dom_border}/{border_count})")
+    print(
+        f"  - 확신 전형 정확도   : {safe_div(correct_dom_clear, clear_count) * 100:.2f}% ({correct_dom_clear}/{clear_count})")
+    print("\n[2단계 최종 원소 정확도 비교]")
+    print(
+        f"  - 경계선 그룹 정확도 : {safe_div(correct_weak_border, border_count) * 100:.2f}% ({correct_weak_border}/{border_count})")
+    print(
+        f"  - 확신 전형 정확도   : {safe_div(correct_weak_clear, clear_count) * 100:.2f}% ({correct_weak_clear}/{clear_count})")
+    print("-" * 75)
+
+    print("[자주 발생하는 경계선 조합 Top 5 Distribution]")
+    sorted_pairs = sorted(border_pair_counts.items(), key=lambda x: x[1], reverse=True)
+    for pair, count in sorted_pairs[:5]:
+        print(f"  - {pair:<15} : {count:>2}번 발생 ({safe_div(count, border_count) * 100:.1f}%)")
+    print("=" * 75 + "\n")
