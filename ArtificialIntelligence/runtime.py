@@ -293,8 +293,10 @@ class Runtime:
                 self.scene_prompt_builder.build_prompt(Scene.SCENE_8_ANALYSIS) or ""
             )
 
-        pitch_shifter = pedalboard.Pedalboard([pedalboard.PitchShift(-10)])
-        effects: list[AudioEffect] = [lambda data, sr: data + pitch_shifter(data, sr)]
+        pitch_shifter = pedalboard.Pedalboard([pedalboard.PitchShift(-4)])
+        effects: list[AudioEffect] = [
+            lambda data, sr: data + pitch_shifter(data, sr) * 0.25
+        ]
         await self.start_speech(
             SpeechRequest(prompt, Scene.SCENE_8_ANALYSIS, effects=effects)
         )

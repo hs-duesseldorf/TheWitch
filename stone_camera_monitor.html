@@ -1,0 +1,138 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Stone Camera Monitor</title>
+    <style>
+        html,
+        body {
+            width: 100%;
+            height: 100%;
+            margin: 0;
+            overflow: hidden;
+            background: #000;
+        }
+
+        canvas {
+            display: block;
+            width: 100vw;
+            height: 100vh;
+            background: #000;
+        }
+
+        #status {
+            position: fixed;
+            left: 12px;
+            bottom: 10px;
+            color: rgba(255, 255, 255, 0.7);
+            font: 12px/1.4 system-ui, sans-serif;
+            pointer-events: none;
+        }
+    </style>
+</head>
+<body>
+    <canvas id="video"></canvas>
+    <div id="status">connecting</div>
+
+    <script>
+        const params = new URLSearchParams(location.search);
+        const defaultUrl = `ws://${location.hostname || "127.0.0.1"}:8081/ws/ai-3d-video`;
+        const wsUrl = params.get("ws") || defaultUrl;
+        const canvas = document.getElementById("video");
+        const ctx = canvas.getContext("2d", { alpha: false });
+        const status = document.getElementById("status");
+        const maxDevicePixelRatio = 2;
+        let latestFrame = null;
+        let drawing = false;
+        let droppedFrames = 0;
+
+        function resize() {
+            const scale = Math.min(devicePixelRatio || 1, maxDevicePixelRatio);
+            canvas.width = Math.max(2, Math.floor(innerWidth * scale));
+            canvas.height = Math.max(2, Math.floor(innerHeight * scale));
+        }
+
+        async function drawJpeg(data) {
+            let bitmap = null;
+
+            try {
+                bitmap = await createImageBitmap(new Blob([data], { type: "image/jpeg" }));
+                const scale = Math.min(canvas.width / bitmap.width, canvas.height / bitmap.height);
+                const width = bitmap.width * scale;
+                const height = bitmap.height * scale;
+
+                const x = (canvas.width - width) / 2;
+                const y = (canvas.height - height) / 2;
+
+                ctx.fillStyle = "#000";
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                ctx.save();
+                ctx.translate(canvas.width, 0);
+                ctx.scale(-1, 1);
+                ctx.drawImage(bitmap, canvas.width - x - width, y, width, height);
+                ctx.restore();
+            } finally {
+                bitmap?.close();
+            }
+        }
+
+        async function drawLatestFrame() {
+            if (drawing) {
+                return;
+            }
+
+            drawing = true;
+            try {
+                while (latestFrame) {
+                    const frame = latestFrame;
+                    latestFrame = null;
+                    await drawJpeg(frame);
+                }
+                status.textContent = droppedFrames ? `dropped ${droppedFrames} frames` : "";
+            } catch {
+                status.textContent = "bad frame";
+            } finally {
+                drawing = false;
+
+                if (latestFrame) {
+                    drawLatestFrame();
+                }
+            }
+        }
+
+        function connect() {
+            status.textContent = "connecting";
+            const ws = new WebSocket(wsUrl);
+            ws.binaryType = "arraybuffer";
+
+            ws.onopen = () => {
+                status.textContent = "";
+            };
+
+            ws.onmessage = (event) => {
+                if (latestFrame) {
+                    droppedFrames += 1;
+                }
+                latestFrame = event.data;
+                drawLatestFrame();
+            };
+
+            ws.onerror = () => {
+                ws.close();
+            };
+
+            ws.onclose = () => {
+                status.textContent = "disconnected";
+                setTimeout(connect, 1000);
+            };
+        }
+
+        addEventListener("resize", resize);
+        addEventListener("dblclick", () => document.documentElement.requestFullscreen?.());
+
+        resize();
+        connect();
+    </script>
+</body>
+</html>
