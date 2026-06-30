@@ -165,12 +165,17 @@ def _get_lines(result: dict[str, Any]) -> list[str]:
     weakest = result.get("weakest_element")
     is_border = result.get("is_border_hand", False)
 
+    lookup_key = dominant
+    shot_1 = content.get("shot_1") or {}
+
     if is_border and dominant and second:
         pair_a = f"{dominant}-{second}"
         pair_b = f"{second}-{dominant}"
-        lookup_key = pair_a if pair_a in (content.get("shot_1") or {}) else pair_b
-    else:
-        lookup_key = dominant
+
+        if pair_a in shot_1:
+            lookup_key = pair_a
+        elif pair_b in shot_1:
+            lookup_key = pair_b
 
     if lookup_key:
         for shot_key in ("shot_1", "shot_3", "shot_4"):
