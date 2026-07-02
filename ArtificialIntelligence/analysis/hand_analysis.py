@@ -30,13 +30,26 @@ with open(os.path.join(MODEL_DIR, "rf_stage1.pkl"), "rb") as f: rf_model_s1 = pi
 with open(os.path.join(MODEL_DIR, "xgb_stage1.pkl"), "rb") as f: xgb_model_s1 = pickle.load(f)
 
 weak_mlp_models = {}
+weak_rf_models = {}
+weak_xgb_models = {}
+
 for d_idx in range(5):
-    path = os.path.join(MODEL_DIR, f"sub_mlp_{d_idx}.pth")
-    if os.path.exists(path):
+    mlp_path = os.path.join(MODEL_DIR, f"sub_mlp_{d_idx}.pth")
+    if os.path.exists(mlp_path):
         model = SubWeakMLP()
-        model.load_state_dict(torch.load(path, map_location=torch.device('cpu')))
+        model.load_state_dict(torch.load(mlp_path, map_location=torch.device('cpu')))
         model.eval()
         weak_mlp_models[d_idx] = model
+
+    rf_path = os.path.join(MODEL_DIR, f"sub_rf_{d_idx}.pkl")
+    if os.path.exists(rf_path):
+        with open(rf_path, "rb") as f:
+            weak_rf_models[d_idx] = pickle.load(f)
+
+    xgb_path = os.path.join(MODEL_DIR, f"sub_xgb_{d_idx}.pkl")
+    if os.path.exists(xgb_path):
+        with open(xgb_path, "rb") as f:
+            weak_xgb_models[d_idx] = pickle.load(f)
 
 
 def safe_div(numerator: float, denominator: float) -> float:
@@ -83,12 +96,22 @@ def predict_weak_element(input_payload: Dict[str, Any]) -> str:
     xgb_probs = xgb_model_s1.predict_proba(input_np)[0]
     pred_d_idx = int(np.argmax((rf_probs + xgb_probs) / 2.0))
 
-    if pred_d_idx not in weak_mlp_models: return "NaN"
+    if (pred_d_idx not in weak_mlp_models or
+            pred_d_idx not in weak_rf_models or
+            pred_d_idx not in weak_xgb_models):
+        return "NaN"
 
     input_tensor = torch.tensor(input_np, dtype=torch.float32)
     with torch.no_grad():
         outputs = weak_mlp_models[pred_d_idx](input_tensor)
-        pred_w_idx = int(torch.argmax(outputs, dim=1).item())
+        mlp_probs = torch.softmax(outputs, dim=1).squeeze(0).numpy()
+
+    rf_sub_probs = weak_rf_models[pred_d_idx].predict_proba(input_np)[0]
+
+    xgb_sub_probs = weak_xgb_models[pred_d_idx].predict_proba(input_np)[0]
+
+    final_weak_probs = (mlp_probs + rf_sub_probs + xgb_sub_probs) / 3.0
+    pred_w_idx = int(np.argmax(final_weak_probs))
 
     return ELEMENTS[ROOM_MAPPING[pred_d_idx][pred_w_idx]]
 

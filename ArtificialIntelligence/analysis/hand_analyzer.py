@@ -69,13 +69,26 @@ if os.path.exists(rf_path) and os.path.exists(xgb_path):
     with open(xgb_path, "rb") as f: xgb_model_s1 = pickle.load(f)
 
 weak_mlp_models = {}
+weak_rf_models = {}
+weak_xgb_models = {}
+
 for d_idx in range(5):
-    path = os.path.join(MODEL_DIR, f"sub_mlp_{d_idx}.pth")
-    if os.path.exists(path):
+    mlp_sub_path = os.path.join(MODEL_DIR, f"sub_mlp_{d_idx}.pth")
+    if os.path.exists(mlp_sub_path):
         model = SubWeakMLP()
-        model.load_state_dict(torch.load(path, map_location=torch.device('cpu')))
+        model.load_state_dict(torch.load(mlp_sub_path, map_location=torch.device('cpu')))
         model.eval()
         weak_mlp_models[d_idx] = model
+
+    rf_sub_path = os.path.join(MODEL_DIR, f"sub_rf_{d_idx}.pkl")
+    if os.path.exists(rf_sub_path):
+        with open(rf_sub_path, "rb") as f:
+            weak_rf_models[d_idx] = pickle.load(f)
+
+    xgb_sub_path = os.path.join(MODEL_DIR, f"sub_xgb_{d_idx}.pkl")
+    if os.path.exists(xgb_sub_path):
+        with open(xgb_sub_path, "rb") as f:
+            weak_xgb_models[d_idx] = pickle.load(f)
 
 def _safe_div(num: float, den: float) -> float:
     return 0.0 if den == 0 else num / den
@@ -116,14 +129,23 @@ def _predict_dominant(input_np: np.ndarray) -> tuple[str, str, bool]:
     return ELEMENTS[dominant_idx], ELEMENTS[second_idx], is_border
 
 def _predict_weak(input_np: np.ndarray, dominant_elem: str) -> str:
-    if rf_model_s1 is None or xgb_model_s1 is None: return "feuer"
     pred_d_idx = ELEMENTS.index(dominant_elem)
-    if pred_d_idx not in weak_mlp_models: return "feuer"
+
+    if (pred_d_idx not in weak_mlp_models or
+            pred_d_idx not in weak_rf_models or
+            pred_d_idx not in weak_xgb_models):
+        return "feuer"
 
     input_tensor = torch.tensor(input_np, dtype=torch.float32)
     with torch.no_grad():
         outputs = weak_mlp_models[pred_d_idx](input_tensor)
-        pred_w_idx = int(torch.argmax(outputs, dim=1).item())
+        mlp_probs = torch.softmax(outputs, dim=1).squeeze(0).numpy()
+    rf_probs = weak_rf_models[pred_d_idx].predict_proba(input_np)[0]
+    xgb_probs = weak_xgb_models[pred_d_idx].predict_proba(input_np)[0]
+
+    final_weak_probs = (mlp_probs + rf_probs + xgb_probs) / 3.0
+    pred_w_idx = int(np.argmax(final_weak_probs))
+
     return ELEMENTS[ROOM_MAPPING[pred_d_idx][pred_w_idx]]
 
 def build_result(hand_event: HandEvent) -> Dict[str, Any]:
