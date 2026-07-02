@@ -105,3 +105,4 @@ SourceArt/**/*.tga
 # Keep project descriptors tracked.
 !*.uproject
 !*.uplugin
+/ArtificialIntelligence/extract_hand_datas/hand_analysis_models/
