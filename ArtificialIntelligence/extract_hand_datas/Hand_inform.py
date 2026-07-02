@@ -204,7 +204,7 @@ def process_mohi_dataset_with_task(dataset_dir: str, output_json_path: str):
         return
 
     if not WEIGHTS_PATH.exists():
-        print(f"{WEIGHTS_PATH} 가중치 파일이 존재하지 않습니다.")
+        print(f"{WEIGHTS_PATH} is not exist")
         return
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     cnn_model = load_network_model(WEIGHTS_PATH, device)
@@ -260,7 +260,7 @@ def process_mohi_dataset_with_task(dataset_dir: str, output_json_path: str):
 
             # no result
             if not result.hand_landmarks:
-                print(f"[탈락] {filename} -> no result")
+                print(f"{filename} -> no result")
                 continue
 
             # left / right hand
@@ -272,7 +272,7 @@ def process_mohi_dataset_with_task(dataset_dir: str, output_json_path: str):
 
             # check frontal side
             if not is_palm_frontal(world_pts, handedness_str, min_confidence=0.82):
-                print(f"[탈락] {filename} -> tilted")
+                print(f"{filename} -> tilted")
                 continue
 
             # extract geometry
@@ -324,25 +324,3 @@ if __name__ == "__main__":
     MOHI_FOLDER = "./hand_images"
 
     process_mohi_dataset_with_task(MOHI_FOLDER, "hand_informs.json")
-
-# # [참고] ISO 7250-1 규격 기반 성인 남녀 통합 표준 손 비율 데이터
-# input_average = {
-#     "palm_aspect_ratio": 0.81,  # 손바닥 가로 너비 / 손바닥 세로 길이 (보통 0.8 대 1 비율)
-#     "finger_length_ratio": 0.77,  # 중지 전체 길이 / 손바닥 세로 길이
-#     "index_to_ring_ratio": 0.98,  # 검지 전체 길이 / 약지 전체 길이 (거의 1대 1에 수렴)
-#     "finger_profile": {
-#         "index": 0.67,  # 검지 길이 / 손바닥 세로 길이
-#         "middle": 0.77,  # 중지 길이 / 손바닥 세로 길이
-#         "ring": 0.68,  # 약지 길이 / 손바닥 세로 길이
-#         "little": 0.53  # 새끼 길이 / 손바닥 세로 길이
-#     }
-# }
-
-# "palm_aspect_ratio": 0.48,
-# "finger_length_ratio": 0.77,
-# "index_to_ring_ratio": 0.49,
-# "finger_profile": {
-#     "index": 0.67,
-#     "middle": 0.77,
-#     "ring": 0.68,
-#     "little": 0.53

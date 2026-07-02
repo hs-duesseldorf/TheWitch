@@ -8,7 +8,7 @@ import torch.nn as nn
 
 ELEMENTS = ["holz", "feuer", "erde", "metall", "wasser"]
 ROOM_MAPPING = {d: [w for w in range(5) if d != w] for d in range(5)}
-MODEL_DIR = "hand_analysis_models"
+MODEL_DIR = "extract_hand_datas/hand_analysis_models"
 
 
 class SubWeakMLP(nn.Module):
