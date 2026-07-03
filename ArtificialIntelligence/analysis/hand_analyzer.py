@@ -39,6 +39,7 @@ _HAND_ANALYSIS_SYSTEM_PROMPT = (
     "/no_think\n"
 )
 
+#define MLP
 class SubWeakMLP(nn.Module):
     def __init__(self, input_dim=263, num_classes=4):
         super().__init__()
@@ -59,7 +60,8 @@ class SubWeakMLP(nn.Module):
         x = self.relu2(x)
         return self.fc3(x)
 
-
+#model loading
+#loading dominant element model
 rf_model_s1, xgb_model_s1 = None, None
 rf_path = os.path.join(MODEL_DIR, "rf_stage1.pkl")
 xgb_path = os.path.join(MODEL_DIR, "xgb_stage1.pkl")
@@ -68,6 +70,7 @@ if os.path.exists(rf_path) and os.path.exists(xgb_path):
     with open(rf_path, "rb") as f: rf_model_s1 = pickle.load(f)
     with open(xgb_path, "rb") as f: xgb_model_s1 = pickle.load(f)
 
+#loading weak element models
 weak_mlp_models = {}
 weak_rf_models = {}
 weak_xgb_models = {}
@@ -90,9 +93,11 @@ for d_idx in range(5):
         with open(xgb_sub_path, "rb") as f:
             weak_xgb_models[d_idx] = pickle.load(f)
 
+
 def _safe_div(num: float, den: float) -> float:
     return 0.0 if den == 0 else num / den
 
+# change info to Absolute value to relative value
 def extract_features_tensor(lengths: Dict[str, float]) -> list:
     pw, ph = lengths.get("palm_width", 0.0), lengths.get("palm_height", 0.0)
     idx, mid, rng, pky = lengths.get("index_length", 0.0), lengths.get("middle_length", 0.0), lengths.get("ring_length", 0.0), lengths.get("pinky_length", 0.0)
@@ -104,6 +109,7 @@ def extract_features_tensor(lengths: Dict[str, float]) -> list:
         _safe_div(idx, max_f), _safe_div(mid, max_f), _safe_div(rng, max_f), _safe_div(pky, max_f)
     ]
 
+# combine vectors and hand features
 def _prepare_input_np(hand_event: HandEvent) -> np.ndarray | None:
     lengths = hand_event.lengths or {}
     vector = hand_event.vector or []
@@ -115,34 +121,43 @@ def _predict_dominant(input_np: np.ndarray) -> tuple[str, str, bool]:
     if rf_model_s1 is None or xgb_model_s1 is None:
         return "holz", "wasser", False
 
+    #predict element
     rf_probs = rf_model_s1.predict_proba(input_np)[0]
     xgb_probs = xgb_model_s1.predict_proba(input_np)[0]
+
+    #voting
     avg_probs = (rf_probs + xgb_probs) / 2.0
 
     sorted_indices = np.argsort(avg_probs)[::-1]
     dominant_idx = sorted_indices[0]
     second_idx = sorted_indices[1]
 
+    #checking if it is in border
     prob_diff = avg_probs[dominant_idx] - avg_probs[second_idx]
     is_border = prob_diff <= 0.05
 
     return ELEMENTS[dominant_idx], ELEMENTS[second_idx], is_border
 
 def _predict_weak(input_np: np.ndarray, dominant_elem: str) -> str:
+    #check dominant element
     pred_d_idx = ELEMENTS.index(dominant_elem)
 
+    #if model don't exist return just fire
     if (pred_d_idx not in weak_mlp_models or
             pred_d_idx not in weak_rf_models or
             pred_d_idx not in weak_xgb_models):
         return "feuer"
 
     input_tensor = torch.tensor(input_np, dtype=torch.float32)
+
+    #predict weak element
     with torch.no_grad():
         outputs = weak_mlp_models[pred_d_idx](input_tensor)
         mlp_probs = torch.softmax(outputs, dim=1).squeeze(0).numpy()
     rf_probs = weak_rf_models[pred_d_idx].predict_proba(input_np)[0]
     xgb_probs = weak_xgb_models[pred_d_idx].predict_proba(input_np)[0]
 
+    #voting
     final_weak_probs = (mlp_probs + rf_probs + xgb_probs) / 3.0
     pred_w_idx = int(np.argmax(final_weak_probs))
 
@@ -187,6 +202,7 @@ def _get_lines(result: dict[str, Any]) -> list[str]:
     weakest = result.get("weakest_element")
     is_border = result.get("is_border_hand", False)
 
+    #set default dominant element
     lookup_key = dominant
     shot_1 = content.get("shot_1") or {}
 
@@ -194,6 +210,7 @@ def _get_lines(result: dict[str, Any]) -> list[str]:
         pair_a = f"{dominant}-{second}"
         pair_b = f"{second}-{dominant}"
 
+        #check if the line exist. if not, set default
         if pair_a in shot_1:
             lookup_key = pair_a
         elif pair_b in shot_1:

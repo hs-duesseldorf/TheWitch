@@ -323,4 +323,4 @@ def process_mohi_dataset_with_task(dataset_dir: str, output_json_path: str):
 if __name__ == "__main__":
     MOHI_FOLDER = "./hand_images"
 
-    process_mohi_dataset_with_task(MOHI_FOLDER, "hand_informs.json")
+    process_mohi_dataset_with_task(MOHI_FOLDER, "../analysis/hand_informs.json")

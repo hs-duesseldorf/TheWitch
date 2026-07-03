@@ -5,6 +5,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.optim as optim
+from charset_normalizer.cd import Counter
 from torch.utils.data import DataLoader, TensorDataset
 from sklearn.model_selection import train_test_split
 from sklearn.ensemble import RandomForestClassifier
@@ -13,12 +14,27 @@ from k_means_constrained import KMeansConstrained
 import pickle
 
 DATASET_PATH = "hand_informs.json"
+MODEL_SAVE_DIR = "../extract_hand_datas/hand_analysis_models"
 
+""""
+This is a script for training element classifying models!
+
+Description of Models
+
+1. Labeling with constrained K-Means
+get a average of info from one person
+divide average in 5 group for labeling dominant element
+and divide again each group in 4 group for labeling weak element
+
+2. Predict Element
+Use Random Forest and XGBoost for predict dominant element
+Use Random Forest and XGBoost and MLP for predict weak element
+"""""
 
 def safe_div(numerator: float, denominator: float) -> float:
     return numerator / denominator if denominator != 0 else 0.0
 
-
+# change info to Absolute value to relative value
 def extract_features(lengths):
     palm_width = lengths.get("palm_width", 0.0)
     palm_height = lengths.get("palm_height", 0.0)
@@ -41,6 +57,7 @@ def extract_features(lengths):
         safe_div(pinky_length, max_finger)
     ]
 
+#init mlp model
 class SubWeakMLP(nn.Module):
     def __init__(self, input_dim=263, num_classes=4):
         super().__init__()
@@ -57,6 +74,7 @@ class SubWeakMLP(nn.Module):
     def forward(self, x): return self.network(x)
 
 if __name__ == "__main__":
+    #set seed
     random.seed(42)
     np.random.seed(42)
     torch.manual_seed(42)
@@ -64,16 +82,21 @@ if __name__ == "__main__":
 
     ELEMENTS = ["holz", "feuer", "erde", "metall", "wasser"]
 
+    #load dateset
     with open(DATASET_PATH, "r", encoding="utf-8") as f:
         data = json.load(f)
 
     person_features = {}
     for key, item in data.items():
+        #check exception
         vector = item.get("vector", [])
         if not vector or len(vector) != 256: continue
         lengths = item.get("lengths", {})
         if not lengths or lengths.get("middle_length", 0) == 0 or lengths.get("palm_height", 0) == 0: continue
 
+        #gather every info from one person
+
+        #add person_id if it is not in person_features
         person_id = str(item["request_id"]).split("-")[0].strip().upper()
         if person_id not in person_features:
             person_features[person_id] = []
@@ -81,39 +104,63 @@ if __name__ == "__main__":
         combined_vector = extract_features(lengths) + vector
         person_features[person_id].append(combined_vector)
 
+    #sort by id
     unique_person_ids = sorted(list(person_features.keys()))
+
+    #extract average from one person for labeling
     person_avg_vectors = np.array([np.mean(person_features[pid], axis=0) for pid in unique_person_ids],
                                   dtype=np.float32)
 
-    # Dominant element labeling
+    # DOMINANT ELEMENT LABELING
+
+    #define size of cluster
     n_people = len(unique_person_ids)
     dom_size = n_people // 5
+
+    #define model
     kmeans_dom = KMeansConstrained(n_clusters=5, size_min=dom_size, size_max=dom_size + 1, random_state=42)
+    # clustering
     dom_labels = kmeans_dom.fit_predict(person_avg_vectors)
+
+    #add label to data
     person_to_dom = {pid: int(label) for pid, label in zip(unique_person_ids, dom_labels)}
 
-    # Weak element labeling
+    # WEAK ELEMENT LABELING
     person_to_weak_idx = {}
     for d_idx in range(5):
+        #gather person in same dominant element
         sub_pids = [pid for pid in unique_person_ids if person_to_dom[pid] == d_idx]
         sub_vectors = np.array([np.mean(person_features[pid], axis=0) for pid in sub_pids], dtype=np.float32)
+
+        #set size of cluster
         n_sub = len(sub_pids)
         weak_size = n_sub // 4
+
+        #define model
         kmeans_weak = KMeansConstrained(n_clusters=4, size_min=weak_size, size_max=weak_size + 1, random_state=42)
+
+        #clustering
         weak_labels = kmeans_weak.fit_predict(sub_vectors)
+
+        # add label to data
         for pid, w_label in zip(sub_pids, weak_labels):
             person_to_weak_idx[pid] = int(w_label)
 
+    #mapping each cluster to element so that dominant element and weak element are not a same element
     room_mapping = {d: [w for w in range(5) if d != w] for d in range(5)}
 
     print("labeling completed")
 
+    #stratify: make sure that class labels are evenly distributed in train and test sets
     unique_Y_dom = [person_to_dom[pid] for pid in unique_person_ids]
+
+    # test : train = 2 : 8
     train_pids, test_pids = train_test_split(unique_person_ids, test_size=0.2, random_state=42, stratify=unique_Y_dom)
 
     X_train_list, Y_dom_train, Y_weak_train = [], [], []
     X_test_list, Y_dom_test, Y_weak_test = [], [], []
 
+    #make sure that one person in only test set or train set for valid evaluation
     for pid in unique_person_ids:
         d_label = person_to_dom[pid]
         w_label = person_to_weak_idx[pid]
@@ -130,6 +177,12 @@ if __name__ == "__main__":
     X_train = np.array(X_train_list, dtype=np.float32)
     Y_dom_train = np.array(Y_dom_train, dtype=np.int64)
     Y_weak_train = np.array(Y_weak_train, dtype=np.int64)
+
+    # check the ratio of element in test/train set
+    train_counts = Counter(Y_dom_train)
+    test_counts = Counter(Y_dom_test)
+    for i, element in enumerate(ELEMENTS):
+        print(f"[{element}] Train: {train_counts[i]} | Test : {test_counts[i]}")
 
     print("train, test set ready")
 
@@ -170,10 +223,12 @@ if __name__ == "__main__":
         w_mlp.eval()
         weak_mlp_models[d_idx] = w_mlp
 
+        # random forest training
         w_rf = RandomForestClassifier(n_estimators=150, max_depth=8, random_state=42, n_jobs=-1)
         w_rf.fit(X_sub, Y_sub)
         weak_rf_models[d_idx] = w_rf
 
+        # XGBoost training
         w_xgb = XGBClassifier(n_estimators=100, max_depth=4, learning_rate=0.05, random_state=42, n_jobs=-1)
         w_xgb.fit(X_sub, Y_sub)
         weak_xgb_models[d_idx] = w_xgb
@@ -200,20 +255,17 @@ if __name__ == "__main__":
             pred_d = int(np.argmax(p_dom))
 
             # weak element
-            if pred_d in weak_mlp_models:
-                mlp_logits = weak_mlp_models[pred_d](feat_t)
+            mlp_logits = weak_mlp_models[pred_d](feat_t)
 
-                mlp_probs = torch.softmax(mlp_logits, dim=1).squeeze(0).numpy()
-                rf_probs = weak_rf_models[pred_d].predict_proba(feat_np)[0]
-                xgb_probs = weak_xgb_models[pred_d].predict_proba(feat_np)[0]
+            mlp_probs = torch.softmax(mlp_logits, dim=1).squeeze(0).numpy()
+            rf_probs = weak_rf_models[pred_d].predict_proba(feat_np)[0]
+            xgb_probs = weak_xgb_models[pred_d].predict_proba(feat_np)[0]
 
-                #voting
-                final_weak_probs = (mlp_probs + rf_probs + xgb_probs) / 3.0
+            #voting
+            final_weak_probs = (mlp_probs + rf_probs + xgb_probs) / 3.0
 
-                pred_w_idx = int(np.argmax(final_weak_probs))
-                pred_w = room_mapping[pred_d][pred_w_idx]
-            else:
-                pred_w = (pred_d + 1) % 5
+            pred_w_idx = int(np.argmax(final_weak_probs))
+            pred_w = room_mapping[pred_d][pred_w_idx]
 
         # count score
         if pred_d == true_d:
@@ -229,12 +281,12 @@ if __name__ == "__main__":
     print(f"total accuracy : {perfect_combo:<4} / {total_test_images} | {(perfect_combo / total_test_images) * 100:.2f}%")
 
     #save models
-    os.makedirs("hand_analysis_models", exist_ok=True)
+    os.makedirs(MODEL_SAVE_DIR, exist_ok=True)
 
     # dominant element models
-    with open("hand_analysis_models/rf_stage1.pkl", "wb") as f:
+    with open("../extract_hand_datas/hand_analysis_models/rf_stage1.pkl", "wb") as f:
         pickle.dump(rf_model_s1, f)
-    with open("hand_analysis_models/xgb_stage1.pkl", "wb") as f:
+    with open("../extract_hand_datas/hand_analysis_models/xgb_stage1.pkl", "wb") as f:
         pickle.dump(xgb_model_s1, f)
 
     print(f"dominant element models saved")
@@ -243,16 +295,16 @@ if __name__ == "__main__":
     for d_idx in range(5):
         if d_idx in weak_mlp_models:
             # sub mlp
-            mlp_path = f"sub_mlp_{d_idx}.pth"
+            mlp_path = os.path.join(MODEL_SAVE_DIR, f"sub_mlp_{d_idx}.pth")
             torch.save(weak_mlp_models[d_idx].state_dict(), mlp_path)
 
             # sub rf
-            rf_path = f"hand_analysis_models/sub_rf_{d_idx}.pkl"
+            rf_path = os.path.join(MODEL_SAVE_DIR, f"sub_rf_{d_idx}.pkl")
             with open(rf_path, "wb") as f:
                 pickle.dump(weak_rf_models[d_idx], f)
 
             # sub xgb
-            xgb_path = f"hand_analysis_models/sub_xgb_{d_idx}.pkl"
+            xgb_path = os.path.join(MODEL_SAVE_DIR, f"sub_xgb_{d_idx}.pkl")
             with open(xgb_path, "wb") as f:
                 pickle.dump(weak_xgb_models[d_idx], f)
 
