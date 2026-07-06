@@ -97,7 +97,8 @@ for d_idx in range(5):
 def _safe_div(num: float, den: float) -> float:
     return 0.0 if den == 0 else num / den
 
-# change info to Absolute value to relative value
+# Extracts geometric features form the measured hand.
+# These features are used to calculate ratios which we use as input for the element scoring
 def extract_features_tensor(lengths: Dict[str, float]) -> list:
     pw, ph = lengths.get("palm_width", 0.0), lengths.get("palm_height", 0.0)
     idx, mid, rng, pky = lengths.get("index_length", 0.0), lengths.get("middle_length", 0.0), lengths.get("ring_length", 0.0), lengths.get("pinky_length", 0.0)
@@ -107,7 +108,8 @@ def extract_features_tensor(lengths: Dict[str, float]) -> list:
     return [
         _safe_div(pw, ph), _safe_div(avg_f, ph), _safe_div(idx, rng),
         _safe_div(idx, max_f), _safe_div(mid, max_f), _safe_div(rng, max_f), _safe_div(pky, max_f)
-    ]
+        ]
+
 
 # combine vectors and hand features
 def _prepare_input_np(hand_event: HandEvent) -> np.ndarray | None:
@@ -163,6 +165,7 @@ def _predict_weak(input_np: np.ndarray, dominant_elem: str) -> str:
 
     return ELEMENTS[ROOM_MAPPING[pred_d_idx][pred_w_idx]]
 
+# Performs the complete hand analysis pipeline and returns all information required for prompt generation.
 def build_result(hand_event: HandEvent) -> Dict[str, Any]:
     input_np = _prepare_input_np(hand_event)
 
@@ -190,6 +193,8 @@ def _load_content() -> dict[str, Any]:
     return package.get("hand_analysis", package)
 
 
+# Selects the appropriate analysis text for the detected hand.
+# Borderline hands use combined element descriptions, whilst hands with clear results use the dominant and weakes element.
 def _get_lines(result: dict[str, Any]) -> list[str]:
     lines_list: list[str] = []
     try:
@@ -247,6 +252,8 @@ def _get_base_texts(result: dict[str, Any]) -> str:
 
 
 class HandAnalyzer:
+    # Builds the complete LLM prompt for a detected hand
+    # Returns 'None' if no valid hand measurements are available or if the analysis could not be completed.
     def build_prompt(self, hand_event: HandEvent | None) -> str | None:
         if not hand_event or not hand_event.lengths:
             return None
@@ -269,6 +276,8 @@ class HandAnalyzer:
             f"Beobachtung: {trigger}. Gesehene Hand: {hand}. {base_texts}"
         )
 
+    # Converts the detected hand identifier into a readable label
+    # Includes a fall back if it fails to identify the hand as either left or right.
     @staticmethod
     def _hand_label(hand_event: HandEvent) -> str:
         if not hand_event.hand:
