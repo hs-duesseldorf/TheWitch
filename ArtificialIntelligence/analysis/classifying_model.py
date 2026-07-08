@@ -13,8 +13,8 @@ from xgboost import XGBClassifier
 from k_means_constrained import KMeansConstrained
 import pickle
 
-DATASET_PATH = "hand_informs.json"
-MODEL_SAVE_DIR = "../extract_hand_datas/hand_analysis_models"
+DATASET_PATH = "hand_analysis_models/hand_informs.json"
+MODEL_SAVE_DIR = "hand_analysis_models"
 
 """"
 This is a script for training element classifying models!
@@ -241,6 +241,9 @@ if __name__ == "__main__":
     correct_weak = 0
     perfect_combo = 0
 
+    d_num = [0,0,0,0,0]
+    w_num = [0,0,0,0,0]
+
     for idx in range(total_test_images):
         feat = X_test_list[idx]
         true_d = Y_dom_test[idx]
@@ -267,6 +270,9 @@ if __name__ == "__main__":
             pred_w_idx = int(np.argmax(final_weak_probs))
             pred_w = room_mapping[pred_d][pred_w_idx]
 
+            d_num[pred_d] += 1
+            w_num[pred_w] += 1
+
         # count score
         if pred_d == true_d:
             correct_dom += 1
@@ -275,18 +281,16 @@ if __name__ == "__main__":
         if pred_d == true_d and pred_w == true_w:
             perfect_combo += 1
 
-    print(f"total test image set: {total_test_images}")
-    print(f"dominant element accuracy : {correct_dom:<4} / {total_test_images} | {(correct_dom / total_test_images) * 100:.2f}%")
-    print(f"weak element accuracy : {correct_weak:<4} / {total_test_images} | {(correct_weak / total_test_images) * 100:.2f}%")
-    print(f"total accuracy : {perfect_combo:<4} / {total_test_images} | {(perfect_combo / total_test_images) * 100:.2f}%")
+    print(d_num)
+    print(w_num)
 
     #save models
     os.makedirs(MODEL_SAVE_DIR, exist_ok=True)
 
     # dominant element models
-    with open("../extract_hand_datas/hand_analysis_models/rf_stage1.pkl", "wb") as f:
+    with open("hand_analysis_models/rf_stage1.pkl", "wb") as f:
         pickle.dump(rf_model_s1, f)
-    with open("../extract_hand_datas/hand_analysis_models/xgb_stage1.pkl", "wb") as f:
+    with open("hand_analysis_models/xgb_stage1.pkl", "wb") as f:
         pickle.dump(xgb_model_s1, f)
 
     print(f"dominant element models saved")
