@@ -65,10 +65,36 @@ class SpeechRequest:
 
 class Runtime:
     def __init__(self):
+        # Counts open manual debug ui websites
+        self.manual_debug_clients = 0
         self.websocket_server = WebSocketServer(
             host="0.0.0.0",
             port=int(os.environ["WITCH_AI_PORT"]),
+            runtime=self,
         )
+        # Groups Broadcast Routes by their associated usage
+        # Eases changes to the manual_debug_ui; one can choose which broadcast to silence
+        self.broadcast_groups = {
+            # visual input
+            "camera": {
+                "/ws/ip-ai-video",
+                "/ws/ip-roi",
+            },
+            # visual output
+            "unity": {
+                "/ws/ai-3d",
+                "/ws/ai-3d-video",
+                "/ws/ai-3d-roi",
+            },
+            "events": {
+                "/ws/ip-ai",
+            },
+        }
+        # Name all Groups here that should be disabled during the manual debug ui use
+        # set() for none (Why would you ever do that? Just use the regular Debug UI dummy!)
+        # This makes it possible to allow broadcasts of f.e. the events, but to disable the camera stream and Unity trigger
+        self.disabled_broadcasts_on_manual_debug_ui = {"camera", "unity", "events"}
+
         self.state_machine = StateMachine()
         self.hand_analyzer = HandAnalyzer()
         self.scene_prompt_builder = ScenePromptBuilder()
@@ -141,6 +167,19 @@ class Runtime:
         self.debug_ui_started = True
         threading.Thread(target=run_debug_ui, daemon=True).start()
 
+    # Checks how many Routes are open to manual_debug_ui.html and 
+    # enters restricted broadcast mode aslong as at least 1 is open
+    def manual_debug_active(self):
+        return self.manual_debug_clients > 0
+
+    # Silences all Broadcasts defined to be in innit
+    def broadcast_allowed(self, path):
+        if self.manual_debug_active():
+            for group_name in self.disabled_broadcasts_on_manual_debug_ui:
+                if path in self.broadcast_groups[group_name]:
+                    return False
+        return True
+
     def register_routes(self):
         self.websocket_server.add_route("/ws/ip-ai", self._on_ip_ai_message)
         self.websocket_server.add_route("/ws/ip-ai-video", self._on_ip_ai_video_message)
@@ -148,6 +187,8 @@ class Runtime:
         self.websocket_server.add_route("/ws/ai-3d", self._on_ai_3d_message)
         self.websocket_server.add_route("/ws/ai-3d-video", None)
         self.websocket_server.add_route("/ws/ai-3d-roi", None)
+        self.websocket_server.add_route("/ws/manual-debug", None)
+
 
     async def _on_ip_ai_message(
         self, _server: WebSocketServer, _connection: Any, message: str | bytes
@@ -163,6 +204,10 @@ class Runtime:
     async def _on_ip_ai_video_message(
         self, _server: WebSocketServer, _connection: Any, message: str | bytes
     ):
+        # In manual mode, do NOT broadcast video frames
+        # Else it will result in constant error messages, as no link is established
+        if self.state_machine.manual_mode:
+            return
         if isinstance(message, bytes):
             await self.websocket_server.broadcast(message, path="/ws/ai-3d-video")
 
@@ -176,6 +221,10 @@ class Runtime:
         self, _server: WebSocketServer, _connection: Any, message: str | bytes
     ):
         event = self.ai3d_channel.decode(message)
+        # In manual mode, do NOT broadcast video frames
+        # Else it will result in constant error messages, as no link is established
+        if self.state_machine.manual_mode:
+            return
         if isinstance(event, EventDoneEvent):
             await self.handle_unreal_event(event)
 
@@ -466,7 +515,9 @@ class Runtime:
         self.pending_unreal_ack = None
         self.queued_speech = None
         self.analysis_started = False
-        self.state_machine.manual_mode = False
+        # Would break manual_debug_ui if it gets set to false after a cycle has been simulated
+        # Should only be changed via the manual_debug_ui.html button!
+        #self.state_machine.manual_mode = False
         self._debug_return_state = None
         self._debug_cooldown_until = 0.0
         self._gaslight_correct_hand = None

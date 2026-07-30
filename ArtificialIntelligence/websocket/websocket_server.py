@@ -15,11 +15,12 @@ MessageCallback = Callable[["WebSocketServer", ServerConnection, str | bytes], A
 
 
 class WebSocketServer:
-    def __init__(self, host: str = "0.0.0.0", port: int = 8765):
+    def __init__(self, host: str = "0.0.0.0", port: int = 8765, runtime=None):
         self.host = host
         self.port = port
         self._routes: dict[str, tuple[set[ServerConnection], MessageCallback]] = {}
         self._server = None
+        self._runtime = runtime
 
     def add_route(self, path: str, callback: MessageCallback) -> None:
         self._routes[path] = (set(), callback)
@@ -33,6 +34,8 @@ class WebSocketServer:
         path: str | None = None,
         exclude: ServerConnection | None = None,
     ) -> None:
+        if path and self._runtime and not self._runtime.broadcast_allowed(path):
+            return
         if path:
             clients, _ = self._routes.get(path, (set(), None))
             targets = set(clients)
@@ -75,6 +78,10 @@ class WebSocketServer:
             return
         clients, callback = route
         clients.add(websocket)
+        if request_path == "/ws/manual-debug" and self._runtime:
+            self._runtime.manual_debug_clients += 1
+            disabled = ", ".join(self._runtime.disabled_broadcasts_on_manual_debug_ui)
+            logger.info(f"Manual-Debug-UI connected - disabled broadcast groups: {disabled}")
         logger.info("Client connected on %s. Total: %s", request_path, len(clients))
         try:
             async for message in websocket:
@@ -87,6 +94,9 @@ class WebSocketServer:
         except Exception as exc:
             logger.error("WebSocket error on %s: %s", request_path, exc)
         finally:
+            if request_path == "/ws/manual-debug" and self._runtime:
+                self._runtime.manual_debug_clients -= 1
+                logger.info(f"Manual-Debug-UI disconnected - all broadcast groups are reenabled")
             clients.discard(websocket)
             logger.debug("Client disconnected from %s. Total: %s", request_path, len(clients))
 

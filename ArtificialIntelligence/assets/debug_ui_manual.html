@@ -216,8 +216,16 @@
         </section>
 
     </main>
-    <script>
+    <script type="module">
+        console.log("SCRIPT STARTED");
+        console.log("document.readyState =", document.readyState);
         const API = location.origin;
+        async function json(path) {
+            return (await fetch(`${API}${path}`)).json();
+        }
+        const { ws_port } = await json("/api/config");
+        const wsBase = `${location.protocol === "https:" ? "wss" : "ws"}://${location.hostname}:${ws_port}`;
+        const ws = new WebSocket(`${wsBase}/ws/manual-debug`);
         const $ = (id) => document.getElementById(id);
         let currentState = "";
         let graphRenderId = 0;
@@ -230,10 +238,6 @@
         });
 
         fetch("/api/manual_mode/on", { method: "POST" });
-
-        async function json(path) {
-            return (await fetch(`${API}${path}`)).json();
-        }
 
         async function updateState() {
             const nextState = (await json("/api/state")).state || "-";
@@ -350,7 +354,10 @@
             }, 100);
         }
 
-        document.addEventListener("DOMContentLoaded", () => {
+        console.log("WS URL:", `${wsBase}/ws/manual-debug`);
+
+        function init() {
+            console.log("Init fired");
             initGraphNavigation();
             updateState();
             loadGraph();
@@ -391,13 +398,19 @@
                     await loadGraph();
                 };
             });
+        }
 
-            
-        });
+        if (document.readyState === "loading") {
+            document.addEventListener("DOMContentLoaded", init);
+        } else {
+            init();
+        }
 
         window.addEventListener("beforeunload", () => {
             fetch("/api/manual_mode/off", { method: "POST" });
         });
+
+        console.log("SCRIPT ENDED");
     
     </script>
   </body>
