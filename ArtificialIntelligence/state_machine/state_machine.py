@@ -8,6 +8,13 @@ from transitions.extensions import GraphMachine
 from shared.events import HandTrigger, PersonTrigger, Scene
 
 
+# This class manages everything regarding the StateMachine functions
+# This is written with the "transitions" extension for Python, Documentation can be found via web (transitions library)
+
+# Defines necessary and possible Attributes
+# description: used to display the comprehensive Scene name in the UI (Website)
+# auto_trigger: a scene can be entered which automaticly triggeres a transition with that name
+# is_analysis: this scene needs specific timing for handanalysis
 @dataclass(frozen=True)
 class State:
     state: Scene
@@ -21,6 +28,9 @@ class State:
         return self.state.value
 
 
+# trigger: what trigger (f.e. HandTrigger, sensor input) calls on this state
+# source: which scene the transition starts in / is possible in
+# dest(ination): the scene transitioned to
 @dataclass(frozen=True)
 class Transition:
     trigger: str
@@ -28,6 +38,8 @@ class Transition:
     dest: str
 
 
+# All States defined with necessary Information
+# -> NEW STATES HAVE TO BE ENTERED HERE!
 STATES = [
     State(Scene.SCENE_0_IDLE, "Idle"),
     State(Scene.SCENE_1_WELCOME, "Welcome"),
@@ -65,7 +77,9 @@ STATES = [
     State(Scene.DEBUG_GASLIGHT, "Debug: gaslight"),
 ]
 
-
+# All possible transitions following the structure defined by the class
+# Sensor triggers are assigned to Scenes here
+# -> NEW SCENES HAVE TO BE INTEGRATED HERE WITH THEIR OWN TRANSITION TO AND FROM OTHER SCENES!
 TRANSITIONS = [
     Transition(
         PersonTrigger.DETECTED.value,
@@ -186,6 +200,8 @@ class _GraphModel:
     pass
 
 
+# This class contains all Methods to manage the StateMachine and it's functionality
+# Called and used in runtime.py!
 class StateMachine:
     def __init__(self) -> None:
         self.manual_mode = False
