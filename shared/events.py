@@ -6,12 +6,6 @@ from typing import Any, TypeAlias
 import msgspec
 
 
-# Collection of Classes concerning Triggers and Events
-# defining all possible Properties and their respective strings 
-# f.e. a Hand can either have the Property of being the right or left Hand
-
-# Mostly used by the StateMachine and Sensor-Inputs sent via Websockets
-
 class HandTrigger(str, Enum):
     DETECTED = "hand_detected"
     ABSENT = "hand_absent"
@@ -49,9 +43,6 @@ class Scene(str, Enum):
     SCENE_8_ANALYSIS = "scene_8_analysis"
     SCENE_9_OUTRO = "scene_9_outro"
 
-
-# The following Events contain the necessary Information needed for further processes triggered by them
-# f.e. every Event can hold Information about it's origin - where it was triggered from
 
 class Event(
     msgspec.Struct, frozen=True, kw_only=True, tag_field="type", omit_defaults=True
@@ -94,9 +85,6 @@ class AnalysisResultEvent(Event, tag="analysis_result"):
 class ErrorEvent(Event, tag="error"):
     message: str
 
-
-# These Alias are used to determine which kind of Event needs to listen to or work with what kind of Event
-# f.e. IPEvents can only be those concerning the Hand or Person
 
 IPEvent: TypeAlias = HandEvent | PersonEvent
 AI3DEvent: TypeAlias = (

@@ -218,7 +218,6 @@
     </head>
     <body> 
         <header class="switcher">
-            <!-- CURRENTLY DEPRICATED (Manual)-->
             <button id="switchToDebugManual">Debug Manual UI</button>
         </header>
         <main>
@@ -306,12 +305,9 @@
                 if (!changed) loadGraph();
             };
 
-            
-            // CURRENTLY DEPRICATED (Manual)
             document.getElementById("switchToDebugManual").onclick = () => {
                 window.location.href = "/debug_ui_manual.html";
             };
-            // ---
 
             async function init() {
                 initGraphNavigation();

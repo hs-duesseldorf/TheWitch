@@ -7,17 +7,6 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 
-# Connection bewteen the debug_ui.html (website) and the runtime.py
-# Calls happen via FastApi 
-# Communicates with debug_ui.html, runtime.py and state_machine.py
-# Only Changes necessary here are when aspects are added to debug_ui.html that require Information from
-# the code or send Information (f.e. Button presses) to the code
-
-# debug_ui_manual.html is currently !NOT FUNCTIONING! due to a refactor
-# It's usecase was to simulate certain events / state changes to make debugging easier
-# the html and necessary Methods here are still provided and can be reinstated
-# it called on simulation Methods in runtime.py, which in turn called manual scene triggers in state_machine.py
-
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",

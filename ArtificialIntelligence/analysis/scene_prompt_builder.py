@@ -10,7 +10,6 @@ from shared.events import Scene
 
 logger = logging.getLogger("ai")
 
-# This path leads to where we save base/example sentences for all scenes
 PACKAGE_PATH = Path(__file__).resolve().parent.parent / "package.json"
 
 SYSTEM_PROMPT = (
@@ -53,25 +52,19 @@ SYSTEM_PROMPT = (
     "/no_think\n"
 )
 
-# Holds additional runtime information required for some scene-specific prompt generation
+
 @dataclass(frozen=True)
 class ScenePromptContext:
     gaslight_pending: bool = False
     gaslight_hand_name: str | None = None
 
-# Builds the LLM prompts for most individual scenes(excluding the analysis)
-# 
-# Builder selects a base text from the package.json, whilst avoiding immediate repetitions using a shuffle bag system.
-# Then it wraps the selected text with system instructions and some scene-specific instructions.
+
 class ScenePromptBuilder:
     def __init__(self):
         self.scenes = self._load_scenes()
         self._current_base_texts: dict[str, str] = {}
         self._shuffle_bags: dict[str, list[str]] = {}
 
-    # Builds the final prompt for the given scene. 
-    # Returns 'None' for any scenes that shouldnt trigger LLM generation(e.g. SCENE_4_AWAITING_HAND)
-    # The returned prompt contains system instructions, example texts and scene-specific rules.
     def build_prompt(self, scene: Scene, context: ScenePromptContext | None = None) -> str | None:
         context = context or ScenePromptContext()
 
@@ -83,9 +76,6 @@ class ScenePromptBuilder:
             return None
         return self._wrap(scene, base_text)
 
-
-    # Retrieves the base text, for most scenes this simply grabs a predefined base text.
-    # Some scenes require dynamic text generation(e.g. gaslight scene) in order to insert further information(e.g. which hand is currently shown).
     def _base_text(self, scene: Scene, context: ScenePromptContext) -> str | None:
         if scene is Scene.DEBUG_GASLIGHT and context.gaslight_pending:
             hand_name = context.gaslight_hand_name or "unbekannte"
@@ -100,8 +90,6 @@ class ScenePromptBuilder:
 
         return self._scene_text(scene.value)
 
-    # Selects a base text for the specified scene.
-    # Uses a shuffle bag to minimize repititions while ensuring every available base text is used before any are repeated.
     def _scene_text(self, scene_name: str) -> str | None:
         entry = self.scenes.get(scene_name)
         if not isinstance(entry, list):
@@ -115,8 +103,6 @@ class ScenePromptBuilder:
             return None
         return self._next_from_shuffle_bag(scene_name, candidates)
 
-    # returns additional scene texts that are given as examples of paraphrasing in the prompt.
-    # This does exclude the text that has been selected as our current base text.
     def _get_examples(self, scene_name: str) -> list[str]:
         entry = self.scenes.get(scene_name)
         if not isinstance(entry, list):
@@ -128,10 +114,6 @@ class ScenePromptBuilder:
             if isinstance(item, str) and item.strip() and item.strip() != current
         ]
 
-    # Selects the next base text from the scene's own shuffle bag
-    # This guarantees that all candidates are used once before reshuffling.
-    # Additionally it also prevents each base text from being selected back to back upon reshuffle.
-    # Each scene has its own bag so that we get a more unique experience for everyone(e.g. avoids always linking scene1 text2 with scene2 text2 and instead shuffles connections each time)
     def _next_from_shuffle_bag(self, scene_name: str, candidates: list[str]) -> str:
         bag = self._shuffle_bags.get(scene_name, [])
 
@@ -147,9 +129,6 @@ class ScenePromptBuilder:
         self._current_base_texts[scene_name] = chosen
         return chosen
 
-    # Wraps everything together into out final LLM prompt
-    # This includes the System prompt, the base prompt, information about which scene we are in and our base sentence.
-    # Additionally it will include examples and scene specific instructions, if existent for the current scene.
     def _wrap(self, scene: Scene, base_text: str) -> str:
         scene_name = scene.value
         parts = [
@@ -171,7 +150,6 @@ class ScenePromptBuilder:
             f"Basetext: {base_text.strip()}",
         ]
 
-        # adds a list of examples only when available for the current scene
         examples = self._get_examples(scene_name)
         if examples:
             parts.append(
@@ -182,8 +160,6 @@ class ScenePromptBuilder:
             for index, example in enumerate(examples, start=1):
                 parts.append(f"Beispiel {index}: {example}")
 
-
-        # additional scene specific rules are mainly used to solve weird scene specific behaviours whilst not wanting to affect other scenes
         if scene_name == "scene_1_welcome":
             parts.append(
                 "EXTRA INFO:"
