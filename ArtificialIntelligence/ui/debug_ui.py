@@ -39,10 +39,6 @@ def _state_response(state: str):
     return {"state": state}
 
 
-def _manual_mode_response(enabled: bool):
-    return {"manual_mode": enabled}
-
-
 @app.get("/")
 @app.get("/debug_ui.html")
 def get_ui():
@@ -98,15 +94,6 @@ async def simulate_event_done():
 @app.post("/api/state/{state}")
 def set_state(state: str):
     return _state_response(_runtime.force_state(state))
-
-@app.post("/api/manual_mode/on")
-def manual_on():
-    return _manual_mode_response(_runtime.set_manual_mode(True))
-
-@app.post("/api/manual_mode/off")
-def manual_off():
-    return _manual_mode_response(_runtime.set_manual_mode(False))
-
 
 def run():
     port = int(os.environ["WITCH_AI_UI_PORT"])

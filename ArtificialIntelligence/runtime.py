@@ -197,17 +197,11 @@ class Runtime:
         if not isinstance(event, (HandEvent, PersonEvent)):
             return
         await self.ip_channel.broadcast(event)
-        if isinstance(event, HandEvent) and self.state_machine.manual_mode:
-            return
         await self.handle_image_processing_event(event)
 
     async def _on_ip_ai_video_message(
         self, _server: WebSocketServer, _connection: Any, message: str | bytes
     ):
-        # In manual mode, do NOT broadcast video frames
-        # Else it will result in constant error messages, as no link is established
-        if self.state_machine.manual_mode:
-            return
         if isinstance(message, bytes):
             await self.websocket_server.broadcast(message, path="/ws/ai-3d-video")
 
@@ -221,10 +215,6 @@ class Runtime:
         self, _server: WebSocketServer, _connection: Any, message: str | bytes
     ):
         event = self.ai3d_channel.decode(message)
-        # In manual mode, do NOT broadcast video frames
-        # Else it will result in constant error messages, as no link is established
-        if self.state_machine.manual_mode:
-            return
         if isinstance(event, EventDoneEvent):
             await self.handle_unreal_event(event)
 
@@ -505,19 +495,12 @@ class Runtime:
         self.reset_cycle_state()
         return self.state
 
-    def set_manual_mode(self, enabled: bool) -> bool:
-        self.state_machine.manual_mode = enabled
-        return enabled
-
     def reset_cycle_state(self):
         self._accepted_hand_event = None
         self._clear_hand_selection()
         self.pending_unreal_ack = None
         self.queued_speech = None
         self.analysis_started = False
-        # Would break manual_debug_ui if it gets set to false after a cycle has been simulated
-        # Should only be changed via the manual_debug_ui.html button!
-        #self.state_machine.manual_mode = False
         self._debug_return_state = None
         self._debug_cooldown_until = 0.0
         self._gaslight_correct_hand = None

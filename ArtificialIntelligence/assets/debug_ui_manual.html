@@ -237,8 +237,6 @@
             securityLevel: "loose",
         });
 
-        fetch("/api/manual_mode/on", { method: "POST" });
-
         async function updateState() {
             const nextState = (await json("/api/state")).state || "-";
             document.getElementById("currentState").textContent = nextState;
@@ -405,11 +403,7 @@
         } else {
             init();
         }
-
-        window.addEventListener("beforeunload", () => {
-            fetch("/api/manual_mode/off", { method: "POST" });
-        });
-
+        
         console.log("SCRIPT ENDED");
     
     </script>

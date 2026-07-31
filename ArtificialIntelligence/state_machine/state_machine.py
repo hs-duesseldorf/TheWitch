@@ -188,7 +188,6 @@ class _GraphModel:
 
 class StateMachine:
     def __init__(self) -> None:
-        self.manual_mode = False
         self._state = Scene.SCENE_0_IDLE.value
 
         self._defs = {state.id: state for state in STATES}
