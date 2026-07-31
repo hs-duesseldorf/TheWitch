@@ -81,7 +81,7 @@ class Runtime:
                 "/ws/ip-roi",
             },
             # visual output
-            "unity": {
+            "unreal": {
                 "/ws/ai-3d",
                 "/ws/ai-3d-video",
                 "/ws/ai-3d-roi",
@@ -91,9 +91,9 @@ class Runtime:
             },
         }
         # Name all Groups here that should be disabled during the manual debug ui use
-        # set() for none (Why would you ever do that? Just use the regular Debug UI dummy!)
-        # This makes it possible to allow broadcasts of f.e. the events, but to disable the camera stream and Unity trigger
-        self.disabled_broadcasts_on_manual_debug_ui = {"camera", "unity", "events"}
+        # set() for none (Why would you ever do that? Just use the regular Debug UI, dummy!)
+        # This makes it possible to allow broadcasts of f.e. the events, but to disable the camera stream and unreal trigger
+        self.disabled_broadcasts_on_manual_debug_ui = {"camera", "unreal", "events"}
 
         self.state_machine = StateMachine()
         self.hand_analyzer = HandAnalyzer()
@@ -252,6 +252,13 @@ class Runtime:
         await self.trigger_state(event.trigger.value, cancel_speech=False)
 
     async def handle_unreal_event(self, _event: EventDoneEvent):
+        # Manual debug mode: does not rely on unreal ack
+        if self.manual_debug_active():
+            current_scene = self.state_machine.state
+            changes = self.state_machine.event_done(current_scene)
+            if changes:
+                await self.apply_state_change(changes[-1], cancel_speech=False)
+            return
         pending = self.pending_unreal_ack
         if pending is None:
             return

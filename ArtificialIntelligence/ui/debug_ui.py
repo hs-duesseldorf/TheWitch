@@ -74,7 +74,6 @@ def get_config():
 async def reset_state():
     return _state_response(await _runtime.trigger_state_event("reset"))
 
-
 @app.post("/api/trigger/{event}")
 async def trigger_event(event: str):
     return _state_response(await _runtime.trigger_state_event(event))
