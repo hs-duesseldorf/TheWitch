@@ -229,6 +229,14 @@ class StateMachine:
         changes = self.advance(trigger)
         return changes[-1] if changes else None
 
+    # Returns a list of all available triggers for one scene, used in manual debug ui
+    def get_available_triggers_for_scene(self, current_scene: str) -> list[str]:
+        return [
+            t.trigger
+            for t in TRANSITIONS
+            if t.source == current_scene
+        ]
+
     def advance(self, trigger: str | None) -> list[Transition]:
         if trigger is None:
             return []

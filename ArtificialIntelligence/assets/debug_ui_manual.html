@@ -17,14 +17,6 @@
             * {
                 box-sizing: border-box;
             }
-            body {
-                margin: 0;
-                background: var(--bg);
-                color: var(--text);
-                font:
-                    14px/1.45 system-ui,
-                    sans-serif;
-            }
             main {
                 display: grid;
                 grid-template-columns: 250px 250px minmax(600px, 1fr);
@@ -47,6 +39,23 @@
                 grid-column: 1 / 3;
                 grid-row: 2;
             }
+
+            .current-state-panel .body {
+                display: flex;
+                justify-content: space-between;
+                align-items: flex-start;
+                gap: 20px;
+            }
+
+            #state-info {
+                flex: 1;
+            }
+
+            #valid-inputs {
+                flex: 1;
+                margin-left: 40px;
+            }
+
             .state-machine-panel {
                 grid-column: 3;
                 grid-row: 1 / span 2;
@@ -185,17 +194,25 @@
         <section class="panel top-box">
             <div class="head"><h2>Other Events</h2></div>
             <div class="body">
-                <button data-person-event="person_detected">Person detected</button>
                 <button data-person-event="person_absent">Person absent</button>
+                <button data-person-event="person_detected">Person detected</button>
+                <button data-person-event="person_seated">Person seated</button>
 
                 <button data-animation-event="animation-event_done">Animation done</button>
             </div>
         </section>
 
         <section class="panel top-box current-state-panel">
-            <div class="head"><h2>Current State</h2></div>
+            <div class="head"><h2>State Info</h2></div>
             <div class="body">
-                <span id="currentState" class="state">-</span>
+                <div id="state-info">
+                    <h3>Last Scene:</h3>
+                    <p><span id="last-scene"></span></p>
+                    <h3>Current Scene:</h3>
+                    <p><span id="current-scene" class="state"></span></p>
+                    <h3>Valid Inputs:</h3>
+                    <ul id="valid-inputs"></ul>
+                </div>
                 <button id="resetButton">Reset</button>
             </div>
         </section>
@@ -227,7 +244,6 @@
         const wsBase = `${location.protocol === "https:" ? "wss" : "ws"}://${location.hostname}:${ws_port}`;
         const ws = new WebSocket(`${wsBase}/ws/manual-debug`);
         const $ = (id) => document.getElementById(id);
-        let currentState = "";
         let graphRenderId = 0;
         let graphPending = false;
         const graphView = { scale: 1, x: 0, y: 0, initialized: false };
@@ -237,9 +253,21 @@
             securityLevel: "loose",
         });
 
-        async function updateState() {
-            const nextState = (await json("/api/state")).state || "-";
-            document.getElementById("currentState").textContent = nextState;
+        async function updateStateInfo() {
+            const res = await fetch(`${API}/api/state_info`);
+            const info = await res.json();
+
+            document.getElementById("current-scene").textContent = info.current_scene;
+            document.getElementById("last-scene").textContent = info.last_scene ?? "—";
+
+            const ul = document.getElementById("valid-inputs");
+            ul.innerHTML = "";
+
+            info.valid_triggers.forEach(trigger => {
+                const li = document.createElement("li");
+                li.textContent = trigger;
+                ul.appendChild(li);
+            });
         }
 
         function applyGraphTransform() {
@@ -357,12 +385,11 @@
         function init() {
             console.log("Init fired");
             initGraphNavigation();
-            updateState();
             loadGraph();
 
             document.getElementById("resetButton").onclick = async () => {
                 await fetch(`${API}/api/reset`, { method: "POST" });
-                await updateState();
+                await updateStateInfo();
                 await loadGraph();
             };
 
@@ -374,7 +401,7 @@
                 btn.onclick = async () => {
                     const ev = btn.dataset.handEvent;
                     await fetch(`${API}/api/sim_hand_event/${ev}`, { method: "POST" });
-                    await updateState();
+                    await updateStateInfo();
                     await loadGraph();
                 };
             });
@@ -383,7 +410,7 @@
                 btn.onclick = async () => {
                     const ev = btn.dataset.personEvent;
                     await fetch(`${API}/api/sim_person_event/${ev}`, { method: "POST" });
-                    await updateState();
+                    await updateStateInfo();
                     await loadGraph();
                 };
             });
@@ -392,7 +419,7 @@
                 btn.onclick = async () => {
                     const ev = btn.dataset.animationEvent;
                     await fetch(`${API}/api/sim_animation_event`, { method: "POST" });
-                    await updateState();
+                    await updateStateInfo();
                     await loadGraph();
                 };
             });

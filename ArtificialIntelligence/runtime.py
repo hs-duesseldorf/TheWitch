@@ -114,6 +114,7 @@ class Runtime:
         self._gaslight_correct_hand: Hand | None = None
         self.gaslight_pending = False
         self.gaslight_hand_name: str | None = None
+        self.last_scene = None
 
         self.pending_unreal_ack: PendingUnrealAck | None = None
         self.queued_speech: SpeechRequest | None = None
@@ -282,6 +283,8 @@ class Runtime:
             await self.apply_state_change(change, cancel_speech=cancel_speech)
 
     async def apply_state_change(self, change: Transition, *, cancel_speech: bool):
+        # saveloads the scene we change from to be able to be displayed
+        self.last_scene = change.source
         self.pending_unreal_ack = None
         if change.dest.startswith("scene_debug_"):
             self._debug_return_state = (

@@ -94,6 +94,18 @@ async def simulate_event_done():
 def set_state(state: str):
     return _state_response(_runtime.force_state(state))
 
+# Fetches the information to display current scene, the available triggers and the last scene
+@app.get("/api/state_info")
+async def get_state_info():
+    current = _runtime.state_machine.state
+    last = _runtime.last_scene 
+    valid = _state_machine.get_available_triggers_for_scene(current)
+    return {
+        "current_scene": current,
+        "last_scene": last,
+        "valid_triggers": valid,
+    }
+
 def run():
     port = int(os.environ["WITCH_AI_UI_PORT"])
     logger.info("FastAPI server starting on 0.0.0.0:%d", port)
