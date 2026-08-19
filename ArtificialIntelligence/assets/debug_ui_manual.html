@@ -183,6 +183,8 @@
                 <section class="panel top-box">
             <div class="head"><h2>Hand Events</h2></div>
             <div class="body">
+                <!-- data-hand-event is needed to bunch these buttons into a listener -->
+                <!-- the names of the triggeres have to be the same as defined in shared/events.py -->
                 <button data-hand-event="hand_detected">Hand detected</button>
                 <button data-hand-event="hand_absent">Hand absent</button>
                 <button data-hand-event="hand_wrong_side">Wrong side</button>
