@@ -7,6 +7,16 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 
+# Connection bewteen the debug_ui.html (website) and the runtime.py
+# Calls happen via FastApi 
+# Communicates with debug_ui.html, runtime.py and state_machine.py
+# Only Changes necessary here are when aspects are added to debug_ui.html that require Information from
+# the code or send Information (f.e. Button presses) to the code
+
+# debug_ui_manual.html is currently functioning besides a few state-transition bugs
+# It's usecase is to simulate certain events / state changes to make debugging easier
+# it calls on simulation Methods in runtime.py, which in turn call manual scene triggers in state_machine.py
+
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
@@ -37,10 +47,6 @@ def set_runtime(ws_server, state_machine, runtime):
 
 def _state_response(state: str):
     return {"state": state}
-
-
-def _manual_mode_response(enabled: bool):
-    return {"manual_mode": enabled}
 
 
 @app.get("/")
@@ -78,7 +84,6 @@ def get_config():
 async def reset_state():
     return _state_response(await _runtime.trigger_state_event("reset"))
 
-
 @app.post("/api/trigger/{event}")
 async def trigger_event(event: str):
     return _state_response(await _runtime.trigger_state_event(event))
@@ -99,14 +104,17 @@ async def simulate_event_done():
 def set_state(state: str):
     return _state_response(_runtime.force_state(state))
 
-@app.post("/api/manual_mode/on")
-def manual_on():
-    return _manual_mode_response(_runtime.set_manual_mode(True))
-
-@app.post("/api/manual_mode/off")
-def manual_off():
-    return _manual_mode_response(_runtime.set_manual_mode(False))
-
+# Fetches the information to display current scene, the available triggers and the last scene
+@app.get("/api/state_info")
+async def get_state_info():
+    current = _runtime.state_machine.state
+    last = _runtime.last_scene 
+    valid = _state_machine.get_available_triggers_for_scene(current)
+    return {
+        "current_scene": current,
+        "last_scene": last,
+        "valid_triggers": valid,
+    }
 
 def run():
     port = int(os.environ["WITCH_AI_UI_PORT"])

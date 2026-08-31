@@ -33,6 +33,7 @@ class _QueuedAudio:
     data: np.ndarray
 
 
+# Stores the playback state for a single audio output device
 @dataclass
 class _AudioOutput:
     device: int | None
@@ -52,6 +53,8 @@ class _AudioOutput:
     playback_complete_at: float | None = None
 
 
+# Assigns a priority score to Linux audio devices.
+# Higher scores indicate preferred playback devices
 def _linux_output_score(name: str) -> int:
     lowered = name.lower()
     if "monitor" in lowered or "null" in lowered:
@@ -73,11 +76,15 @@ def _linux_output_score(name: str) -> int:
     return 10
 
 
+# Checks whether an audio device matches the configured virtual cable
+# (configured in .env)
 def _is_virtual_cable(name: str) -> bool:
     needle = os.environ["WITCH_VIRTUAL_CABLE_NAME"].strip()
     return bool(needle) and needle.lower() in name.lower()
 
 
+# Finds suitable output devices for audio playback.
+# Device selection is platform-specific and prioritizes virtual cable if configured.
 def find_audio_devices() -> list[int | None]:
     if not HAS_SOUNDDEVICE:
         return []
@@ -149,6 +156,8 @@ class AudioPlayer:
         self._outputs: list[_AudioOutput] = []
 
 
+    # Starts all configured audio output streams.
+    # Output devices are found automatically and initialized only once during the applications lifetime.
     def start(self):
         if not HAS_SOUNDDEVICE:
             logger.warning("sounddevice import failed")
@@ -226,6 +235,8 @@ class AudioPlayer:
     def prebuffer_seconds(self) -> float:
         return self._prebuffer_seconds
 
+    # Starts a new playback generation
+    # Clears any previously queued audio and prepares every output device for receiving new audio data.
     def begin(self):
         self.start()
         with self._source_lock:
@@ -241,6 +252,8 @@ class AudioPlayer:
                 if not output.is_virtual_cable:
                     self._enqueue_output(output, silence, generation=generation)
 
+    # Queues an audio chunk for playback.
+    # Audio is converted into the internal playback format and optional effects are applied before buffering.
     def put(self, audio_chunk: bytes, *, format: str = "pcm", sample_rate: int | None = None, effects: list[AudioEffect] | None = None):
         try:
             data = self._convert_chunk(audio_chunk, format=format, sample_rate=sample_rate)
@@ -258,12 +271,15 @@ class AudioPlayer:
                 exc,
             )
 
+    # Marks the current audio stream as complete
+    # Playback continues running until all buffered audio has been played.
     def finish(self):
         self._drain_source_queue()
         for output in self._outputs:
             with output.lock:
                 output.producer_done = True
 
+    # Waits until all queued audio is done playing on every output.
     async def wait_for_playback(self):
         if not self._outputs:
             return
@@ -294,6 +310,8 @@ class AudioPlayer:
 
             await asyncio.sleep(0.02)
 
+    # Immediately stops the current playback session
+    # All queued audio is discarded and a new playback generation is started to invalidate pending data
     def clear(self):
         with self._source_lock:
             self._source_generation += 1
@@ -304,6 +322,8 @@ class AudioPlayer:
         self._pcm_remainder = b""
 
 
+    # Audio callback executed by the sounddevice output stream
+    # Continuously transfers buffered audio into the output device while handling underruns and playback synchronization.
     def _callback(self, output, outdata, frames, callback_time, status):
         outdata.fill(0)
         written = 0
@@ -401,6 +421,7 @@ class AudioPlayer:
                 device_delay = 0.0
         return now + device_delay + (written / self._output_sample_rate)
 
+    # Distributes queued source audio to every active output device
     def _drain_source_queue(self):
         while True:
             try:
@@ -414,12 +435,15 @@ class AudioPlayer:
             for output in self._outputs:
                 self._enqueue_output(output, item.data, generation=item.generation)
 
+    # Adds audio to the shared source queue and forwards it to all outputs
     def _enqueue_source(self, data: np.ndarray):
         with self._source_lock:
             generation = self._source_generation
         self._source_queue.put(_QueuedAudio(generation=generation, data=data.copy()))
         self._drain_source_queue()
 
+    # Queues audio for a specific output device
+    # Audio is ignored if it belongs to an outdated playback generation
     def _enqueue_output(self, output: _AudioOutput, data: np.ndarray, *, generation: int):
         with output.lock:
             if generation != output.generation:
@@ -427,6 +451,8 @@ class AudioPlayer:
             output.buffered_frames += int(data.shape[0])
             output.queue.put(_QueuedAudio(generation=generation, data=data.copy()))
 
+    # Converts incoming audio into the internal playback format
+    # Handles PCM and WAV input, resampling, stereo conversion and data type normalization.
     def _convert_chunk(self, audio_chunk: bytes, *, format: str, sample_rate: int | None) -> np.ndarray | None:
         if format == "wav":
             import io
@@ -462,6 +488,7 @@ class AudioPlayer:
 
         return data
 
+    # Removes all pending audio from the shared source queue
     def _clear_source_queue(self):
         while True:
             try:
@@ -469,6 +496,8 @@ class AudioPlayer:
             except queue.Empty:
                 break
 
+    # Resets the playback state of a single output device
+    # Clears all buffered audio and prepares the device for a new playback generation.
     def _clear_output(self, output: _AudioOutput, *, producer_done: bool, generation: int):
         with output.lock:
             output.generation = generation

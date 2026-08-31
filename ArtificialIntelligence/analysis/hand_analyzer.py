@@ -64,6 +64,8 @@ def _safe_div(num: float, den: float) -> float:
     return 0.0 if den == 0 else num / den
 
 
+# Extracts geometric features form the measured hand.
+# These features are used to calculate ratios which we use as input for the element scoring
 def extract_features(lengths: dict[str, float]) -> dict[str, float]:
     palm_width = lengths.get("palm_width", 0.0)
     palm_height = lengths.get("palm_height", 0.0)
@@ -80,6 +82,8 @@ def extract_features(lengths: dict[str, float]) -> dict[str, float]:
     }
 
 
+# Computes the initial score for each element
+# The score is based on the extracted hand proportions and represents the position of the hand within our predefined element model
 def compute_raw_scores(features: dict[str, float]) -> dict[str, float]:
     palm_c = (features["palm_aspect_ratio"] - PALM_CENTER) * PALM_SCALE
     finger_c = (features["finger_length_ratio"] - FINGER_CENTER) * FINGER_SCALE
@@ -99,6 +103,8 @@ def normalize_scores(raw_scores: dict[str, float]) -> dict[str, float]:
     return out
 
 
+# Classifies each element based on its normalized score.
+# Elements are categorized as balanced, too srong or too weak based on predefined thresholds.
 def determine_states(normalized_scores: dict[str, float]) -> dict[str, str]:
     states: dict[str, str] = {}
     for element, z in normalized_scores.items():
@@ -111,11 +117,14 @@ def determine_states(normalized_scores: dict[str, float]) -> dict[str, str]:
     return states
 
 
+# Calculates the confidence of the detected dominant element.
+# Confidence is defined as the difference between the highest and second-highest normalized score.
 def compute_confidence(scores: dict[str, float]) -> float:
     sorted_vals = sorted(scores.values(), reverse=True)
     return round(sorted_vals[0] - sorted_vals[1], 3)
 
 
+# Performs the complete hand analysis pipeline and returns all information required for prompt generation.
 def build_result(lengths: dict[str, float]) -> dict[str, Any]:
     features = extract_features(lengths)
     raw_scores = compute_raw_scores(features)
@@ -149,6 +158,8 @@ def _load_content() -> dict[str, Any]:
     return package.get("hand_analysis", package)
 
 
+# Selects the appropriate analysis text for the detected hand.
+# Borderline hands use combined element descriptions, whilst hands with clear results use the dominant and weakes element.
 def _get_lines(result: dict[str, Any]) -> list[str]:
     lines_list: list[str] = []
     try:
@@ -199,6 +210,8 @@ def _get_base_texts(result: dict[str, Any]) -> str:
 
 
 class HandAnalyzer:
+    # Builds the complete LLM prompt for a detected hand
+    # Returns 'None' if no valid hand measurements are available or if the analysis could not be completed.
     def build_prompt(self, hand_event: HandEvent | None) -> str | None:
         if not hand_event or not hand_event.lengths:
             return None
@@ -221,6 +234,8 @@ class HandAnalyzer:
             f"Beobachtung: {trigger}. Gesehene Hand: {hand}. {base_texts}"
         )
 
+    # Converts the detected hand identifier into a readable label
+    # Includes a fall back if it fails to identify the hand as either left or right.
     @staticmethod
     def _hand_label(hand_event: HandEvent) -> str:
         if not hand_event.hand:

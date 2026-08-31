@@ -65,10 +65,36 @@ class SpeechRequest:
 
 class Runtime:
     def __init__(self):
+        # Counts open manual debug ui websites
+        self.manual_debug_clients = 0
         self.websocket_server = WebSocketServer(
             host="0.0.0.0",
             port=int(os.environ["WITCH_AI_PORT"]),
+            runtime=self,
         )
+        # Groups Broadcast Routes by their associated usage
+        # Eases changes to the manual_debug_ui; one can choose which broadcast to silence
+        self.broadcast_groups = {
+            # visual input
+            "camera": {
+                "/ws/ip-ai-video",
+                "/ws/ip-roi",
+            },
+            # visual output
+            "unreal": {
+                "/ws/ai-3d",
+                "/ws/ai-3d-video",
+                "/ws/ai-3d-roi",
+            },
+            "events": {
+                "/ws/ip-ai",
+            },
+        }
+        # Name all Groups here that should be disabled during the manual debug ui use
+        # set() for none (Why would you ever do that? Just use the regular Debug UI, dummy!)
+        # This makes it possible to allow broadcasts of f.e. the events, but to disable the camera stream and unreal trigger
+        self.disabled_broadcasts_on_manual_debug_ui = {"camera", "unreal", "events"}
+
         self.state_machine = StateMachine()
         self.hand_analyzer = HandAnalyzer()
         self.scene_prompt_builder = ScenePromptBuilder()
@@ -88,6 +114,7 @@ class Runtime:
         self._gaslight_correct_hand: Hand | None = None
         self.gaslight_pending = False
         self.gaslight_hand_name: str | None = None
+        self.last_scene = None
 
         self.pending_unreal_ack: PendingUnrealAck | None = None
         self.queued_speech: SpeechRequest | None = None
@@ -141,6 +168,19 @@ class Runtime:
         self.debug_ui_started = True
         threading.Thread(target=run_debug_ui, daemon=True).start()
 
+    # Checks how many Routes are open to manual_debug_ui.html and 
+    # enters restricted broadcast mode aslong as at least 1 is open
+    def manual_debug_active(self):
+        return self.manual_debug_clients > 0
+
+    # Silences all Broadcasts defined to be in innit
+    def broadcast_allowed(self, path):
+        if self.manual_debug_active():
+            for group_name in self.disabled_broadcasts_on_manual_debug_ui:
+                if path in self.broadcast_groups[group_name]:
+                    return False
+        return True
+
     def register_routes(self):
         self.websocket_server.add_route("/ws/ip-ai", self._on_ip_ai_message)
         self.websocket_server.add_route("/ws/ip-ai-video", self._on_ip_ai_video_message)
@@ -148,6 +188,8 @@ class Runtime:
         self.websocket_server.add_route("/ws/ai-3d", self._on_ai_3d_message)
         self.websocket_server.add_route("/ws/ai-3d-video", None)
         self.websocket_server.add_route("/ws/ai-3d-roi", None)
+        self.websocket_server.add_route("/ws/manual-debug", None)
+
 
     async def _on_ip_ai_message(
         self, _server: WebSocketServer, _connection: Any, message: str | bytes
@@ -156,8 +198,6 @@ class Runtime:
         if not isinstance(event, (HandEvent, PersonEvent)):
             return
         await self.ip_channel.broadcast(event)
-        if isinstance(event, HandEvent) and self.state_machine.manual_mode:
-            return
         await self.handle_image_processing_event(event)
 
     async def _on_ip_ai_video_message(
@@ -213,6 +253,13 @@ class Runtime:
         await self.trigger_state(event.trigger.value, cancel_speech=False)
 
     async def handle_unreal_event(self, _event: EventDoneEvent):
+        # Manual debug mode: does not rely on unreal ack
+        if self.manual_debug_active():
+            current_scene = self.state_machine.state
+            changes = self.state_machine.event_done(current_scene)
+            if changes:
+                await self.apply_state_change(changes[-1], cancel_speech=False)
+            return
         pending = self.pending_unreal_ack
         if pending is None:
             return
@@ -236,6 +283,8 @@ class Runtime:
             await self.apply_state_change(change, cancel_speech=cancel_speech)
 
     async def apply_state_change(self, change: Transition, *, cancel_speech: bool):
+        # saveloads the scene we change from to be able to be displayed
+        self.last_scene = change.source
         self.pending_unreal_ack = None
         if change.dest.startswith("scene_debug_"):
             self._debug_return_state = (
@@ -456,17 +505,12 @@ class Runtime:
         self.reset_cycle_state()
         return self.state
 
-    def set_manual_mode(self, enabled: bool) -> bool:
-        self.state_machine.manual_mode = enabled
-        return enabled
-
     def reset_cycle_state(self):
         self._accepted_hand_event = None
         self._clear_hand_selection()
         self.pending_unreal_ack = None
         self.queued_speech = None
         self.analysis_started = False
-        self.state_machine.manual_mode = False
         self._debug_return_state = None
         self._debug_cooldown_until = 0.0
         self._gaslight_correct_hand = None
