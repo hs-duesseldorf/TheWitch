@@ -1,0 +1,802 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <title>The Witch Debug - Combined</title>
+        <script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
+        <style>
+            :root {
+                color-scheme: dark;
+                --bg: #101113;
+                --panel: #17191d;
+                --well: #111316;
+                --text: #e9eaec;
+                --muted: #989da6;
+                --line: #2b2f36;
+                --accent: #f0c36a;
+                --ok: #8fc79a;
+                --err: #ef8a80;
+                --button: #20242a;
+                --button-hover: #2a3038;
+                --mono: 12px ui-monospace, "Cascadia Mono", Consolas, monospace;
+            }
+            * {
+                box-sizing: border-box;
+            }
+            ::selection {
+                background: rgb(240 195 106 / 0.35);
+            }
+            * {
+                scrollbar-color: #3a3f48 transparent;
+                scrollbar-width: thin;
+            }
+            body {
+                margin: 0;
+                height: 100vh;
+                overflow: hidden;
+                display: grid;
+                grid-template-rows: auto minmax(0, 1fr);
+                background: var(--bg);
+                color: var(--text);
+                font:
+                    14px/1.45 system-ui,
+                    sans-serif;
+            }
+
+            /* Top bar */
+            .topbar {
+                display: flex;
+                align-items: center;
+                gap: 16px;
+                padding: 10px 16px;
+                border-bottom: 1px solid var(--line);
+                background: var(--panel);
+            }
+            .topbar h1 {
+                margin: 0;
+                font-size: 14px;
+                font-weight: 650;
+            }
+            .topbar .mode {
+                color: var(--muted);
+                font-size: 12px;
+            }
+            .topbar .state-now {
+                display: flex;
+                align-items: baseline;
+                gap: 8px;
+                min-width: 0;
+                font-size: 12px;
+                color: var(--muted);
+            }
+            .topbar nav {
+                display: flex;
+                gap: 6px;
+                margin-left: auto;
+            }
+            .topbar nav a {
+                color: var(--muted);
+                font-size: 12px;
+                text-decoration: none;
+                padding: 4px 8px;
+                border-radius: 6px;
+                border: 1px solid transparent;
+            }
+            .topbar nav a:hover {
+                color: var(--text);
+                border-color: var(--line);
+            }
+
+            /* Layout */
+            main {
+                display: grid;
+                grid-template-columns: minmax(0, 1.75fr) minmax(320px, 1fr);
+                gap: 12px;
+                padding: 12px;
+                min-height: 0;
+            }
+            .left {
+                display: grid;
+                grid-template-rows: auto auto minmax(180px, 1fr);
+                gap: 12px;
+                min-height: 0;
+                overflow: auto;
+            }
+            .controls {
+                display: grid;
+                grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr) minmax(0, 1.2fr);
+                gap: 12px;
+            }
+            .events {
+                display: grid;
+                grid-template-columns: repeat(3, minmax(0, 1fr));
+                gap: 12px;
+                min-height: 0;
+            }
+
+            /* Panels */
+            .panel {
+                min-width: 0;
+                min-height: 0;
+                display: grid;
+                grid-template-rows: 38px minmax(0, 1fr);
+                border: 1px solid var(--line);
+                background: var(--panel);
+                border-radius: 8px;
+                overflow: hidden;
+            }
+            .head {
+                display: flex;
+                align-items: center;
+                gap: 8px;
+                height: 38px;
+                padding: 0 12px;
+                border-bottom: 1px solid var(--line);
+            }
+            h2,
+            .label {
+                margin: 0;
+                color: var(--muted);
+                font-size: 12px;
+                font-weight: 650;
+                text-transform: uppercase;
+            }
+            .label {
+                font-size: 11px;
+            }
+            .body {
+                padding: 12px;
+            }
+
+            /* Buttons */
+            button {
+                height: 30px;
+                border: 1px solid var(--line);
+                background: var(--button);
+                color: var(--text);
+                border-radius: 6px;
+                padding: 0 10px;
+                font: inherit;
+                font-size: 12px;
+                cursor: pointer;
+                transition:
+                    background-color 120ms ease-out,
+                    border-color 120ms ease-out,
+                    transform 80ms ease-out;
+            }
+            button:hover {
+                background: var(--button-hover);
+            }
+            button:active {
+                transform: translateY(1px);
+            }
+            button:focus-visible,
+            a:focus-visible {
+                outline: 2px solid var(--accent);
+                outline-offset: 2px;
+            }
+            button[aria-busy="true"] {
+                border-color: var(--accent);
+                cursor: progress;
+            }
+            .button-group {
+                display: flex;
+                flex-wrap: wrap;
+                gap: 6px;
+            }
+            .button-group + .label {
+                margin-top: 12px;
+            }
+            .label + .button-group {
+                margin-top: 6px;
+            }
+
+            /* Videos */
+            .videos {
+                display: grid;
+                grid-template-columns: 1fr 1fr;
+                gap: 12px;
+                padding: 12px;
+            }
+            .videos .label {
+                margin-bottom: 6px;
+            }
+            .stream-wrap {
+                position: relative;
+                width: 100%;
+                aspect-ratio: var(--video-ratio, 16 / 9);
+                max-height: 48vh;
+                background: #050608;
+                border: 1px solid #0c0e12;
+                border-radius: 6px;
+                overflow: hidden;
+            }
+            canvas {
+                display: block;
+                width: 100%;
+                height: 100%;
+            }
+            .overlay {
+                position: absolute;
+                left: 10px;
+                bottom: 8px;
+                padding: 3px 6px;
+                border-radius: 4px;
+                background: rgb(0 0 0 / 0.58);
+                color: #d6d8dc;
+                font-size: 11px;
+                font-variant-numeric: tabular-nums;
+            }
+
+            /* State info */
+            .state {
+                color: var(--accent);
+                font: 13px ui-monospace, "Cascadia Mono", Consolas, monospace;
+                overflow-wrap: anywhere;
+            }
+            .state-info dl {
+                display: grid;
+                grid-template-columns: auto minmax(0, 1fr);
+                gap: 4px 12px;
+                margin: 0;
+            }
+            .state-info dt {
+                color: var(--muted);
+                font-size: 12px;
+            }
+            .state-info dd {
+                margin: 0;
+                font: var(--mono);
+                overflow-wrap: anywhere;
+            }
+            .state-info dd.state {
+                font-size: 13px;
+            }
+            #valid-inputs {
+                display: flex;
+                flex-wrap: wrap;
+                gap: 4px;
+                margin: 6px 0 0;
+                padding: 0;
+                list-style: none;
+            }
+            #valid-inputs li {
+                padding: 1px 6px;
+                border: 1px solid var(--line);
+                border-radius: 4px;
+                background: var(--well);
+                font: var(--mono);
+                font-size: 11px;
+            }
+            #valid-inputs:empty::before {
+                content: "none";
+                color: var(--muted);
+                font-size: 12px;
+            }
+            .state-actions {
+                display: flex;
+                align-items: center;
+                gap: 10px;
+                margin-top: 12px;
+            }
+            #actionStatus {
+                min-width: 0;
+                color: var(--muted);
+                font: var(--mono);
+                font-size: 11px;
+                overflow-wrap: anywhere;
+            }
+            #actionStatus.ok {
+                color: var(--ok);
+            }
+            #actionStatus.err {
+                color: var(--err);
+            }
+
+            /* Event panels */
+            pre {
+                margin: 0;
+                padding: 10px 12px;
+                min-height: 0;
+                overflow: auto;
+                white-space: pre-wrap;
+                overflow-wrap: anywhere;
+                background: var(--well);
+                font: var(--mono);
+            }
+            .panel.flash .head {
+                animation: flash 600ms ease-out;
+            }
+            @keyframes flash {
+                from {
+                    background: rgb(240 195 106 / 0.16);
+                }
+                to {
+                    background: transparent;
+                }
+            }
+
+            /* State machine graph */
+            .graph-tools {
+                display: flex;
+                align-items: center;
+                gap: 4px;
+                margin-left: auto;
+            }
+            .graph-tools button {
+                min-width: 30px;
+                padding: 0 8px;
+            }
+            #graphZoom {
+                min-width: 46px;
+                color: var(--muted);
+                text-align: center;
+                font: 11px ui-monospace, monospace;
+            }
+            #graphViewport {
+                position: relative;
+                min-height: 0;
+                overflow: hidden;
+                cursor: grab;
+                background-color: #090a0c;
+                touch-action: none;
+                user-select: none;
+            }
+            #graphViewport.panning {
+                cursor: grabbing;
+            }
+            #graphContent {
+                position: absolute;
+                inset: 0;
+            }
+            #graphContent svg {
+                display: block;
+                width: 100% !important;
+                height: 100% !important;
+                max-width: none !important;
+            }
+
+            @media (max-width: 1280px) {
+                .controls {
+                    grid-template-columns: 1fr 1fr;
+                }
+                .controls .state-info {
+                    grid-column: 1 / -1;
+                }
+            }
+            @media (max-width: 1000px) {
+                body {
+                    height: auto;
+                    overflow: auto;
+                }
+                main {
+                    grid-template-columns: minmax(0, 1fr);
+                }
+                .left {
+                    overflow: visible;
+                }
+                .events {
+                    grid-template-columns: minmax(0, 1fr);
+                }
+                .events pre {
+                    max-height: 260px;
+                }
+                #graphViewport {
+                    height: 600px;
+                }
+            }
+            @media (max-width: 640px) {
+                .topbar {
+                    flex-wrap: wrap;
+                    gap: 6px 12px;
+                }
+                .topbar .mode {
+                    display: none;
+                }
+                .videos,
+                .controls {
+                    grid-template-columns: minmax(0, 1fr);
+                }
+            }
+            @media (prefers-reduced-motion: reduce) {
+                * {
+                    transition: none !important;
+                    animation: none !important;
+                }
+            }
+        </style>
+    </head>
+    <body>
+        <header class="topbar">
+            <h1>The Witch Debug</h1>
+            <span class="mode">live + manual</span>
+            <div class="state-now">
+                state <span id="currentState" class="state">-</span>
+            </div>
+            <nav aria-label="Debug pages">
+                <a href="/debug_ui.html">Full Debug UI</a>
+                <a href="/debug_ui_manual.html" title="Manual UI silences camera, events and Unreal">Manual UI</a>
+            </nav>
+        </header>
+        <main>
+            <div class="left">
+                <section class="panel" aria-labelledby="videosTitle">
+                    <div class="head"><h2 id="videosTitle">Videos</h2></div>
+                    <div class="videos">
+                        <div>
+                            <div class="label">Video</div>
+                            <div class="stream-wrap">
+                                <canvas id="cameraCanvas" aria-label="Camera stream"></canvas
+                                ><span id="cameraFps" class="overlay">0 fps</span>
+                            </div>
+                        </div>
+                        <div>
+                            <div class="label">ROI</div>
+                            <div class="stream-wrap">
+                                <canvas id="roiCanvas" aria-label="ROI stream"></canvas
+                                ><span id="roiFps" class="overlay">0 fps</span>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <div class="controls">
+                    <section class="panel" aria-labelledby="handTitle">
+                        <div class="head"><h2 id="handTitle">Hand Events</h2></div>
+                        <div class="body">
+                            <!-- trigger names must match shared/events.py -->
+                            <div class="button-group">
+                                <button data-hand-event="hand_detected">Hand detected</button>
+                                <button data-hand-event="hand_absent">Hand absent</button>
+                                <button data-hand-event="hand_wrong_side">Wrong side</button>
+                                <button data-hand-event="hand_not_fully_in_view">Not fully in view</button>
+                                <button data-hand-event="hand_tilted">Hand tilted</button>
+                            </div>
+                        </div>
+                    </section>
+
+                    <section class="panel" aria-labelledby="otherTitle">
+                        <div class="head"><h2 id="otherTitle">Other Events</h2></div>
+                        <div class="body">
+                            <div class="label">Person</div>
+                            <div class="button-group">
+                                <button data-person-event="person_absent">Person absent</button>
+                                <button data-person-event="person_detected">Person detected</button>
+                                <button data-person-event="person_seated">Person seated</button>
+                            </div>
+                            <div class="label">Unreal</div>
+                            <div class="button-group">
+                                <button data-animation-event>Animation done</button>
+                            </div>
+                        </div>
+                    </section>
+
+                    <section class="panel state-info" aria-labelledby="stateTitle">
+                        <div class="head"><h2 id="stateTitle">State Info</h2></div>
+                        <div class="body">
+                            <dl>
+                                <dt>Last scene</dt>
+                                <dd id="last-scene">-</dd>
+                                <dt>Current scene</dt>
+                                <dd id="current-scene" class="state">-</dd>
+                            </dl>
+                            <div class="label" style="margin-top: 10px">Valid inputs</div>
+                            <ul id="valid-inputs"></ul>
+                            <div class="state-actions">
+                                <button id="resetButton">Reset</button>
+                                <span id="actionStatus" role="status" aria-live="polite"></span>
+                            </div>
+                        </div>
+                    </section>
+                </div>
+
+                <div class="events">
+                    <section class="panel" id="ImageProcessingPanel">
+                        <div class="head"><h2>ImageProcessing</h2></div>
+                        <pre id="ImageProcessingEvents">waiting...</pre>
+                    </section>
+                    <section class="panel" id="ArtificialIntelligencePanel">
+                        <div class="head"><h2>ArtificialIntelligence</h2></div>
+                        <pre id="ArtificialIntelligenceEvents">waiting...</pre>
+                    </section>
+                    <section class="panel" id="UnrealPanel">
+                        <div class="head"><h2>Unreal</h2></div>
+                        <pre id="UnrealEvents">waiting...</pre>
+                    </section>
+                </div>
+            </div>
+
+            <section class="panel" aria-labelledby="graphTitle">
+                <div class="head">
+                    <h2 id="graphTitle">State Machine</h2>
+                    <div class="graph-tools">
+                        <button id="graphZoomOut" title="Zoom out" aria-label="Zoom out">-</button>
+                        <span id="graphZoom">100%</span>
+                        <button id="graphZoomIn" title="Zoom in" aria-label="Zoom in">+</button>
+                        <button id="graphFit" title="Fit diagram">Fit</button>
+                    </div>
+                </div>
+                <div id="graphViewport"><div id="graphContent"></div></div>
+            </section>
+        </main>
+
+        <script>
+            // Bewusst KEINE Verbindung zu /ws/manual-debug: Kamera, Events und Unreal laufen weiter,
+            // die Buttons rufen zusaetzlich die /api/sim_* Endpunkte auf.
+            const API = location.origin;
+            const $ = (id) => document.getElementById(id);
+            let currentState = "";
+            let graphRenderId = 0;
+            let graphPending = false;
+            const graphView = { scale: 1, x: 0, y: 0, initialized: false };
+            mermaid.initialize({
+                startOnLoad: false,
+                theme: "dark",
+                securityLevel: "loose",
+            });
+
+            addEventListener("DOMContentLoaded", init);
+
+            async function init() {
+                initGraphNavigation();
+                initButtons();
+                const { ws_port } = await json("/api/config");
+                const wsBase = `${location.protocol === "https:" ? "wss" : "ws"}://${location.hostname}:${ws_port}`;
+                await refreshState();
+                loadGraph();
+                stream("camera", `${wsBase}/ws/ai-3d-video`);
+                stream("roi", `${wsBase}/ws/ai-3d-roi`);
+                socket(`${wsBase}/ws/ip-ai`, (ev) => {
+                    show(ev.origin, ev, "ImageProcessing");
+                    refreshState();
+                });
+                socket(`${wsBase}/ws/ai-3d`, (ev) => {
+                    show(ev.origin, ev, "ArtificialIntelligence");
+                    refreshState();
+                });
+            }
+
+            async function json(path, options) {
+                const res = await fetch(`${API}${path}`, options);
+                if (!res.ok) throw new Error(`${path}: HTTP ${res.status}`);
+                return res.json();
+            }
+
+            async function refreshState() {
+                const [{ state }, info] = await Promise.all([
+                    json("/api/state"),
+                    json("/api/state_info"),
+                ]);
+                const nextState = state || "-";
+                $("currentState").textContent = nextState;
+                $("current-scene").textContent = info.current_scene ?? "-";
+                $("last-scene").textContent = info.last_scene ?? "-";
+                renderValidInputs(info.valid_triggers ?? []);
+                if (nextState !== currentState) {
+                    currentState = nextState;
+                    loadGraph();
+                }
+            }
+
+            function renderValidInputs(triggers) {
+                const ul = $("valid-inputs");
+                ul.replaceChildren(
+                    ...triggers.map((trigger) => {
+                        const li = document.createElement("li");
+                        li.textContent = trigger;
+                        return li;
+                    }),
+                );
+            }
+
+            function initButtons() {
+                const bind = (selector, pathFor) => {
+                    document.querySelectorAll(selector).forEach((btn) => {
+                        btn.onclick = () => runAction(btn, pathFor(btn));
+                    });
+                };
+                bind("[data-hand-event]", (btn) => `/api/sim_hand_event/${btn.dataset.handEvent}`);
+                bind("[data-person-event]", (btn) => `/api/sim_person_event/${btn.dataset.personEvent}`);
+                bind("[data-animation-event]", () => "/api/sim_animation_event");
+                $("resetButton").onclick = () => runAction($("resetButton"), "/api/reset");
+            }
+
+            async function runAction(btn, path) {
+                const status = $("actionStatus");
+                const name = path.split("/").pop();
+                btn.setAttribute("aria-busy", "true");
+                status.className = "";
+                status.textContent = `${name} ...`;
+                try {
+                    const { state } = await json(path, { method: "POST" });
+                    status.className = "ok";
+                    status.textContent = `${name} -> ${state}`;
+                    await refreshState();
+                    loadGraph();
+                } catch (err) {
+                    status.className = "err";
+                    status.textContent = `${name} failed: ${err.message}`;
+                    console.warn(err);
+                } finally {
+                    btn.removeAttribute("aria-busy");
+                }
+            }
+
+            function socket(url, onEvent, binary = false) {
+                const connect = () => {
+                    const ws = new WebSocket(url);
+                    if (binary) ws.binaryType = "arraybuffer";
+                    ws.onerror = () => ws.close();
+                    ws.onclose = () => setTimeout(connect, 1000);
+                    ws.onmessage = (e) => {
+                        try {
+                            Promise.resolve(
+                                onEvent(binary ? e.data : JSON.parse(e.data)),
+                            ).catch(() => {});
+                        } catch {}
+                    };
+                };
+                connect();
+            }
+
+            // Unbekannte origins (z. B. "ManualSimulation") landen im Panel des Kanals
+            function show(origin, event, fallback) {
+                const name = $(`${origin}Events`) ? origin : fallback;
+                $(`${name}Events`).textContent = JSON.stringify(event, null, 2);
+                const panel = $(`${name}Panel`);
+                panel.classList.remove("flash");
+                void panel.offsetWidth;
+                panel.classList.add("flash");
+            }
+
+            function stream(name, url) {
+                const canvas = $(`${name}Canvas`);
+                const ctx = canvas.getContext("2d", { alpha: false });
+                const wrap = canvas.closest(".stream-wrap");
+                let frames = 0,
+                    lastTick = performance.now();
+                ctx.fillStyle = "#000";
+
+                new ResizeObserver(() => {
+                    const r = canvas.getBoundingClientRect();
+                    canvas.width = Math.max(2, Math.floor(r.width * devicePixelRatio));
+                    canvas.height = Math.max(2, Math.floor(r.height * devicePixelRatio));
+                }).observe(canvas);
+
+                socket(
+                    url,
+                    async (data) => {
+                        const bmp = await createImageBitmap(new Blob([data], { type: "image/jpeg" }));
+                        wrap.style.setProperty("--video-ratio", `${bmp.width} / ${bmp.height}`);
+                        const scale = Math.max(canvas.width / bmp.width, canvas.height / bmp.height);
+                        const w = bmp.width * scale,
+                            h = bmp.height * scale;
+                        ctx.fillRect(0, 0, canvas.width, canvas.height);
+                        ctx.drawImage(bmp, (canvas.width - w) / 2, (canvas.height - h) / 2, w, h);
+                        bmp.close();
+                        frames++;
+                        const now = performance.now();
+                        if (now - lastTick >= 1000) {
+                            $(`${name}Fps`).textContent = `${Math.round((frames * 1000) / (now - lastTick))} fps`;
+                            frames = 0;
+                            lastTick = now;
+                        }
+                    },
+                    true,
+                );
+            }
+
+            function applyGraphTransform() {
+                const viewport = $("graphViewport");
+                const svg = $("graphContent").querySelector("svg");
+                if (!svg) return;
+                svg.setAttribute(
+                    "viewBox",
+                    [
+                        -graphView.x / graphView.scale,
+                        -graphView.y / graphView.scale,
+                        viewport.clientWidth / graphView.scale,
+                        viewport.clientHeight / graphView.scale,
+                    ].join(" "),
+                );
+                $("graphZoom").textContent = `${Math.round(graphView.scale * 100)}%`;
+            }
+
+            function zoomGraph(factor, clientX, clientY) {
+                const viewport = $("graphViewport");
+                const rect = viewport.getBoundingClientRect();
+                const px = (clientX ?? rect.left + rect.width / 2) - rect.left;
+                const py = (clientY ?? rect.top + rect.height / 2) - rect.top;
+                const next = Math.min(4, Math.max(0.1, graphView.scale * factor));
+                const ratio = next / graphView.scale;
+                graphView.x = px - (px - graphView.x) * ratio;
+                graphView.y = py - (py - graphView.y) * ratio;
+                graphView.scale = next;
+                applyGraphTransform();
+            }
+
+            function fitGraph() {
+                const viewport = $("graphViewport");
+                const svg = $("graphContent").querySelector("svg");
+                if (!svg) return;
+                const width = Number(svg.dataset.graphWidth);
+                const height = Number(svg.dataset.graphHeight);
+                const padding = 40;
+                graphView.scale = Math.max(
+                    0.1,
+                    Math.min(
+                        1,
+                        (viewport.clientWidth - padding * 2) / width,
+                        (viewport.clientHeight - padding * 2) / height,
+                    ),
+                );
+                graphView.x = (viewport.clientWidth - width * graphView.scale) / 2;
+                graphView.y = (viewport.clientHeight - height * graphView.scale) / 2;
+                graphView.initialized = true;
+                applyGraphTransform();
+            }
+
+            function initGraphNavigation() {
+                const viewport = $("graphViewport");
+                let pan = null;
+                viewport.addEventListener(
+                    "wheel",
+                    (event) => {
+                        event.preventDefault();
+                        zoomGraph(Math.exp(-event.deltaY * 0.0015), event.clientX, event.clientY);
+                    },
+                    { passive: false },
+                );
+                viewport.addEventListener("pointerdown", (event) => {
+                    pan = { x: event.clientX, y: event.clientY };
+                    viewport.setPointerCapture(event.pointerId);
+                    viewport.classList.add("panning");
+                });
+                viewport.addEventListener("pointermove", (event) => {
+                    if (!pan) return;
+                    graphView.x += event.clientX - pan.x;
+                    graphView.y += event.clientY - pan.y;
+                    pan = { x: event.clientX, y: event.clientY };
+                    applyGraphTransform();
+                });
+                const stopPan = () => {
+                    pan = null;
+                    viewport.classList.remove("panning");
+                };
+                viewport.addEventListener("pointerup", stopPan);
+                viewport.addEventListener("pointercancel", stopPan);
+                viewport.addEventListener("dblclick", fitGraph);
+                new ResizeObserver(() => applyGraphTransform()).observe(viewport);
+                $("graphZoomOut").onclick = () => zoomGraph(0.8);
+                $("graphZoomIn").onclick = () => zoomGraph(1.25);
+                $("graphFit").onclick = fitGraph;
+            }
+
+            async function loadGraph() {
+                if (graphPending) return;
+                graphPending = true;
+                setTimeout(async () => {
+                    graphPending = false;
+                    const div = $("graphContent");
+                    const renderId = ++graphRenderId;
+                    const { graph } = await json("/api/state-machine-graph");
+                    try {
+                        const rendered = await mermaid.render(`g${Date.now()}-${renderId}`, graph);
+                        if (renderId === graphRenderId) {
+                            div.innerHTML = rendered.svg;
+                            const svg = div.querySelector("svg");
+                            const box = svg.viewBox.baseVal;
+                            svg.dataset.graphWidth = box.width;
+                            svg.dataset.graphHeight = box.height;
+                            svg.setAttribute("preserveAspectRatio", "none");
+                            graphView.initialized ? applyGraphTransform() : fitGraph();
+                        }
+                    } catch {
+                        if (renderId === graphRenderId) div.textContent = graph;
+                    }
+                }, 100);
+            }
+        </script>
+    </body>
+</html>
