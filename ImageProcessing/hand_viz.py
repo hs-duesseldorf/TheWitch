@@ -15,6 +15,9 @@ MASK_BLUR_KERNEL = 9
 MASK_MORPH_KERNEL = 3
 BACKGROUND_HISTORY = 300
 BACKGROUND_VAR_THRESHOLD = 32.0
+# Skin in YCrCb (Chai & Ngan); Y minimum drops the dark stone floor. Black or LED-tinted floor is not skin.
+SKIN_YCRCB_LOW = (40, 133, 77)
+SKIN_YCRCB_HIGH = (255, 173, 127)
 BACKGROUND_LEARNING_RATE = 0.01
 BACKGROUND_RELEARN_RATE = 0.2
 FOREGROUND_FREEZE_RATIO = 0.02
@@ -64,13 +67,22 @@ class HandVizPublisher:
         # otherwise a resting hand slowly becomes background.
         foreground = self.subtractor.apply(square_bgr, learningRate=0.0)
         foreground_ratio = float(np.count_nonzero(foreground)) / foreground.size
-        learning_rate = self._learning_rate(foreground_ratio, hand_present)
+        # Only skin-coloured foreground becomes fog, so noise and non-skin objects never show.
+        hand_like = cv2.bitwise_and(foreground, self._skin_mask(square_bgr))
+        skin_present = np.count_nonzero(hand_like) / hand_like.size >= FOREGROUND_FREEZE_RATIO
+        # A partly visible hand (no landmarks yet) must not fade into the background while aligning.
+        learning_rate = self._learning_rate(foreground_ratio, hand_present or skin_present)
         if learning_rate > 0.0:
             self.subtractor.apply(square_bgr, learningRate=learning_rate)
 
-        cleaned = cv2.morphologyEx(foreground, cv2.MORPH_OPEN, self.morph_kernel)
+        cleaned = cv2.morphologyEx(hand_like, cv2.MORPH_OPEN, self.morph_kernel)
         cleaned = cv2.morphologyEx(cleaned, cv2.MORPH_CLOSE, self.morph_kernel)
         return cv2.GaussianBlur(cleaned, (MASK_BLUR_KERNEL, MASK_BLUR_KERNEL), 0)
+
+    @staticmethod
+    def _skin_mask(square_bgr: np.ndarray) -> np.ndarray:
+        ycrcb = cv2.cvtColor(square_bgr, cv2.COLOR_BGR2YCrCb)
+        return cv2.inRange(ycrcb, SKIN_YCRCB_LOW, SKIN_YCRCB_HIGH)
 
     def _learning_rate(self, foreground_ratio: float, hand_present: bool) -> float:
         if hand_present:

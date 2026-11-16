@@ -33,6 +33,7 @@ class WebSocketServer:
         message: str | bytes,
         path: str | None = None,
         exclude: ServerConnection | None = None,
+        warn_if_dropped: bool = True,
     ) -> None:
         if path and self._runtime and not self._runtime.broadcast_allowed(path):
             return
@@ -46,7 +47,7 @@ class WebSocketServer:
         if exclude is not None:
             targets.discard(exclude)
         if not targets:
-            if path is not None:
+            if path is not None and warn_if_dropped:
                 logger.warning("No connected clients on %s, event dropped", path)
             return
         results = await asyncio.gather(

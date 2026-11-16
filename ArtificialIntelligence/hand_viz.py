@@ -9,9 +9,9 @@ from shared.events import HandTrigger, Scene
 SCAN_DURATION_S = 5.0
 SCAN_RUNNING_MAX = 0.99
 
-RING_NEUTRAL = "neutral"
 RING_RED = "red"
 RING_GREEN = "green"
+RING_OFF = "off"
 
 HAND_PROMPT_SCENES = frozenset(
     {
@@ -59,8 +59,12 @@ class HandVizComposer:
 
     @staticmethod
     def _ring(scene: Scene, hand_ok: bool) -> str:
+        # Circle only exists from "Lege deine Hand in den Stein" (end of scene 3) until the witch
+        # has finished reading it (end of scene 7); otherwise it shrinks away.
+        if scene is Scene.SCENE_7_HANDSCAN_DONE:
+            return RING_GREEN
         if scene not in HAND_PROMPT_SCENES:
-            return RING_NEUTRAL
+            return RING_OFF
         return RING_GREEN if hand_ok else RING_RED
 
     def _scan(self, scene: Scene, now: float) -> float:

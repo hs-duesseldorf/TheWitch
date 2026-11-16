@@ -211,26 +211,26 @@ class Runtime:
         self, _server: WebSocketServer, _connection: Any, message: str | bytes
     ):
         if isinstance(message, bytes):
-            await self.websocket_server.broadcast(message, path="/ws/ai-3d-video")
+            await self.websocket_server.broadcast(message, path="/ws/ai-3d-video", warn_if_dropped=False)
 
     async def _on_ip_roi_message(
         self, _server: WebSocketServer, _connection: Any, message: str | bytes
     ):
         if isinstance(message, bytes):
-            await self.websocket_server.broadcast(message, path="/ws/ai-3d-roi")
+            await self.websocket_server.broadcast(message, path="/ws/ai-3d-roi", warn_if_dropped=False)
 
     async def _on_ip_ai_handviz_message(
         self, _server: WebSocketServer, _connection: Any, message: str | bytes
     ):
         # Binary = fog mask JPEG, passed through; text = landmarks + hand status -> "ring|scan|points"
         if isinstance(message, bytes):
-            await self.websocket_server.broadcast(message, path="/ws/ai-3d-handviz")
+            await self.websocket_server.broadcast(message, path="/ws/ai-3d-handviz", warn_if_dropped=False)
             return
         frame = msgspec.json.decode(message, type=HandVizFrame)
         text = self.hand_viz_composer.compose(
             self.state_machine.current_scene, frame.trigger, frame.points, time.monotonic()
         )
-        await self.websocket_server.broadcast(text, path="/ws/ai-3d-handviz")
+        await self.websocket_server.broadcast(text, path="/ws/ai-3d-handviz", warn_if_dropped=False)
 
     async def _on_ai_3d_message(
         self, _server: WebSocketServer, _connection: Any, message: str | bytes
