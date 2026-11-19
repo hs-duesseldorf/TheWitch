@@ -42,8 +42,6 @@ BACKGROUND_LEARNING_RATE = 0.01
 BACKGROUND_RELEARN_RATE = 0.2
 FOREGROUND_FREEZE_RATIO = 0.02
 UNEXPLAINED_FOREGROUND_MAX_S = 2.0
-# shortcut: temporary diagnosis why a hand far from the camera disappears, remove after
-DEBUG_LOG_INTERVAL_S = 1.0
 
 
 class HandVizPublisher:
@@ -64,7 +62,6 @@ class HandVizPublisher:
         self.morph_kernel = np.ones((MASK_MORPH_KERNEL, MASK_MORPH_KERNEL), np.uint8)
         self.close_kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (MASK_CLOSE_KERNEL, MASK_CLOSE_KERNEL))
         self.unexplained_foreground_since: float | None = None
-        self.last_debug_log_at = 0.0
         self.last_hand_seen_at: float | None = None
 
     def publish(self, frame_bgr: np.ndarray, trigger: HandTrigger, landmarks: list[Any] | None) -> None:
@@ -101,19 +98,10 @@ class HandVizPublisher:
             self.subtractor.apply(square_bgr, learningRate=learning_rate)
         # Without landmarks (hand still entering) all foreground shows, as an alignment aid.
         hand_like = cv2.bitwise_and(foreground, self._hand_region(points)) if points else foreground
-        self._debug_log(bool(points), foreground, hand_like, learning_rate)
 
         cleaned = cv2.morphologyEx(hand_like, cv2.MORPH_OPEN, self.morph_kernel)
         cleaned = cv2.morphologyEx(cleaned, cv2.MORPH_CLOSE, self.close_kernel)
         return cv2.GaussianBlur(cleaned, (MASK_BLUR_KERNEL, MASK_BLUR_KERNEL), 0)
-
-    def _debug_log(self, hand_present: bool, foreground: np.ndarray, hand_like: np.ndarray, learning_rate: float) -> None:
-        if time.monotonic() - self.last_debug_log_at < DEBUG_LOG_INTERVAL_S:
-            return
-        self.last_debug_log_at = time.monotonic()
-        percent = lambda m: 100.0 * np.count_nonzero(m) / m.size
-        logger.info("hand_viz debug: landmarks=%s foreground=%.1f%% fog=%.1f%% learning_rate=%.2f",
-                    hand_present, percent(foreground), percent(hand_like), learning_rate)
 
     @staticmethod
     def _hand_region(points: list[list[float]]) -> np.ndarray:

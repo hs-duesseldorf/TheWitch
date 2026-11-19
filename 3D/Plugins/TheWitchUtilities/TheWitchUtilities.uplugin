@@ -6,7 +6,7 @@
 	"Description": "Blueprint utility functions for TheWitch.",
 	"Category": "Blueprint",
 	"CreatedBy": "",
-	"EngineVersion": "5.7.0",
+	"EngineVersion": "5.8.0",
 	"CanContainContent": false,
 	"Installed": false,
 	"SupportedTargetPlatforms": [
