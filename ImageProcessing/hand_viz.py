@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import time
 from typing import Any
 
@@ -8,20 +9,41 @@ import numpy as np
 
 from shared.events import HandTrigger
 
+logger = logging.getLogger("image-processing")
+
 HAND_VIZ_INTERVAL_S = 1.0 / 15.0
-MASK_SIZE = 128
+MASK_SIZE = 256
 MASK_JPEG_QUALITY = 80
 MASK_BLUR_KERNEL = 9
 MASK_MORPH_KERNEL = 3
+# Larger close only: fills holes in the mask (each hole would draw its own fog outline); open stays small so fingers survive
+MASK_CLOSE_KERNEL = 7
 BACKGROUND_HISTORY = 300
 BACKGROUND_VAR_THRESHOLD = 32.0
-# Skin in YCrCb (Chai & Ngan); Y minimum drops the dark stone floor. Black or LED-tinted floor is not skin.
-SKIN_YCRCB_LOW = (40, 133, 77)
-SKIN_YCRCB_HIGH = (255, 173, 127)
+# No skin colour: fixed colour ranges failed for bright light and do not cover every skin tone.
+# With landmarks the fog is the foreground inside a hand-shaped stencil (palm + one thick line per bone).
+# A convex hull let finger gaps through whenever the background counts as foreground (exposure change,
+# hand close to the camera), so the fingers merged into one block.
+HAND_STENCIL_WIDTH_RATIO = 0.3  # bone line thickness relative to the wrist-to-middle-knuckle length (real finger ~0.2)
+WRIST_LANDMARK = 0
+MIDDLE_KNUCKLE_LANDMARK = 9
+PALM_LANDMARKS = (0, 1, 5, 9, 13, 17)
+HAND_BONES = (
+    (0, 1), (1, 2), (2, 3), (3, 4),
+    (5, 6), (6, 7), (7, 8),
+    (9, 10), (10, 11), (11, 12),
+    (13, 14), (14, 15), (15, 16),
+    (17, 18), (18, 19), (19, 20),
+    (0, 5), (5, 9), (9, 13), (13, 17), (0, 17),  # palm edges, so the palm border gets the same margin
+)
+# Keeps the background frozen briefly after landmarks drop out (hand partly out of view while aligning).
+HAND_RECENT_S = 3.0
 BACKGROUND_LEARNING_RATE = 0.01
 BACKGROUND_RELEARN_RATE = 0.2
 FOREGROUND_FREEZE_RATIO = 0.02
 UNEXPLAINED_FOREGROUND_MAX_S = 2.0
+# shortcut: temporary diagnosis why a hand far from the camera disappears, remove after
+DEBUG_LOG_INTERVAL_S = 1.0
 
 
 class HandVizPublisher:
@@ -40,7 +62,10 @@ class HandVizPublisher:
             detectShadows=False,
         )
         self.morph_kernel = np.ones((MASK_MORPH_KERNEL, MASK_MORPH_KERNEL), np.uint8)
+        self.close_kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (MASK_CLOSE_KERNEL, MASK_CLOSE_KERNEL))
         self.unexplained_foreground_since: float | None = None
+        self.last_debug_log_at = 0.0
+        self.last_hand_seen_at: float | None = None
 
     def publish(self, frame_bgr: np.ndarray, trigger: HandTrigger, landmarks: list[Any] | None) -> None:
         if (time.monotonic() - self.last_publish_at) < HAND_VIZ_INTERVAL_S:
@@ -48,8 +73,8 @@ class HandVizPublisher:
         self.last_publish_at = time.monotonic()
 
         square = self._mirrored_centre_square(frame_bgr)
-        mask = self._silhouette_mask(square, hand_present=landmarks is not None)
         points = self._square_points(frame_bgr, landmarks) if landmarks is not None else []
+        mask = self._silhouette_mask(square, points)
 
         self.client.send_message({"trigger": trigger.value, "points": points})
         self.client.send_message(self._encode_mask(mask))
@@ -62,27 +87,44 @@ class HandVizPublisher:
         square = frame_bgr[top:top + side, left:left + side]
         return cv2.flip(cv2.resize(square, (MASK_SIZE, MASK_SIZE), interpolation=cv2.INTER_AREA), 1)
 
-    def _silhouette_mask(self, square_bgr: np.ndarray, *, hand_present: bool) -> np.ndarray:
+    def _silhouette_mask(self, square_bgr: np.ndarray, points: list[list[float]]) -> np.ndarray:
         # Peek first: freeze the background while a hand (or anything larger) is in view,
         # otherwise a resting hand slowly becomes background.
         foreground = self.subtractor.apply(square_bgr, learningRate=0.0)
         foreground_ratio = float(np.count_nonzero(foreground)) / foreground.size
-        # Only skin-coloured foreground becomes fog, so noise and non-skin objects never show.
-        hand_like = cv2.bitwise_and(foreground, self._skin_mask(square_bgr))
-        skin_present = np.count_nonzero(hand_like) / hand_like.size >= FOREGROUND_FREEZE_RATIO
-        # A partly visible hand (no landmarks yet) must not fade into the background while aligning.
-        learning_rate = self._learning_rate(foreground_ratio, hand_present or skin_present)
+        if points:
+            self.last_hand_seen_at = time.monotonic()
+        # A partly visible hand (landmarks just lost) must not fade into the background while aligning.
+        hand_recent = self.last_hand_seen_at is not None and time.monotonic() - self.last_hand_seen_at < HAND_RECENT_S
+        learning_rate = self._learning_rate(foreground_ratio, hand_recent)
         if learning_rate > 0.0:
             self.subtractor.apply(square_bgr, learningRate=learning_rate)
+        # Without landmarks (hand still entering) all foreground shows, as an alignment aid.
+        hand_like = cv2.bitwise_and(foreground, self._hand_region(points)) if points else foreground
+        self._debug_log(bool(points), foreground, hand_like, learning_rate)
 
         cleaned = cv2.morphologyEx(hand_like, cv2.MORPH_OPEN, self.morph_kernel)
-        cleaned = cv2.morphologyEx(cleaned, cv2.MORPH_CLOSE, self.morph_kernel)
+        cleaned = cv2.morphologyEx(cleaned, cv2.MORPH_CLOSE, self.close_kernel)
         return cv2.GaussianBlur(cleaned, (MASK_BLUR_KERNEL, MASK_BLUR_KERNEL), 0)
 
+    def _debug_log(self, hand_present: bool, foreground: np.ndarray, hand_like: np.ndarray, learning_rate: float) -> None:
+        if time.monotonic() - self.last_debug_log_at < DEBUG_LOG_INTERVAL_S:
+            return
+        self.last_debug_log_at = time.monotonic()
+        percent = lambda m: 100.0 * np.count_nonzero(m) / m.size
+        logger.info("hand_viz debug: landmarks=%s foreground=%.1f%% fog=%.1f%% learning_rate=%.2f",
+                    hand_present, percent(foreground), percent(hand_like), learning_rate)
+
     @staticmethod
-    def _skin_mask(square_bgr: np.ndarray) -> np.ndarray:
-        ycrcb = cv2.cvtColor(square_bgr, cv2.COLOR_BGR2YCrCb)
-        return cv2.inRange(ycrcb, SKIN_YCRCB_LOW, SKIN_YCRCB_HIGH)
+    def _hand_region(points: list[list[float]]) -> np.ndarray:
+        pixels = (np.asarray(points, dtype=np.float32) * MASK_SIZE).astype(np.int32)
+        region = np.zeros((MASK_SIZE, MASK_SIZE), np.uint8)
+        cv2.fillConvexPoly(region, cv2.convexHull(pixels[list(PALM_LANDMARKS)]), 255)
+        # Thick lines have round caps, so the stencil also covers the fingertip beyond the tip landmark.
+        width = max(2, int(HAND_STENCIL_WIDTH_RATIO * np.linalg.norm(pixels[MIDDLE_KNUCKLE_LANDMARK] - pixels[WRIST_LANDMARK])))
+        for start, end in HAND_BONES:
+            cv2.line(region, tuple(int(v) for v in pixels[start]), tuple(int(v) for v in pixels[end]), 255, width)
+        return region
 
     def _learning_rate(self, foreground_ratio: float, hand_present: bool) -> float:
         if hand_present:
