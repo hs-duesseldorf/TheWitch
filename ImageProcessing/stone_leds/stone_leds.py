@@ -21,7 +21,7 @@ class StoneLeds:
         self._set(False)
 
     def show_present(self):
-        self._set(False)
+        self._set(True)
 
     def show_seated(self):
         self._set(True)

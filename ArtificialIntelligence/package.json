@@ -6,7 +6,7 @@
         "Komm näher und nimm Platz. Die Zeichen haben dich zu mir geführt.",
         "Setz dich zu mir. Schon seit einiger Zeit wusste ich, dass du kommen würdest.",
         "Ich spüre deine Präsenz. Setze dich, dann zeige ich dir dein Schicksal.",
-        "Traue dich. Setz dich. Ich weiß, dass du hier bist und mir zuhören möchtest."
+        "Traue dich. Setz dich. Ich weiß, dass du hier bist und dass du mir zuhören möchtest."
     ],
     "scene_2_seated": [
         "Bleib ruhig sitzen und finde eine entspannte Haltung.",
@@ -55,6 +55,12 @@
         "Mehr gibt es in diesem Moment nicht zu sagen. Bewahre die Erkenntnisse gut auf.",
         "Weiter kann ich dir nun nicht mehr helfen. Der weitere Weg liegt bei dir.",
         "Habe Kraft für deinen weiteren Weg nach dieser Deutung. Mein Part ist vorbei."
+    ],
+    "scene_debug_gaslight": [
+        "Du hast mir deine {hand_name} Hand gezeigt. Genau diese ist die falsche. Nimm die andere Hand.",
+        "Ich sehe deine {hand_name} Hand. Doch genau diese ist nicht die richtige. Lege nun die andere Hand in den Stein.",
+        "Die {hand_name} Hand liegt vor mir. Aber diese Hand ist die falsche. Zeige mir die andere.",
+        "Du hast die {hand_name} Hand gewählt. Leider ist genau diese nicht gemeint. Nimm stattdessen die andere Hand."
     ],
     "scene_debug_shot_1_hand_absent": [
         "Ich sehe deine Hand nicht. Lege sie vollständig in den Stein.",
