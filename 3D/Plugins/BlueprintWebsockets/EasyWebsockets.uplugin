@@ -10,7 +10,7 @@
 	"DocsURL": "https://docs.google.com/document/d/1EXeESlA3gbdMkv2n9b5hhK5mhQTMLh-9aGH3XV_pdYs/edit?usp=sharing",
 	"MarketplaceURL": "com.epicgames.launcher://ue/marketplace/product/4b5a7cbf6dda4b91878824a47104c596",
 	"SupportURL": "https://www.ringenberg.dev/contact",
-	"EngineVersion": "5.7.0",
+	"EngineVersion": "5.8.0",
 	"CanContainContent": false,
 	"Installed": true,
 	"Modules": [
