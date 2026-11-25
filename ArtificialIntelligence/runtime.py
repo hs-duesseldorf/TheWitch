@@ -9,6 +9,7 @@ from contextlib import suppress
 from dataclasses import dataclass
 from typing import Any
 
+import msgspec
 import pedalboard
 
 from ArtificialIntelligence.analysis.hand_analyzer import HandAnalyzer
@@ -18,6 +19,7 @@ from ArtificialIntelligence.analysis.scene_prompt_builder import (
 )
 from ArtificialIntelligence.clients.llm_client import LLMClient
 from ArtificialIntelligence.clients.tts_client import TTSClient
+from ArtificialIntelligence.hand_viz import HandVizComposer, HandVizFrame
 from ArtificialIntelligence.speech.audio_player import AudioEffect
 from ArtificialIntelligence.speech.speech_pipeline import (
     SpeechPipeline,
@@ -79,12 +81,14 @@ class Runtime:
             "camera": {
                 "/ws/ip-ai-video",
                 "/ws/ip-roi",
+                "/ws/ip-ai-handviz",
             },
             # visual output
             "unreal": {
                 "/ws/ai-3d",
                 "/ws/ai-3d-video",
                 "/ws/ai-3d-roi",
+                "/ws/ai-3d-handviz",
             },
             "events": {
                 "/ws/ip-ai",
@@ -97,6 +101,7 @@ class Runtime:
 
         self.state_machine = StateMachine()
         self.hand_analyzer = HandAnalyzer()
+        self.hand_viz_composer = HandVizComposer()
         self.scene_prompt_builder = ScenePromptBuilder()
         self.speech_pipeline = SpeechPipeline(
             llm=LLMClient(
@@ -188,6 +193,8 @@ class Runtime:
         self.websocket_server.add_route("/ws/ai-3d", self._on_ai_3d_message)
         self.websocket_server.add_route("/ws/ai-3d-video", None)
         self.websocket_server.add_route("/ws/ai-3d-roi", None)
+        self.websocket_server.add_route("/ws/ip-ai-handviz", self._on_ip_ai_handviz_message)
+        self.websocket_server.add_route("/ws/ai-3d-handviz", None)
         self.websocket_server.add_route("/ws/manual-debug", None)
 
 
@@ -204,13 +211,26 @@ class Runtime:
         self, _server: WebSocketServer, _connection: Any, message: str | bytes
     ):
         if isinstance(message, bytes):
-            await self.websocket_server.broadcast(message, path="/ws/ai-3d-video")
+            await self.websocket_server.broadcast(message, path="/ws/ai-3d-video", warn_if_dropped=False)
 
     async def _on_ip_roi_message(
         self, _server: WebSocketServer, _connection: Any, message: str | bytes
     ):
         if isinstance(message, bytes):
-            await self.websocket_server.broadcast(message, path="/ws/ai-3d-roi")
+            await self.websocket_server.broadcast(message, path="/ws/ai-3d-roi", warn_if_dropped=False)
+
+    async def _on_ip_ai_handviz_message(
+        self, _server: WebSocketServer, _connection: Any, message: str | bytes
+    ):
+        # Binary = fog mask JPEG, passed through; text = landmarks + hand status -> "ring|scan|points"
+        if isinstance(message, bytes):
+            await self.websocket_server.broadcast(message, path="/ws/ai-3d-handviz", warn_if_dropped=False)
+            return
+        frame = msgspec.json.decode(message, type=HandVizFrame)
+        text = self.hand_viz_composer.compose(
+            self.state_machine.current_scene, frame.trigger, frame.points, time.monotonic()
+        )
+        await self.websocket_server.broadcast(text, path="/ws/ai-3d-handviz", warn_if_dropped=False)
 
     async def _on_ai_3d_message(
         self, _server: WebSocketServer, _connection: Any, message: str | bytes

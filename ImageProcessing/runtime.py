@@ -29,6 +29,9 @@ class Runtime:
             f"{ai_base_url}/ws/ip-ai-video", max_queue=4
         )
         self.roi_client = WebSocketClient(f"{ai_base_url}/ws/ip-roi", max_queue=4)
+        self.hand_viz_client = WebSocketClient(
+            f"{ai_base_url}/ws/ip-ai-handviz", max_queue=8
+        )
 
         self.stabilizer = ObservationStabilizer(
             float(os.environ["WITCH_EVENT_STABILITY_SECONDS"])
@@ -63,6 +66,7 @@ class Runtime:
         self.event_client.start()
         self.video_client.start()
         self.roi_client.start()
+        self.hand_viz_client.start()
 
         with suppress(Exception):
             self.stone_leds.open()
@@ -82,6 +86,7 @@ class Runtime:
         with suppress(Exception):
             self.stone_leds.close()
 
+        self.hand_viz_client.stop()
         self.roi_client.stop()
         self.video_client.stop()
         self.event_client.stop()
@@ -130,7 +135,7 @@ class Runtime:
     def _create_hand_tracker(self):
         from ImageProcessing.hand_tracker import HandTracker
 
-        return HandTracker(self.video_client, self.roi_client)
+        return HandTracker(self.video_client, self.roi_client, self.hand_viz_client)
 
     def _create_leds(self):
         if os.environ["WITCH_SEAT_SENSOR_OVERRIDE"].strip().lower() == "true":

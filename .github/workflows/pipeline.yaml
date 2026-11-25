@@ -10,7 +10,8 @@ jobs:
     name: Witch Compose smoke test on Linux
     runs-on: ubuntu-latest
     env:
-      MPLCONFIGDIR: ${{ runner.temp }}/matplotlib
+      # runner context is not available in job-level env
+      MPLCONFIGDIR: /tmp/matplotlib
 
     steps:
       - name: Checkout code

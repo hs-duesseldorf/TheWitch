@@ -11,6 +11,7 @@ from typing import Any, Callable
 
 import numpy as np
 
+from ImageProcessing.hand_viz import HandVizPublisher
 from shared.events import Hand, HandEvent, HandTrigger
 
 logger = logging.getLogger("image-processing")
@@ -69,9 +70,12 @@ def _parse_camera_source(raw: str) -> int | str:
 
 
 class HandTracker:
-    def __init__(self, video_client, roi_client):
+    def __init__(self, video_client, roi_client, hand_viz_client):
         self.video_client = video_client
         self.roi_client = roi_client
+        self.hand_viz = HandVizPublisher(hand_viz_client)
+        self._viz_frame: np.ndarray | None = None
+        self._viz_landmarks: list[Any] | None = None
         self.camera_source = _parse_camera_source(os.environ["WITCH_CAMERA_SOURCE"])
 
         self._callback: Callable[[HandEvent], None] | None = None
@@ -168,6 +172,8 @@ class HandTracker:
 
         raw_frame = self._normalize_capture_frame(raw_frame)
         self.frame_counter += 1
+        self._viz_frame = raw_frame
+        self._viz_landmarks = None
 
         rgb = cv2.cvtColor(raw_frame, cv2.COLOR_BGR2RGB)
         mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb)
@@ -185,6 +191,7 @@ class HandTracker:
 
     def _process_detected_hand(self, raw_frame: np.ndarray, result: Any, index: int):
         hand_landmarks = result.hand_landmarks[index]
+        self._viz_landmarks = hand_landmarks
         hand = Hand(result.handedness[index][0].category_name.strip().lower())
         height, width = raw_frame.shape[:2]
         should_publish_video = self._should_publish_video()
@@ -294,6 +301,9 @@ class HandTracker:
     def _emit(self, event: HandEvent):
         if self._callback is not None:
             self._callback(event)
+        if self._viz_frame is not None:
+            self.hand_viz.publish(self._viz_frame, event.trigger, self._viz_landmarks)
+            self._viz_frame = None
 
     def _should_publish_video(self) -> bool:
         return (time.monotonic() - self.last_video_publish_at) >= VIDEO_STREAM_INTERVAL_S
